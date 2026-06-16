@@ -21,9 +21,13 @@ RUN npm ci --omit=dev
 # ── Stage 2: build frontend ─────────────────────────────────────────────────
 FROM node:20-bookworm AS build
 WORKDIR /app
-ENV PUPPETEER_SKIP_DOWNLOAD=true
+# Force a full install (incl. devDependencies: vite, tailwind, the react plugin).
+# Coolify sets NODE_ENV=production in the build env, which would otherwise make
+# `npm ci` silently skip devDependencies and break `vite build`.
+ENV PUPPETEER_SKIP_DOWNLOAD=true \
+    NODE_ENV=development
 COPY package.json package-lock.json .npmrc ./
-RUN npm ci
+RUN npm ci --include=dev
 COPY . .
 # Same-origin API in production — leave VITE_API_URL unset so the SPA calls /api
 # on whatever origin Coolify serves it from.
