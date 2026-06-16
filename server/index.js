@@ -4022,9 +4022,14 @@ async function ensureSchema() {
     )
   `);
 
-  // Backward-compatible migration: add any columns that may be missing from a
-  // pre-existing users table (e.g. created by another project on the same DB).
+  // Backward-compatible migration: ensure every column this app expects exists
+  // on the users table, even if the table was created by another project on the
+  // same database with a different schema. ER_DUP_FIELDNAME = already exists, safe to ignore.
   for (const [col, def] of [
+    ['name', 'VARCHAR(255) NOT NULL DEFAULT \'\''],
+    ['email', 'VARCHAR(255) NOT NULL DEFAULT \'\''],
+    ['phone', 'VARCHAR(60) NULL'],
+    ['password_hash', 'VARCHAR(255) NOT NULL DEFAULT \'\''],
     ['role', "VARCHAR(30) DEFAULT 'user'"],
     ['email_verified', 'TINYINT(1) DEFAULT 0'],
     ['verification_token', 'VARCHAR(128) NULL'],
@@ -4049,6 +4054,8 @@ async function ensureSchema() {
     ['password_reset_used_at', 'DATETIME NULL'],
     ['cv_unlocked_at', 'DATETIME NULL'],
     ['cv_sections', 'JSON NULL'],
+    ['created_at', 'DATETIME DEFAULT CURRENT_TIMESTAMP'],
+    ['updated_at', 'DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'],
   ]) {
     try { await pool.query(`ALTER TABLE users ADD COLUMN ${col} ${def}`); } catch (e) { if (e?.code !== 'ER_DUP_FIELDNAME') throw e; }
   }
