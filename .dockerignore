@@ -41,5 +41,6 @@ DEPLOY_CPANEL.md
 EVENTS_BUGFIX_PLAN.md
 zoom_sdk_event_system_implementation_guide.md
 
-# Large root-level logo assets not needed for the build (src/assets/*.png is kept)
-/*.png
+# Unused root-level image (the Mutale logo PNGs ARE needed by the vite build via
+# src/utils/certificateImage.js, so we cannot exclude root-level PNGs)
+# Keeping large logo files in the image is acceptable (~100 KB total).
