@@ -4022,8 +4022,28 @@ async function ensureSchema() {
     )
   `);
 
-  // Backward-compatible migration: add password reset fields to users table.
+  // Backward-compatible migration: add any columns that may be missing from a
+  // pre-existing users table (e.g. created by another project on the same DB).
   for (const [col, def] of [
+    ['role', "VARCHAR(30) DEFAULT 'user'"],
+    ['email_verified', 'TINYINT(1) DEFAULT 0'],
+    ['verification_token', 'VARCHAR(128) NULL'],
+    ['verification_token_expires', 'DATETIME NULL'],
+    ['profession', 'VARCHAR(255) NULL'],
+    ['organization', 'VARCHAR(255) NULL'],
+    ['about', 'TEXT NULL'],
+    ['specialties', 'TEXT NULL'],
+    ['portfolio_url', 'VARCHAR(500) NULL'],
+    ['linkedin_url', 'VARCHAR(500) NULL'],
+    ['linkedin_handle', 'VARCHAR(255) NULL'],
+    ['occupation', 'VARCHAR(255) NULL'],
+    ['nrc_id', 'VARCHAR(100) NULL'],
+    ['whatsapp', 'VARCHAR(60) NULL'],
+    ['user_type', "VARCHAR(30) DEFAULT 'local'"],
+    ['address', 'VARCHAR(500) NULL'],
+    ['interests', 'TEXT NULL'],
+    ['kyc_completed', 'TINYINT(1) DEFAULT 0'],
+    ['profile_photo', 'VARCHAR(500) NULL'],
     ['password_reset_token_hash', 'VARCHAR(128) NULL'],
     ['password_reset_expires', 'DATETIME NULL'],
     ['password_reset_used_at', 'DATETIME NULL'],
