@@ -29,9 +29,10 @@ ENV PUPPETEER_SKIP_DOWNLOAD=true \
 COPY package.json package-lock.json .npmrc ./
 RUN npm ci --include=dev
 COPY . .
-# Same-origin API in production — leave VITE_API_URL unset so the SPA calls /api
-# on whatever origin Coolify serves it from.
-RUN npm run build
+# Build for production. Override NODE_ENV back to production so Vite emits a
+# production bundle. Cap Node heap to 1.5 GB so the Rolldown bundler (Vite 8)
+# doesn't OOM-kill the build container on memory-constrained servers.
+RUN NODE_ENV=production NODE_OPTIONS="--max-old-space-size=1536" npm run build
 
 # ── Stage 3: runtime ────────────────────────────────────────────────────────
 FROM node:20-bookworm-slim AS runtime
