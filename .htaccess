@@ -1,0 +1,7 @@
+# DO NOT REMOVE. CLOUDLINUX PASSENGER CONFIGURATION BEGIN
+PassengerAppRoot "/home5/mutalemubanga/mutaleapp"
+PassengerBaseURI "/"
+PassengerNodejs "/home5/mutalemubanga/nodevenv/mutaleapp/18/bin/node"
+PassengerAppType node
+PassengerStartupFile lsentry.cjs
+# DO NOT REMOVE. CLOUDLINUX PASSENGER CONFIGURATION END

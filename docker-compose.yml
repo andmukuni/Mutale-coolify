@@ -1,0 +1,56 @@
+# Coolify deployment — single app container (API + SPA on one port).
+# In Coolify either:
+#   (a) deploy as "Dockerfile" application (uses ./Dockerfile), or
+#   (b) deploy as "Docker Compose" and point it at this file.
+# Set the environment values in the Coolify UI (Environment Variables) — do NOT
+# commit secrets. The ${VAR} refs below are populated from those.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+
+      # ── Database (your Coolify-managed MySQL) ──
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME:-default}
+
+      # ── Public URL & CORS (set to your Coolify domain) ──
+      APP_URL: ${APP_URL}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+
+      # ── Secrets ──
+      AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET}
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-}
+
+      # ── Payments (Lenco) — optional, also configurable in Admin Settings ──
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-lenco}
+      PAYMENT_CURRENCY: ${PAYMENT_CURRENCY:-ZMW}
+      LENCO_PUBLIC_KEY: ${LENCO_PUBLIC_KEY:-}
+      LENCO_SECRET_KEY: ${LENCO_SECRET_KEY:-}
+      LENCO_WEBHOOK_SECRET: ${LENCO_WEBHOOK_SECRET:-}
+      LENCO_ACCOUNT_ID: ${LENCO_ACCOUNT_ID:-}
+      LENCO_SANDBOX: ${LENCO_SANDBOX:-false}
+
+      # ── Receipt PDF engine (jsPDF is the safe default) ──
+      RECEIPT_PDF_LEGACY: ${RECEIPT_PDF_LEGACY:-1}
+    volumes:
+      # Persist user uploads across deploys/restarts.
+      - mutale_uploads:/app/uploads
+    expose:
+      - "4000"
+    # Coolify maps your domain → container port 4000 via its proxy.
+    # For a bare `docker compose up` locally, uncomment to publish:
+    # ports:
+    #   - "4000:4000"
+
+volumes:
+  mutale_uploads:
