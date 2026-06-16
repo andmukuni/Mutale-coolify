@@ -4,7 +4,7 @@
 # and any variable listed in this file gets locked to the compose file (undeletable from UI).
 
 services:
-  app:
+  mutale:
     build:
       context: .
       dockerfile: Dockerfile
