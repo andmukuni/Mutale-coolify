@@ -63,6 +63,8 @@ COPY --from=build /app/dist ./dist
 COPY server ./server
 COPY shared ./shared
 COPY package.json package-lock.json .npmrc ./
+# Receipt/certificate server-side logo fallback (parity with cPanel zip deploy)
+COPY Logo-Website-Mutale-08.png ./
 
 # Persisted user uploads — mount a Coolify volume here.
 RUN mkdir -p /app/uploads && chown -R node:node /app/uploads

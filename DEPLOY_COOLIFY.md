@@ -41,6 +41,34 @@ Browser → Coolify proxy (TLS) → mutale container :4000 → Coolify MySQL
 
 > **Important:** Use Coolify's **internal** hostname for `DB_HOST`. Public IPs like `13.140.178.27` are for external access only and may be blocked from inside the Docker network.
 
+**Preflight check** (run on Coolify server after setting env vars in UI):
+
+```bash
+# Export the same vars Coolify injects, then:
+node scripts/coolify-preflight.mjs --test-db
+```
+
+---
+
+## Compatibility audit summary
+
+This app **does not need a framework change** for Coolify. Vite + React + Express already match Coolify's single-container model.
+
+| Requirement | Status |
+|---|---|
+| Single HTTP port (4000) | OK — Express serves API + SPA |
+| Reverse proxy / TLS | OK — set `TRUST_PROXY=1` |
+| Health check | OK — `/api/health` (DB-free) |
+| Persistent uploads | OK — `mutale_uploads` volume |
+| MySQL via env vars | OK — set `DB_NAME=default` |
+| Native `canvas` dep | OK — multi-stage Dockerfile |
+
+**Hard startup requirements** (container crashes if missing):
+
+- `AUTH_TOKEN_SECRET` — strong random hex
+- `DB_HOST`, `DB_PASSWORD`, `DB_NAME=default` — internal MySQL host
+- `DEFAULT_ADMIN_PASSWORD` — non-default password on first deploy (empty DB)
+
 ---
 
 ## Step 2 — Create Docker Compose application
@@ -96,6 +124,14 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ---
 
 ## Step 5 — Deploy
+
+Before deploying, validate the compose setup locally (optional):
+
+```bash
+bash scripts/coolify-compose-check.sh
+# Or with a full image build (requires Docker + ~2 GB RAM):
+bash scripts/coolify-compose-check.sh --build
+```
 
 Click **Deploy** in Coolify. First build takes 5–15 minutes (Vite build + `canvas` native compile).
 

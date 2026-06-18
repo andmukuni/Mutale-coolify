@@ -24,6 +24,9 @@
     "deploy:zip": "bash scripts/make-cpanel-update-zip.sh",
     "deploy:coolify:verify": "bash scripts/verify-coolify-deploy.sh",
     "deploy:coolify:seed": "bash scripts/coolify-seed.sh",
+    "deploy:coolify:preflight": "node scripts/coolify-preflight.mjs",
+    "deploy:coolify:check": "bash scripts/coolify-compose-check.sh",
+    "deploy:coolify:postdeploy": "bash scripts/coolify-postdeploy.sh",
     "fix-deployment": "bash scripts/fix-deployment.sh",
     "install:production": "npm install --omit=dev --legacy-peer-deps"
   },
