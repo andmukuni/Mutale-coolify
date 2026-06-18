@@ -3,7 +3,10 @@ import { ShoppingCart, ShoppingBag, Search, Filter } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import BookCard from '../components/BookCard';
 import { useBookStore } from '../context/BookStoreContext';
+import { useData } from '../context/DataContext';
+import { defaultWebsitePages } from '../data/websitePages';
 import SectionHeader from '../components/SectionHeader';
+import PageHeaderBackdrop from '../components/PageHeaderBackdrop';
 
 // Type filter groups. Each maps to one or more `product_type` values.
 const typeFilters = [
@@ -17,6 +20,8 @@ const typeFilters = [
 
 export default function BookShopPage() {
   const { products, productsLoaded, cartItemCount } = useBookStore();
+  const { profile } = useData();
+  const page = profile.websitePages?.shop || defaultWebsitePages.shop;
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [sort, setSort] = useState('featured');
@@ -50,17 +55,18 @@ export default function BookShopPage() {
   return (
     <div className="min-h-screen">
       {/* Hero */}
-      <section className="bg-gradient-to-br from-navy-950 via-navy-900 to-navy-800 text-white py-16 sm:py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <section className="relative overflow-hidden bg-gradient-to-br from-navy-950 via-navy-900 to-navy-800 text-white py-16 sm:py-20">
+        <PageHeaderBackdrop image={page.headerBackgroundImage} />
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <div className="inline-flex items-center gap-2 bg-cyan-500/10 text-cyan-400 px-4 py-1.5 rounded-full text-sm font-medium mb-6 border border-cyan-500/20">
             <ShoppingBag size={16} />
-            Shop
+            {page.headerEyebrow || defaultWebsitePages.shop.headerEyebrow}
           </div>
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-4">
-            Books, Apparel & <span className="text-cyan-400">Event Merch</span>
+            {page.headerTitle || defaultWebsitePages.shop.headerTitle}
           </h1>
           <p className="text-navy-300 max-w-2xl mx-auto text-base sm:text-lg">
-            T-shirts, mugs, keyholders, books, and limited-edition event merchandise from Mutale Mubanga.
+            {page.headerDescription || defaultWebsitePages.shop.headerDescription}
           </p>
 
           {/* Cart floating link */}

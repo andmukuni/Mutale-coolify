@@ -3,14 +3,22 @@ import { Send, Mail, Phone, MapPin } from 'lucide-react';
 import SectionHeader from '../components/SectionHeader';
 import ContactCard from '../components/ContactCard';
 import SiteLogo from '../components/SiteLogo';
+import PageHeaderBackdrop from '../components/PageHeaderBackdrop';
 import { useData } from '../context/DataContext';
 import { useUserAuth } from '../context/UserAuthContext';
 import { getApiBase } from '../utils/apiBase';
+import { defaultWebsitePages } from '../data/websitePages';
 
 const API_BASE = getApiBase();
 
 export default function ContactPage() {
   const { profile } = useData();
+  const page = profile.websitePages?.contact || defaultWebsitePages.contact;
+  const visibility = profile.websitePages?.sectionVisibility || {};
+  const isVisible = (id) => visibility[id] !== false;
+  const availableForItems = (Array.isArray(page.availableForItems) && page.availableForItems.length > 0)
+    ? page.availableForItems
+    : defaultWebsitePages.contact.availableForItems;
   const { currentUser } = useUserAuth();
   const submittedTimerRef = useRef(null);
 
@@ -68,12 +76,13 @@ export default function ContactPage() {
   return (
     <div>
       {/* Header */}
-      <section className="bg-gradient-to-br from-navy-950 via-navy-900 to-navy-800 text-white py-16 sm:py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="relative overflow-hidden bg-gradient-to-br from-navy-950 via-navy-900 to-navy-800 text-white py-16 sm:py-20">
+        <PageHeaderBackdrop image={page.headerBackgroundImage} />
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="max-w-3xl">
             <SiteLogo variant="white" className="h-14 sm:h-16 w-auto mb-5" />
-            <span className="inline-block text-xs font-semibold uppercase tracking-widest text-cyan-400 mb-3">Contact</span>
-            <h1 className="text-4xl sm:text-5xl font-bold mb-4">Get in Touch</h1>
+            <span className="inline-block text-xs font-semibold uppercase tracking-widest text-cyan-400 mb-3">{page.headerEyebrow || defaultWebsitePages.contact.headerEyebrow}</span>
+            <h1 className="text-4xl sm:text-5xl font-bold mb-4">{page.headerTitle || defaultWebsitePages.contact.headerTitle}</h1>
             <p className="text-lg text-navy-300 leading-relaxed">
               {profile.availableFor}
             </p>
@@ -185,10 +194,11 @@ export default function ContactPage() {
             {/* Contact Info */}
             <div className="lg:col-span-2">
               <ContactCard profile={profile} />
+              {isVisible('contact.available-for') && (
               <div className="mt-6 bg-white rounded-2xl border border-navy-100 p-6 shadow-sm">
-                <h3 className="text-sm font-semibold text-navy-900 mb-3">Available For</h3>
+                <h3 className="text-sm font-semibold text-navy-900 mb-3">{page.availableForTitle || defaultWebsitePages.contact.availableForTitle}</h3>
                 <ul className="space-y-2">
-                  {['Consulting', 'Training & Workshops', 'Technical Advisory', 'Speaking Engagements', 'Quality System Reviews'].map(item => (
+                  {availableForItems.map(item => (
                     <li key={item} className="flex items-center gap-2 text-sm text-navy-600">
                       <span className="w-1.5 h-1.5 rounded-full bg-cyan-500" />
                       {item}
@@ -196,6 +206,7 @@ export default function ContactPage() {
                   ))}
                 </ul>
               </div>
+              )}
             </div>
           </div>
         </div>

@@ -113,6 +113,7 @@ export const NAV_PERMISSION_MAP = {
   'settlement-accounts': 'finance.payouts',
   payouts: 'finance.payouts',
   'website-pages': 'website.manage',
+  sections: 'website.manage',
   'partner-logos': 'website.manage',
   menu: 'website.manage',
   settings: 'settings.manage',

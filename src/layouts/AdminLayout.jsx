@@ -22,6 +22,7 @@ import {
   Landmark,
   MessageSquare,
   PanelsTopLeft,
+  Layers,
   BookOpen,
   ShoppingCart,
   Truck,
@@ -87,6 +88,7 @@ const CONTENT_NAVIGATION = [
 
 const SYSTEM_NAVIGATION = [
   { key: 'website-pages', name: 'Website Pages', to: '/admin/website-pages', icon: PanelsTopLeft },
+  { key: 'sections', name: 'Sections', to: '/admin/sections', icon: Layers },
   { key: 'partner-logos', name: 'Partner Logos', to: '/admin/partner-logos', icon: Handshake },
   { key: 'menu', name: 'Menu Management', to: '/admin/menu', icon: Navigation },
   { key: 'users', name: 'Users Table', to: '/admin/users', icon: Users },

@@ -67,6 +67,7 @@ const BookOrdersPage = lazy(() => import('./pages/admin/BookOrdersPage'));
 const ProductTypesPage = lazy(() => import('./pages/admin/ProductTypesPage'));
 const ShippingSettingsPage = lazy(() => import('./pages/admin/ShippingSettingsPage'));
 const WebsitePagesPage = lazy(() => import('./pages/admin/WebsitePagesPage'));
+const SectionsPage = lazy(() => import('./pages/admin/SectionsPage'));
 const PartnerLogosPage = lazy(() => import('./pages/admin/PartnerLogosPage'));
 const MenuManagementPage = lazy(() => import('./pages/admin/MenuManagementPage'));
 const AccessControlPage = lazy(() => import('./pages/admin/AccessControlPage'));
@@ -249,6 +250,7 @@ export default function App() {
         <Route path="books/product-types" element={<ProductTypesPage />} />
         <Route path="shipping" element={<ShippingSettingsPage />} />
         <Route path="website-pages" element={<WebsitePagesPage />} />
+        <Route path="sections" element={<SectionsPage />} />
         <Route path="partner-logos" element={<PartnerLogosPage />} />
         <Route path="menu" element={<MenuManagementPage />} />
         <Route path="access-control" element={<AccessControlPage />} />

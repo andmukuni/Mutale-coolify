@@ -3,14 +3,17 @@ import { Search } from 'lucide-react';
 import SectionHeader from '../components/SectionHeader';
 import EventCard from '../components/EventCard';
 import EmptyState from '../components/EmptyState';
+import PageHeaderBackdrop from '../components/PageHeaderBackdrop';
 import { useData } from '../context/DataContext';
 import { filterBySearch, filterByCategory, getUniqueCategories } from '../utils/helpers';
 import { getEventDisplayStatus, isEventPubliclyVisible } from '../utils/eventServices';
 import { formatDate } from '../utils/helpers';
 import { Link, useSearchParams } from 'react-router-dom';
+import { defaultWebsitePages } from '../data/websitePages';
 
 export default function EventsPage() {
-  const { events } = useData();
+  const { events, profile } = useData();
+  const page = profile.websitePages?.events || defaultWebsitePages.events;
   const [searchParams] = useSearchParams();
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('All');
@@ -46,13 +49,14 @@ export default function EventsPage() {
   return (
     <div>
       {/* Header */}
-      <section className="bg-gradient-to-br from-navy-950 via-navy-900 to-navy-800 text-white py-16 sm:py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="relative overflow-hidden bg-gradient-to-br from-navy-950 via-navy-900 to-navy-800 text-white py-16 sm:py-20">
+        <PageHeaderBackdrop image={page.headerBackgroundImage} />
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="max-w-3xl">
-            <span className="inline-block text-xs font-semibold uppercase tracking-widest text-cyan-400 mb-3">Events</span>
-            <h1 className="text-4xl sm:text-5xl font-bold mb-4">Events & Workshops</h1>
+            <span className="inline-block text-xs font-semibold uppercase tracking-widest text-cyan-400 mb-3">{page.headerEyebrow || defaultWebsitePages.events.headerEyebrow}</span>
+            <h1 className="text-4xl sm:text-5xl font-bold mb-4">{page.headerTitle || defaultWebsitePages.events.headerTitle}</h1>
             <p className="text-lg text-navy-300 leading-relaxed">
-              Professional development events, workshops, and seminars in quality assurance, diagnostics, and laboratory systems.
+              {page.headerIntro || defaultWebsitePages.events.headerIntro}
             </p>
           </div>
         </div>

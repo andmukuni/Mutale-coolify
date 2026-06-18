@@ -799,6 +799,12 @@ function mergeWebsitePagesProfile(existingPages = {}, nextPages = {}) {
     home: { ...(existing.home || {}), ...(nextPages.home || {}) },
     about: { ...(existing.about || {}), ...(nextPages.about || {}) },
     experience: { ...(existing.experience || {}), ...(nextPages.experience || {}) },
+    blog: { ...(existing.blog || {}), ...(nextPages.blog || {}) },
+    events: { ...(existing.events || {}), ...(nextPages.events || {}) },
+    shop: { ...(existing.shop || {}), ...(nextPages.shop || {}) },
+    contact: { ...(existing.contact || {}), ...(nextPages.contact || {}) },
+    global: { ...(existing.global || {}), ...(nextPages.global || {}) },
+    sectionVisibility: { ...(existing.sectionVisibility || {}), ...(nextPages.sectionVisibility || {}) },
     customPages: Array.isArray(nextPages.customPages)
       ? nextPages.customPages
       : (Array.isArray(existing.customPages) ? existing.customPages : []),
@@ -1255,6 +1261,7 @@ function isAdminProtectedRoute(req) {
   if (routePath.startsWith('/api/admin/')) return true;
   if (routePath.startsWith('/api/settings/')) return true;
   if (routePath === '/api/profile' && method === 'PUT') return true;
+  if (routePath.startsWith('/api/site-images')) return true;
   if (routePath.startsWith('/api/events') && ['POST', 'PUT', 'DELETE'].includes(method)) return true;
   if (/^\/api\/events\/[^/]+\/zoom\/meta$/.test(routePath)) return true;
   if (/^\/api\/events\/[^/]+\/daily\/meta$/.test(routePath)) return true;
@@ -2724,6 +2731,257 @@ function buildBrandedEmailHtml({ title, previewText = '', greeting = 'Hi there,'
         <p style="margin:14px 0 0;text-align:center;color:#94a3b8;font-size:12px">© ${new Date().getFullYear()} Mutale Mubanga</p>
       </div>
     </div>
+  </body>
+</html>`;
+}
+
+// Build a Google Calendar "add event" link from event date/time fields.
+function buildGoogleCalendarLink(event = {}, fallbackUrl = '') {
+  try {
+    const startDate = event.start_date || event.date;
+    if (!startDate) return fallbackUrl;
+    const startTime = String(event.start_time || event.time || '').trim();
+    const endDate = event.end_date || startDate;
+    const endTime = String(event.end_time || '').trim();
+    const allDay = !startTime;
+    const pad = (n) => String(n).padStart(2, '0');
+    const compact = (d) => (allDay
+      ? `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`
+      : `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`);
+
+    const start = new Date(`${String(startDate).slice(0, 10)}T${(startTime || '00:00').slice(0, 5)}:00`);
+    if (Number.isNaN(start.getTime())) return fallbackUrl;
+
+    let end;
+    if (allDay) {
+      end = new Date(start);
+      end.setDate(end.getDate() + 1);
+    } else if (endTime) {
+      end = new Date(`${String(endDate).slice(0, 10)}T${endTime.slice(0, 5)}:00`);
+      if (Number.isNaN(end.getTime()) || end <= start) {
+        end = new Date(start);
+        end.setHours(end.getHours() + 2);
+      }
+    } else {
+      end = new Date(start);
+      end.setHours(end.getHours() + 2);
+    }
+
+    const params = new URLSearchParams({
+      action: 'TEMPLATE',
+      text: String(event.title || 'Event'),
+      dates: `${compact(start)}/${compact(end)}`,
+      location: String(event.location || event.venue || ''),
+      details: fallbackUrl ? `More details: ${fallbackUrl}` : '',
+    });
+    return `https://calendar.google.com/calendar/render?${params.toString()}`;
+  } catch {
+    return fallbackUrl;
+  }
+}
+
+/**
+ * Branded HTML for event registration confirmation emails.
+ * Self-contained, table-based layout for broad email-client support.
+ */
+function buildRegistrationEmailHtml({
+  recipientName = 'there',
+  recipientEmail = '',
+  eventTitle = '',
+  eventDate = 'TBA',
+  eventTime = '',
+  eventLocation = 'Online',
+  registrationTypeLabel = 'Complimentary',
+  referenceCode = '',
+  accessPassUrl = '',
+  addToCalendarUrl = '',
+  statusLabel = 'CONFIRMED',
+  statusNote = 'Your registration is confirmed. No further action is required.',
+  previewText = 'You are registered! Your registration has been received.',
+  brand = {},
+} = {}) {
+  const NAVY = '#0B1B3A';
+  const NAVY_TEXT = '#141D45';
+  const TEAL = '#00A79D';
+  const CORAL = '#E76869';
+  const GRAY = '#64748b';
+  const LIGHT = '#f1f6f6';
+  const BORDER = '#e6ebf0';
+
+  const brandName = escapeHtml(brand.name || 'Mutale Mubanga');
+  const brandTagline = escapeHtml(brand.tagline || 'Growing People.');
+  const supportEmail = escapeHtml(brand.supportEmail || 'info@mutalemubanga.org');
+  const websiteUrl = brand.websiteUrl || '';
+  const websiteLabel = escapeHtml(brand.websiteLabel || (websiteUrl ? websiteUrl.replace(/^https?:\/\//, '').replace(/\/$/, '') : 'mutalemubanga.org'));
+  const linkedinUrl = brand.linkedinUrl || '';
+  const youtubeUrl = brand.youtubeUrl || '';
+  const instagramUrl = brand.instagramUrl || '';
+  const signoffPrimary = escapeHtml(brand.signoffPrimary || 'Thank you for being part of this journey.');
+  const signoffSecondary = escapeHtml(brand.signoffSecondary || 'Real conversations. Meaningful impact.');
+
+  const safeName = escapeHtml(recipientName || 'there');
+  const safeEmail = escapeHtml(recipientEmail);
+  const initials = String(recipientName || 'G')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() || '')
+    .join('') || 'G';
+
+  const detailRows = [
+    eventTitle ? { label: 'Event', value: eventTitle } : null,
+    { label: 'Date', value: eventDate || 'TBA' },
+    eventTime ? { label: 'Time', value: eventTime } : null,
+    { label: 'Venue', value: eventLocation || 'Online' },
+    { label: 'Registration Type', value: registrationTypeLabel || 'Complimentary' },
+    referenceCode ? { label: 'Reference', value: referenceCode } : null,
+  ].filter(Boolean);
+
+  const rowsHtml = detailRows.map((row, i) => `
+    <tr>
+      <td style="padding:12px 0;${i < detailRows.length - 1 ? `border-bottom:1px solid ${BORDER};` : ''}width:42%;color:${GRAY};font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;vertical-align:top">${escapeHtml(row.label)}</td>
+      <td style="padding:12px 0;${i < detailRows.length - 1 ? `border-bottom:1px solid ${BORDER};` : ''}color:${NAVY_TEXT};font-size:15px;font-weight:700;vertical-align:top">${escapeHtml(row.value)}</td>
+    </tr>`).join('');
+
+  const button = (label, url, primary) => (url
+    ? `<a href="${escapeHtml(url)}" target="_blank" style="display:block;text-align:center;text-decoration:none;font-size:14px;font-weight:700;letter-spacing:.4px;padding:14px 18px;border-radius:12px;${primary ? `background:${TEAL};color:#ffffff;` : `background:#ffffff;color:${NAVY_TEXT};border:1px solid ${BORDER};`}">${escapeHtml(label)}</a>`
+    : '');
+
+  const socialBadge = (letters, url) => `
+    <a href="${escapeHtml(url || websiteUrl || '#')}" target="_blank" style="display:inline-block;width:30px;height:30px;line-height:30px;text-align:center;border:1px solid ${TEAL};border-radius:50%;color:${TEAL};font-size:11px;font-weight:700;text-decoration:none;margin:0 3px">${letters}</a>`;
+
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>${escapeHtml(eventTitle ? `Registration Confirmed: ${eventTitle}` : 'Registration Confirmed')}</title>
+  </head>
+  <body style="margin:0;padding:0;background:#eef2f5;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">${escapeHtml(previewText)}</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef2f5">
+      <tr>
+        <td align="center" style="padding:24px 12px">
+          <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="width:640px;max-width:100%;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 8px 30px rgba(11,27,58,0.10)">
+            <!-- Header -->
+            <tr>
+              <td style="background:${NAVY};padding:26px 28px">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td style="vertical-align:middle">
+                      <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+                        <td style="vertical-align:middle">
+                          <div style="width:46px;height:46px;border:2px solid ${TEAL};border-radius:12px;text-align:center;line-height:42px;color:#ffffff;font-size:22px;font-weight:800">M</div>
+                        </td>
+                        <td style="vertical-align:middle;padding-left:12px">
+                          <div style="font-size:19px;font-weight:800;letter-spacing:.5px;color:#ffffff">MUTALE <span style="color:${TEAL}">MUBANGA</span></div>
+                          <div style="font-size:12px;color:#aab4c5;margin-top:2px">${brandTagline}</div>
+                        </td>
+                      </tr></table>
+                    </td>
+                    <td style="vertical-align:middle;text-align:right">
+                      <div style="display:inline-block;width:42px;height:42px;border:2px solid ${TEAL};border-radius:50%;text-align:center;line-height:40px;color:${TEAL};font-size:20px;font-weight:700">&#10003;</div>
+                      <div style="font-size:10px;font-weight:700;letter-spacing:1px;color:${TEAL};text-transform:uppercase;margin-top:6px">Registration<br/>Confirmed</div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <!-- Accent bar -->
+            <tr>
+              <td style="padding:0">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+                  <td style="background:${TEAL};height:5px;line-height:5px;font-size:0;width:74%">&nbsp;</td>
+                  <td style="background:${CORAL};height:5px;line-height:5px;font-size:0;width:26%">&nbsp;</td>
+                </tr></table>
+              </td>
+            </tr>
+            <!-- Body -->
+            <tr>
+              <td style="padding:30px 28px 8px">
+                <p style="margin:0 0 6px;color:${GRAY};font-size:15px">Hi ${safeName},</p>
+                <h1 style="margin:0 0 12px;color:${NAVY_TEXT};font-size:28px;line-height:1.2;font-weight:800">You are registered!</h1>
+                <p style="margin:0 0 22px;color:${GRAY};font-size:15px;line-height:1.6">Your registration for the event below has been received successfully. Please keep this email for your records. We look forward to welcoming you.</p>
+
+                <!-- Registrant card -->
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${LIGHT};border-radius:14px;margin:0 0 24px">
+                  <tr>
+                    <td style="padding:18px 20px">
+                      <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+                        <td style="vertical-align:middle">
+                          <div style="width:48px;height:48px;border-radius:50%;background:#ffffff;border:2px solid ${TEAL};text-align:center;line-height:44px;color:${TEAL};font-size:16px;font-weight:800">${escapeHtml(initials)}</div>
+                        </td>
+                        <td style="vertical-align:middle;padding-left:16px">
+                          <div style="font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:${TEAL}">Registrant</div>
+                          <div style="font-size:17px;font-weight:700;color:${NAVY_TEXT};margin-top:2px">${safeName}</div>
+                          ${safeEmail ? `<div style="font-size:13px;color:${GRAY};margin-top:1px">${safeEmail}</div>` : ''}
+                        </td>
+                      </tr></table>
+                    </td>
+                  </tr>
+                </table>
+
+                <!-- Event details -->
+                <div style="font-size:13px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:${TEAL};margin:0 0 6px">Event Details</div>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px">
+                  ${rowsHtml}
+                </table>
+
+                <!-- Status card -->
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${NAVY};border-radius:14px;margin:0 0 24px">
+                  <tr>
+                    <td style="padding:20px 22px">
+                      <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+                        <td style="vertical-align:middle">
+                          <div style="width:48px;height:48px;border:2px solid ${TEAL};border-radius:50%;text-align:center;line-height:46px;color:${TEAL};font-size:22px;font-weight:700">&#10003;</div>
+                        </td>
+                        <td style="vertical-align:middle;padding-left:16px">
+                          <div style="font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:${TEAL}">Registration Status</div>
+                          <div style="font-size:22px;font-weight:800;color:#ffffff;margin:2px 0 4px">${escapeHtml(statusLabel)}</div>
+                          <div style="font-size:13px;color:#aab4c5;line-height:1.5">${escapeHtml(statusNote)}</div>
+                        </td>
+                      </tr></table>
+                    </td>
+                  </tr>
+                </table>
+
+                <!-- Buttons -->
+                ${(accessPassUrl || addToCalendarUrl) ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 8px"><tr>
+                  ${accessPassUrl ? `<td style="padding:0 6px 0 0;width:50%">${button('VIEW ACCESS PASS  →', accessPassUrl, true)}</td>` : ''}
+                  ${addToCalendarUrl ? `<td style="padding:0 0 0 6px;width:50%">${button('📅  ADD TO CALENDAR', addToCalendarUrl, false)}</td>` : ''}
+                </tr></table>` : ''}
+              </td>
+            </tr>
+            <!-- Footer -->
+            <tr>
+              <td style="padding:18px 28px 28px">
+                <div style="border-top:1px solid ${BORDER};padding-top:22px;text-align:center">
+                  <p style="margin:0 0 4px;color:${GRAY};font-size:14px">${signoffPrimary}</p>
+                  <p style="margin:0 0 22px;color:${TEAL};font-size:14px;font-style:italic;font-weight:600">${signoffSecondary}</p>
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+                    <td style="vertical-align:top;text-align:center;padding:6px">
+                      <div style="font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:${NAVY_TEXT}">Need help?</div>
+                      <a href="mailto:${supportEmail}" style="font-size:12px;color:${TEAL};text-decoration:none">${supportEmail}</a>
+                      <div style="font-size:11px;color:${GRAY}">We&rsquo;re here to help.</div>
+                    </td>
+                    <td style="vertical-align:top;text-align:center;padding:6px">
+                      <div style="font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:${NAVY_TEXT}">Visit our website</div>
+                      <a href="${escapeHtml(websiteUrl || '#')}" target="_blank" style="font-size:12px;color:${TEAL};text-decoration:none">${websiteLabel}</a>
+                      <div style="font-size:11px;color:${GRAY}">Learn more about our work.</div>
+                    </td>
+                    <td style="vertical-align:top;text-align:center;padding:6px">
+                      <div style="font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:${NAVY_TEXT};margin-bottom:6px">Follow us</div>
+                      ${socialBadge('in', linkedinUrl)}${socialBadge('YT', youtubeUrl)}${socialBadge('IG', instagramUrl)}
+                    </td>
+                  </tr></table>
+                  <p style="margin:22px 0 0;color:#9aa6b6;font-size:11px">© ${new Date().getFullYear()} ${brandName}. All rights reserved.</p>
+                </div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
   </body>
 </html>`;
 }
@@ -7122,6 +7380,19 @@ app.post('/api/registrations', async (req, res) => {
         });
         const receiptAttached = receiptAttachments.length > 0;
 
+        const registrationTypeLabel = (isFreeCatalog || dueZmw <= 0.005)
+          ? 'Complimentary'
+          : `Paid — ZMW ${dueZmw.toFixed(2)}`;
+        const addToCalendarUrl = buildGoogleCalendarLink(event, eventUrl);
+        const emailCfg = settings?.email || {};
+        const brandFooter = {
+          name: 'Mutale Mubanga',
+          tagline: 'Growing People.',
+          supportEmail: String(emailCfg.replyTo || emailCfg.fromEmail || 'info@mutalemubanga.org').trim(),
+          websiteUrl: appUrl,
+          linkedinUrl: 'https://www.linkedin.com/in/mutale-mubanga',
+        };
+
         const confirmResult = await sendEmailNotification({
           settings,
           to: recipientEmail,
@@ -7129,25 +7400,21 @@ app.post('/api/registrations', async (req, res) => {
           text: receiptAttached
             ? `${emailBody}\n\nYour receipt is attached to this email.`
             : emailBody,
-          html: buildBrandedEmailHtml({
-            title: `Registration Confirmed: ${event.title}`,
-            previewText: 'Your registration is confirmed.',
-            greeting: `Hi ${recipientName},`,
-            bodyLines: [
-              `Thank you for registering for "${event.title}"! Your registration is confirmed.`,
-              enriched.booked_for_name
-                ? `Ticket for: ${String(enriched.booked_for_name).trim()}${enriched.booked_for_relation ? ` (${String(enriched.booked_for_relation).trim()})` : ''}`
-                : '',
-              `Date: ${eventDate}`,
-              eventTime ? `Time: ${eventTime}` : 'Time: TBA',
-              `Location: ${eventLocation}`,
-              ...priceLinesHtml,
-              refCode ? `Reference: ${refCode}` : '',
-              receiptAttached ? 'Your receipt is attached to this email.' : '',
-            ].filter(Boolean),
-            buttonText: 'View event',
-            buttonUrl: eventUrl,
-            footerLines: ['We look forward to seeing you!', 'Best regards,', 'Mutale Mubanga'],
+          html: buildRegistrationEmailHtml({
+            recipientName,
+            recipientEmail,
+            eventTitle: event.title,
+            eventDate,
+            eventTime,
+            eventLocation,
+            registrationTypeLabel,
+            referenceCode: refCode,
+            accessPassUrl: eventUrl,
+            addToCalendarUrl,
+            statusNote: receiptAttached
+              ? 'Your registration is confirmed and your receipt is attached. No further action is required.'
+              : 'Your registration is confirmed. No further action is required.',
+            brand: brandFooter,
           }),
           attachments: receiptAttachments,
         });
@@ -9595,6 +9862,26 @@ app.post('/api/partner-logos/upload', async (req, res) => {
   }
 });
 
+// Site section images (hero, about, CTA, etc.) edited from /admin/sections.
+app.post('/api/site-images/upload', async (req, res) => {
+  try {
+    const image = req.body?.image;
+    if (!image) {
+      return res.status(400).json({ ok: false, message: 'Image data is required.' });
+    }
+    const url = await persistImageIfNeeded(image, req, { folder: 'site', prefix: 'site' });
+    if (!url || String(url).startsWith('data:')) {
+      return res.status(400).json({ ok: false, message: 'Invalid image payload.' });
+    }
+    const relative = String(url).includes('/uploads/')
+      ? `/uploads/${String(url).split('/uploads/')[1]}`
+      : url;
+    return res.json({ ok: true, url: relative });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: 'Failed to upload image', error: error.message });
+  }
+});
+
 app.post('/api/partner-logos', async (req, res) => {
   try {
     const payload = normalizePartnerLogoPayload(req.body || {});
@@ -9800,7 +10087,14 @@ app.put('/api/menu-items/:id', async (req, res) => {
     if (req.params.id === 'reorder') {
       return res.status(404).json({ ok: false, message: 'Not found.' });
     }
-    const payload = normalizeMenuItemPayload({ ...(req.body || {}), id: req.params.id }, req.params.id);
+    // Partial update: merge incoming fields over the existing row so that
+    // single-field updates (e.g. toggling visibility) don't reset other columns.
+    const [[existing]] = await pool.query('SELECT * FROM menu_items WHERE id = ?', [req.params.id]);
+    if (!existing) {
+      return res.status(404).json({ ok: false, message: 'Menu item not found.' });
+    }
+    const merged = { ...mapMenuItemRow(existing), ...(req.body || {}), id: req.params.id };
+    const payload = normalizeMenuItemPayload(merged, req.params.id);
     if (!payload.label) {
       return res.status(400).json({ ok: false, message: 'Label is required.' });
     }

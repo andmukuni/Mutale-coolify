@@ -14,10 +14,25 @@ import heroPortrait from '../assets/herophoto.JPG';
 import { defaultWebsitePages, expertiseIconMap } from '../data/websitePages';
 import TrustedBySection from '../components/TrustedBySection';
 import { fetchPartnerLogos } from '../utils/partnerLogosApi';
+import { resolveMediaUrl } from '../utils/mediaUrl';
+
+const HERO_BG_FALLBACK = 'https://images.unsplash.com/photo-1579154204601-01588f351e67?auto=format&fit=crop&w=1920&q=80';
+const ABOUT_IMG_FALLBACK = 'https://images.unsplash.com/photo-1582719471384-894fbb16e074?auto=format&fit=crop&w=800&q=80';
+const CTA_BG_FALLBACK = 'https://images.unsplash.com/photo-1581093588401-fbb62a02f120?auto=format&fit=crop&w=1920&q=80';
+const HERO_PILL_ICONS = [MapPin, Briefcase, Globe];
 
 export default function HomePage() {
   const { profile, events, blogPosts } = useData();
   const page = profile.websitePages?.home || defaultWebsitePages.home;
+  const visibility = profile.websitePages?.sectionVisibility || {};
+  const isVisible = (id) => visibility[id] !== false;
+  const heroBackground = resolveMediaUrl(page.heroBackgroundImage) || HERO_BG_FALLBACK;
+  const heroPortraitSrc = resolveMediaUrl(page.heroPortraitImage) || heroPortrait;
+  const aboutImage = resolveMediaUrl(page.aboutImage) || ABOUT_IMG_FALLBACK;
+  const ctaBackground = resolveMediaUrl(page.ctaBackgroundImage) || CTA_BG_FALLBACK;
+  const heroPills = (Array.isArray(page.heroPills) && page.heroPills.length > 0)
+    ? page.heroPills
+    : defaultWebsitePages.home.heroPills;
   const expertiseAreas = (Array.isArray(page.expertiseAreas) ? page.expertiseAreas : defaultWebsitePages.home.expertiseAreas)
     .map((area) => ({ ...area, icon: expertiseIconMap[area.icon] || Shield }));
   const testimonials = Array.isArray(page.testimonials) && page.testimonials.length > 0
@@ -134,7 +149,7 @@ export default function HomePage() {
         {/* Background image */}
         <div className="absolute inset-0">
           <img
-            src="https://images.unsplash.com/photo-1579154204601-01588f351e67?auto=format&fit=crop&w=1920&q=80"
+            src={heroBackground}
             alt="Laboratory professional at work"
             className="w-full h-full object-cover"
           />
@@ -182,18 +197,15 @@ export default function HomePage() {
 
               {/* Quick info pills */}
               <div className="flex flex-wrap gap-4 text-sm text-navy-400">
-                <span className="flex items-center gap-1.5">
-                  <MapPin size={14} className="text-cyan-500" />
-                  Lusaka, Zambia
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <Briefcase size={14} className="text-cyan-500" />
-                  15+ Years Experience
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <Globe size={14} className="text-cyan-500" />
-                  10+ Countries
-                </span>
+                {heroPills.map((pill, i) => {
+                  const PillIcon = HERO_PILL_ICONS[i] || CheckCircle;
+                  return (
+                    <span key={`${pill}-${i}`} className="flex items-center gap-1.5">
+                      <PillIcon size={14} className="text-cyan-500" />
+                      {pill}
+                    </span>
+                  );
+                })}
               </div>
             </div>
 
@@ -203,7 +215,7 @@ export default function HomePage() {
                 <div className="absolute -inset-3 rounded-[2rem] bg-cyan-500/20 blur-2xl" />
                 <div className="relative overflow-hidden rounded-[2rem] border border-white/20 bg-white/10 backdrop-blur-sm shadow-2xl shadow-navy-950/40">
                   <img
-                    src={heroPortrait}
+                    src={heroPortraitSrc}
                     alt={`${profile.name} portrait`}
                     className="w-full h-[34rem] object-cover object-center"
                     loading="eager"
@@ -219,13 +231,16 @@ export default function HomePage() {
       <div className="h-1.5 w-full bg-coral shrink-0" aria-hidden />
 
       {/* ═══════════════════════ TRUSTED BY ═══════════════════════ */}
-      <TrustedBySection
-        label={page.trustedByLabel || defaultWebsitePages.home.trustedByLabel}
-        partners={partnerLogos}
-        legacyNames={Array.isArray(page.trustedBy) ? page.trustedBy : defaultWebsitePages.home.trustedBy}
-      />
+      {isVisible('home.trusted-by') && (
+        <TrustedBySection
+          label={page.trustedByLabel || defaultWebsitePages.home.trustedByLabel}
+          partners={partnerLogos}
+          legacyNames={Array.isArray(page.trustedBy) ? page.trustedBy : defaultWebsitePages.home.trustedBy}
+        />
+      )}
 
       {/* ═══════════════════════ ABOUT PREVIEW ═══════════════════════ */}
+      {isVisible('home.about-preview') && (
       <section className="py-20 sm:py-24 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid lg:grid-cols-2 gap-16 items-center">
@@ -233,7 +248,7 @@ export default function HomePage() {
             <div className="relative">
               <div className="rounded-2xl overflow-hidden shadow-2xl shadow-navy-200/50">
                 <img
-                  src="https://images.unsplash.com/photo-1582719471384-894fbb16e074?auto=format&fit=crop&w=800&q=80"
+                  src={aboutImage}
                   alt="Laboratory quality assurance work"
                   className="w-full h-80 sm:h-96 object-cover"
                 />
@@ -245,8 +260,8 @@ export default function HomePage() {
                     <Award size={20} />
                   </div>
                   <div>
-                    <div className="text-sm font-bold text-navy-900">ISO Expert</div>
-                    <div className="text-xs text-navy-400">15189 · 9001 · 17025</div>
+                    <div className="text-sm font-bold text-navy-900">{page.aboutFloatingTitle || defaultWebsitePages.home.aboutFloatingTitle}</div>
+                    <div className="text-xs text-navy-400">{page.aboutFloatingSubtitle || defaultWebsitePages.home.aboutFloatingSubtitle}</div>
                   </div>
                 </div>
               </div>
@@ -254,12 +269,19 @@ export default function HomePage() {
 
             {/* Text side */}
             <div>
-              <span className="inline-block text-xs font-semibold uppercase tracking-widest text-cyan-600 mb-3">
-                {page.aboutEyebrow}
-              </span>
-              <h2 className="text-3xl sm:text-4xl font-bold text-navy-900 mb-6">
-                {page.aboutTitle}
-              </h2>
+              {(() => {
+                const trimmed = String(page.aboutTitle || '').trim();
+                const spaceIdx = trimmed.indexOf(' ');
+                const firstWord = spaceIdx === -1 ? trimmed : trimmed.slice(0, spaceIdx);
+                const restWords = spaceIdx === -1 ? '' : trimmed.slice(spaceIdx + 1);
+                return (
+                  <h2 className="text-3xl sm:text-4xl font-bold mb-3">
+                    <span className="text-[#141D45]">{firstWord}</span>
+                    {restWords && <span className="text-[#00A79D]"> {restWords}</span>}
+                  </h2>
+                );
+              })()}
+              <span className="block h-1 w-12 rounded-full bg-[#E76869] mb-6" />
 
               <div className="space-y-4 mb-8">
                 {profile.summary.slice(0, 3).map((s, i) => (
@@ -290,8 +312,10 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+      )}
 
       {/* ═══════════════════════ EXPERTISE ═══════════════════════ */}
+      {isVisible('home.expertise') && (
       <section className="py-20 sm:py-24 bg-navy-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <SectionHeader
@@ -306,15 +330,16 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+      )}
 
       {/* ═══════════════════════ FEATURED EVENTS ═══════════════════════ */}
-      {featuredSlides.length > 0 && (
+      {isVisible('home.featured-events') && featuredSlides.length > 0 && (
         <section className="py-20 sm:py-24 bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <SectionHeader
-              label="Featured events"
-              title="Don’t miss these upcoming sessions"
-              description="Handpicked events currently highlighted for the community."
+              label={page.featuredEventsLabel || defaultWebsitePages.home.featuredEventsLabel}
+              title={page.featuredEventsTitle || defaultWebsitePages.home.featuredEventsTitle}
+              description={page.featuredEventsDescription || defaultWebsitePages.home.featuredEventsDescription}
             />
 
             <div className="relative">
@@ -377,13 +402,13 @@ export default function HomePage() {
       )}
 
       {/* ═══════════════════════ FEATURED BLOG ═══════════════════════ */}
-      {featuredBlogSlides.length > 0 && (
+      {isVisible('home.featured-blog') && featuredBlogSlides.length > 0 && (
         <section className="py-20 sm:py-24 bg-navy-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <SectionHeader
-              label="Featured blog"
-              title="Latest insights and articles"
-              description="Handpicked articles highlighted from the blog."
+              label={page.featuredBlogLabel || defaultWebsitePages.home.featuredBlogLabel}
+              title={page.featuredBlogTitle || defaultWebsitePages.home.featuredBlogTitle}
+              description={page.featuredBlogDescription || defaultWebsitePages.home.featuredBlogDescription}
             />
 
             <div className="relative">
@@ -456,6 +481,7 @@ export default function HomePage() {
       )}
 
       {/* ═══════════════════════ TESTIMONIALS ═══════════════════════ */}
+      {isVisible('home.testimonials') && (
       <section className="py-20 sm:py-24 bg-white">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <SectionHeader
@@ -516,13 +542,15 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+      )}
 
       {/* ═══════════════════════ CTA ═══════════════════════ */}
+      {isVisible('home.cta') && (
       <section className="relative py-20 sm:py-24 overflow-hidden">
         {/* Background image */}
         <div className="absolute inset-0">
           <img
-            src="https://images.unsplash.com/photo-1581093588401-fbb62a02f120?auto=format&fit=crop&w=1920&q=80"
+            src={ctaBackground}
             alt="Professional collaboration"
             className="w-full h-full object-cover"
           />
@@ -549,6 +577,7 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+      )}
     </div>
   );
 }

@@ -16,6 +16,9 @@ export const EXPERTISE_ICON_OPTIONS = Object.keys(expertiseIconMap);
 export const defaultWebsitePages = {
   home: {
     heroEyebrow: 'Quality Assurance & Diagnostics',
+    heroBackgroundImage: '',
+    heroPortraitImage: '',
+    heroPills: ['Lusaka, Zambia', '15+ Years Experience', '10+ Countries'],
     trustedByLabel: 'Mutale has worked with',
     trustedBy: [
       'Africa CDC',
@@ -28,6 +31,9 @@ export const defaultWebsitePages = {
     ],
     aboutEyebrow: 'About',
     aboutTitle: 'Driving Quality Excellence in Healthcare Diagnostics',
+    aboutImage: '',
+    aboutFloatingTitle: 'ISO Expert',
+    aboutFloatingSubtitle: '15189 · 9001 · 17025',
     aboutTags: ['ISO 15189', 'ISO 9001', 'ISO 17025', 'SLIPTA/SLMTA', 'GLP/GCLP'],
     expertiseLabel: 'Expertise',
     expertiseTitle: 'Core Competencies',
@@ -64,6 +70,12 @@ export const defaultWebsitePages = {
         description: 'Design and delivery of training programmes on quality systems, biosafety, equipment management, and competency assessment frameworks.',
       },
     ],
+    featuredEventsLabel: 'Featured events',
+    featuredEventsTitle: 'Don’t miss these upcoming sessions',
+    featuredEventsDescription: 'Handpicked events currently highlighted for the community.',
+    featuredBlogLabel: 'Featured blog',
+    featuredBlogTitle: 'Latest insights and articles',
+    featuredBlogDescription: 'Handpicked articles highlighted from the blog.',
     testimonialsLabel: 'Testimonials',
     testimonialsTitle: 'What Partners Say',
     testimonialsDescription: 'Feedback from colleagues and programme teams across laboratory quality, diagnostics, and systems strengthening work.',
@@ -94,9 +106,11 @@ export const defaultWebsitePages = {
       },
     ],
     ctaTitle: "Let's Work Together",
+    ctaBackgroundImage: '',
   },
   about: {
     headerEyebrow: 'About',
+    headerBackgroundImage: '',
     summaryLabel: 'Profile',
     summaryTitle: 'Professional Summary',
     highlightsLabel: 'Highlights',
@@ -117,10 +131,42 @@ export const defaultWebsitePages = {
   },
   experience: {
     headerEyebrow: 'Career',
+    headerBackgroundImage: '',
     title: 'Professional Experience',
     intro: 'Over 15 years of progressive experience in laboratory quality systems, diagnostics, and public health programme delivery across sub-Saharan Africa.',
     items: experienceData,
   },
+  blog: {
+    headerEyebrow: 'Blog',
+    headerBackgroundImage: '',
+    headerTitle: 'Insights & Articles',
+    headerIntro: 'Perspectives on quality systems, laboratory management, diagnostics, and public health from over 15 years in the field.',
+  },
+  events: {
+    headerEyebrow: 'Events',
+    headerBackgroundImage: '',
+    headerTitle: 'Events & Workshops',
+    headerIntro: 'Professional development events, workshops, and seminars in quality assurance, diagnostics, and laboratory systems.',
+  },
+  shop: {
+    headerEyebrow: 'Shop',
+    headerBackgroundImage: '',
+    headerTitle: 'Books, Apparel & Event Merch',
+    headerDescription: 'T-shirts, mugs, keyholders, books, and limited-edition event merchandise from Mutale Mubanga.',
+  },
+  contact: {
+    headerEyebrow: 'Contact',
+    headerBackgroundImage: '',
+    headerTitle: 'Get in Touch',
+    availableForTitle: 'Available For',
+    availableForItems: ['Consulting', 'Training & Workshops', 'Technical Advisory', 'Speaking Engagements', 'Quality System Reviews'],
+  },
+  global: {
+    footerBrandName: 'Mutale Mubanga',
+    footerBrandDescription: 'Quality Assurance & Diagnostics Professional with 15+ years of experience in ISO-based quality systems and public health programme delivery.',
+    footerTagline: 'Quality Assurance | Diagnostics | ISO-Based Quality Systems | Public Health',
+  },
+  sectionVisibility: {},
   customPages: [],
 };
 
@@ -142,6 +188,14 @@ export function mergeWebsitePages(savedPages = {}) {
     home: mergeSection(defaultWebsitePages.home, source.home),
     about: mergeSection(defaultWebsitePages.about, source.about),
     experience: mergeSection(defaultWebsitePages.experience, source.experience),
+    blog: mergeSection(defaultWebsitePages.blog, source.blog),
+    events: mergeSection(defaultWebsitePages.events, source.events),
+    shop: mergeSection(defaultWebsitePages.shop, source.shop),
+    contact: mergeSection(defaultWebsitePages.contact, source.contact),
+    global: mergeSection(defaultWebsitePages.global, source.global),
+    sectionVisibility: (source.sectionVisibility && typeof source.sectionVisibility === 'object')
+      ? { ...source.sectionVisibility }
+      : {},
     customPages: Array.isArray(source.customPages) ? source.customPages : [],
   };
 }

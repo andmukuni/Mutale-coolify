@@ -1,11 +1,14 @@
 import { Shield, Award, Cpu, Users, CheckCircle, BookOpen } from 'lucide-react';
 import SectionHeader from '../components/SectionHeader';
+import PageHeaderBackdrop from '../components/PageHeaderBackdrop';
 import { useData } from '../context/DataContext';
 import { defaultWebsitePages } from '../data/websitePages';
 
 export default function AboutPage() {
   const { profile } = useData();
   const page = profile.websitePages?.about || defaultWebsitePages.about;
+  const visibility = profile.websitePages?.sectionVisibility || {};
+  const isVisible = (id) => visibility[id] !== false;
   const education = Array.isArray(page.education) ? page.education : defaultWebsitePages.about.education;
   const leadershipTraining = Array.isArray(page.leadershipTraining)
     ? page.leadershipTraining
@@ -14,8 +17,9 @@ export default function AboutPage() {
   return (
     <div>
       {/* Header */}
-      <section className="bg-gradient-to-br from-navy-950 via-navy-900 to-navy-800 text-white py-16 sm:py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="relative overflow-hidden bg-gradient-to-br from-navy-950 via-navy-900 to-navy-800 text-white py-16 sm:py-20">
+        <PageHeaderBackdrop image={page.headerBackgroundImage} />
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="max-w-3xl">
             <span className="inline-block text-xs font-semibold uppercase tracking-widest text-cyan-400 mb-3">{page.headerEyebrow}</span>
             <h1 className="text-4xl sm:text-5xl font-bold mb-4">{profile.name}</h1>
@@ -25,6 +29,7 @@ export default function AboutPage() {
       </section>
 
       {/* Professional Summary */}
+      {isVisible('about.professional-summary') && (
       <section className="py-16 sm:py-20 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <SectionHeader label={page.summaryLabel} title={page.summaryTitle} center={false} />
@@ -35,8 +40,10 @@ export default function AboutPage() {
           </div>
         </div>
       </section>
+      )}
 
       {/* Relevant Profile */}
+      {isVisible('about.relevant-profile') && (
       <section className="py-16 sm:py-20 bg-navy-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <SectionHeader label={page.highlightsLabel} title={page.highlightsTitle} />
@@ -50,8 +57,10 @@ export default function AboutPage() {
           </div>
         </div>
       </section>
+      )}
 
       {/* Standards & Tools */}
+      {isVisible('about.standards-tools') && (
       <section className="py-16 sm:py-20 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <SectionHeader
@@ -69,8 +78,10 @@ export default function AboutPage() {
           </div>
         </div>
       </section>
+      )}
 
       {/* Computer Proficiency */}
+      {isVisible('about.computer-proficiency') && (
       <section className="py-16 sm:py-20 bg-navy-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <SectionHeader label={page.technologyLabel} title={page.technologyTitle} />
@@ -84,8 +95,10 @@ export default function AboutPage() {
           </div>
         </div>
       </section>
+      )}
 
       {/* Affiliations */}
+      {isVisible('about.affiliations') && (
       <section className="py-16 sm:py-20 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <SectionHeader label={page.affiliationsLabel} title={page.affiliationsTitle} />
@@ -99,8 +112,10 @@ export default function AboutPage() {
           </div>
         </div>
       </section>
+      )}
 
       {/* Education */}
+      {isVisible('about.education') && (
       <section className="py-16 sm:py-20 bg-navy-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <SectionHeader label={page.educationLabel} title={page.educationTitle} />
@@ -123,8 +138,10 @@ export default function AboutPage() {
           </div>
         </div>
       </section>
+      )}
 
       {/* Leadership Training */}
+      {isVisible('about.leadership-training') && (
       <section className="py-16 sm:py-20 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <SectionHeader label={page.trainingLabel} title={page.trainingTitle} />
@@ -142,6 +159,7 @@ export default function AboutPage() {
           </div>
         </div>
       </section>
+      )}
     </div>
   );
 }

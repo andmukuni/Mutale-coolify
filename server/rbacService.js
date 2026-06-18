@@ -207,6 +207,8 @@ export function resolveRouteAdminPermission(req) {
   if (path.startsWith('/api/books')) return method === 'GET' ? 'shop.view' : 'shop.manage';
   if (path.startsWith('/api/product-types')) return 'shop.manage';
   if (path.startsWith('/api/shipping/')) return 'shop.manage';
+  if (path === '/api/profile' && method !== 'GET') return 'website.manage';
+  if (path.startsWith('/api/site-images')) return 'website.manage';
   if (path.startsWith('/api/website-pages')) return 'website.manage';
   if (path.startsWith('/api/partner-logos')) return 'website.manage';
   if (path.startsWith('/api/menu-items')) return 'website.manage';

@@ -2,6 +2,8 @@ import { Link } from 'react-router-dom';
 import { Mail, Phone, MapPin } from 'lucide-react';
 import { headerContact } from '../config/siteHeader.js';
 import { useSiteMenu } from '../context/MenuContext';
+import { useData } from '../context/DataContext';
+import { defaultWebsitePages } from '../data/websitePages';
 import SiteLogo from './SiteLogo';
 
 function isExternalUrl(url) {
@@ -26,6 +28,8 @@ function FooterLink({ link }) {
 
 export default function Footer() {
   const { footerLinks } = useSiteMenu();
+  const { profile } = useData();
+  const global = profile.websitePages?.global || defaultWebsitePages.global;
   const currentYear = new Date().getFullYear();
 
   return (
@@ -36,10 +40,10 @@ export default function Footer() {
           <div>
             <Link to="/" className="flex items-center gap-3 mb-4 group">
               <SiteLogo variant="white" className="h-10 w-auto shrink-0 transition-opacity group-hover:opacity-90" />
-              <span className="text-white font-semibold text-lg">Mutale Mubanga</span>
+              <span className="text-white font-semibold text-lg">{global.footerBrandName || defaultWebsitePages.global.footerBrandName}</span>
             </Link>
             <p className="text-sm text-navy-400 leading-relaxed">
-              Quality Assurance & Diagnostics Professional with 15+ years of experience in ISO-based quality systems and public health programme delivery.
+              {global.footerBrandDescription || defaultWebsitePages.global.footerBrandDescription}
             </p>
           </div>
 
@@ -75,10 +79,10 @@ export default function Footer() {
 
         <div className="mt-10 pt-6 border-t border-navy-800 flex flex-col sm:flex-row justify-between items-center gap-4">
           <p className="text-xs text-navy-500">
-            © {currentYear} Mutale Mubanga. All rights reserved.
+            © {currentYear} {global.footerBrandName || defaultWebsitePages.global.footerBrandName}. All rights reserved.
           </p>
           <p className="text-xs text-navy-600 text-center sm:text-right">
-            Quality Assurance | Diagnostics | ISO-Based Quality Systems | Public Health
+            {global.footerTagline || defaultWebsitePages.global.footerTagline}
           </p>
         </div>
       </div>
