@@ -118,7 +118,11 @@ app.use((_, res, next) => {
 
 const SERVER_ORIGIN = String(process.env.APP_URL || process.env.CORS_ORIGINS?.split(',')[0] || '').trim().replace(/\/$/, '');
 
-app.use(cors({
+// CORS only gates the API. Static assets (dist/, /uploads) and the SPA must
+// never be CORS-checked: Vite emits asset tags with `crossorigin`, so browsers
+// send an `Origin` header even for same-origin requests, and a global CORS gate
+// would 403 every asset → blank page.
+app.use('/api', cors({
   origin(origin, callback) {
     const result = evaluateCorsOrigin(origin, {
       corsOrigins: CORS_ORIGINS,
