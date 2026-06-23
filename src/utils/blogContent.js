@@ -88,4 +88,27 @@ export function prepareContentForEditor(content) {
   return markdownToEditorHtml(content);
 }
 
+/** True when clipboard should paste as an image file (screenshot), not as text. */
+export function shouldHandleClipboardImagePaste(clipboardData) {
+  if (!clipboardData) return false;
+  const file = clipboardData.files?.[0];
+  if (!file?.type?.startsWith('image/')) return false;
+
+  const plain = String(clipboardData.getData('text/plain') || '').trim();
+  const html = String(clipboardData.getData('text/html') || '').trim();
+  if (plain || html) return false;
+
+  return true;
+}
+
+/** Strip Word/Office cruft from pasted HTML so TipTap inserts normal paragraphs. */
+export function sanitizePastedHtml(html) {
+  if (!html || typeof html !== 'string') return html;
+  return html
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<(\/?)(o|v|w|m):[^>]*>/gi, '')
+    .replace(/\sclass="Mso[^"]*"/gi, '')
+    .replace(/\sstyle="[^"]*mso-[^"]*"/gi, '');
+}
+
 export { BLOG_SANITIZE_OPTIONS } from '../../shared/blogContent.js';

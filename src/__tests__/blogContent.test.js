@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   looksLikeHtml,
+  sanitizePastedHtml,
+  shouldHandleClipboardImagePaste,
   stripHtmlForReadTime,
   markdownToEditorHtml,
   prepareContentForEditor,
@@ -32,5 +34,28 @@ describe('blogContent', () => {
   it('prepareContentForEditor converts markdown', () => {
     const result = prepareContentForEditor('## Hello');
     expect(result).toContain('<h2>');
+  });
+
+  it('shouldHandleClipboardImagePaste prefers text over bundled image files', () => {
+    const clipboard = {
+      files: [{ type: 'image/png' }],
+      getData: (type) => (type === 'text/plain' ? 'Hello world' : ''),
+      types: ['text/plain', 'Files'],
+    };
+    expect(shouldHandleClipboardImagePaste(clipboard)).toBe(false);
+  });
+
+  it('shouldHandleClipboardImagePaste allows image-only clipboard', () => {
+    const clipboard = {
+      files: [{ type: 'image/png' }],
+      getData: () => '',
+      types: ['Files'],
+    };
+    expect(shouldHandleClipboardImagePaste(clipboard)).toBe(true);
+  });
+
+  it('sanitizePastedHtml strips Office markup', () => {
+    const html = '<p class="MsoNormal">Hello</p><!-- comment -->';
+    expect(sanitizePastedHtml(html)).toBe('<p>Hello</p>');
   });
 });
