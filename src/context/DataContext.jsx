@@ -437,6 +437,13 @@ export function DataProvider({ children }) {
     return apiFetch('/profile', {
       method: 'PUT',
       body: JSON.stringify(payload),
+    }).then((res) => {
+      if (res?.data && typeof res.data === 'object') {
+        const saved = { ...profile, ...res.data };
+        saved.websitePages = mergeWebsitePages(saved.websitePages);
+        setProfile(saved);
+      }
+      return res;
     }).catch((error) => {
       console.error('Failed to update profile:', error);
       void refreshAllData(true).catch(() => {});

@@ -795,6 +795,23 @@ function parseJsonColumn(value, fallback = {}) {
   return parsed;
 }
 
+function normalizeSectionVisibility(map = {}) {
+  const flat = {};
+  const walk = (node, prefix) => {
+    if (!node || typeof node !== 'object' || Array.isArray(node)) return;
+    for (const [key, value] of Object.entries(node)) {
+      const path = prefix ? `${prefix}.${key}` : key;
+      if (typeof value === 'boolean') {
+        flat[path] = value;
+      } else if (value && typeof value === 'object') {
+        walk(value, path);
+      }
+    }
+  };
+  walk(map, '');
+  return flat;
+}
+
 function mergeWebsitePagesProfile(existingPages = {}, nextPages = {}) {
   if (!nextPages || typeof nextPages !== 'object') return existingPages || {};
   const existing = existingPages && typeof existingPages === 'object' ? existingPages : {};
@@ -809,7 +826,10 @@ function mergeWebsitePagesProfile(existingPages = {}, nextPages = {}) {
     shop: { ...(existing.shop || {}), ...(nextPages.shop || {}) },
     contact: { ...(existing.contact || {}), ...(nextPages.contact || {}) },
     global: { ...(existing.global || {}), ...(nextPages.global || {}) },
-    sectionVisibility: { ...(existing.sectionVisibility || {}), ...(nextPages.sectionVisibility || {}) },
+    sectionVisibility: {
+      ...normalizeSectionVisibility(existing.sectionVisibility || {}),
+      ...normalizeSectionVisibility(nextPages.sectionVisibility || {}),
+    },
     customPages: Array.isArray(nextPages.customPages)
       ? nextPages.customPages
       : (Array.isArray(existing.customPages) ? existing.customPages : []),
@@ -7918,7 +7938,7 @@ app.put('/api/profile', async (req, res) => {
       values: [json],
       timeout: 15000,
     });
-    return res.json({ ok: true, data: payload });
+    return res.json({ ok: true, data: nextProfile });
   } catch (error) {
     return res.status(500).json({ ok: false, message: 'Failed to save profile', error: error.message });
   }

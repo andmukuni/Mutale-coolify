@@ -182,6 +182,24 @@ function mergeSection(defaultSection = {}, savedSection = {}) {
   return merged;
 }
 
+/** Flatten nested sectionVisibility maps (legacy bug used dot-path setter). */
+export function normalizeSectionVisibility(map = {}) {
+  const flat = {};
+  const walk = (node, prefix) => {
+    if (!node || typeof node !== 'object' || Array.isArray(node)) return;
+    for (const [key, value] of Object.entries(node)) {
+      const path = prefix ? `${prefix}.${key}` : key;
+      if (typeof value === 'boolean') {
+        flat[path] = value;
+      } else if (value && typeof value === 'object') {
+        walk(value, path);
+      }
+    }
+  };
+  walk(map, '');
+  return flat;
+}
+
 export function mergeWebsitePages(savedPages = {}) {
   const source = savedPages && typeof savedPages === 'object' ? savedPages : {};
   return {
@@ -193,9 +211,7 @@ export function mergeWebsitePages(savedPages = {}) {
     shop: mergeSection(defaultWebsitePages.shop, source.shop),
     contact: mergeSection(defaultWebsitePages.contact, source.contact),
     global: mergeSection(defaultWebsitePages.global, source.global),
-    sectionVisibility: (source.sectionVisibility && typeof source.sectionVisibility === 'object')
-      ? { ...source.sectionVisibility }
-      : {},
+    sectionVisibility: normalizeSectionVisibility(source.sectionVisibility || {}),
     customPages: Array.isArray(source.customPages) ? source.customPages : [],
   };
 }

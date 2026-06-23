@@ -10,7 +10,7 @@ import {
   getByPath,
   setByPath,
   getSectionVisibility,
-  sectionVisibilityKey,
+  setSectionVisibility,
 } from '../../../config/sectionRegistry';
 
 function valueToFormString(value, type) {
@@ -142,11 +142,10 @@ export default function SectionEditorDrawer({ section, isOpen, onClose }) {
       }
 
       if (section.toggleable) {
-        draft = setByPath(
-          draft,
-          `websitePages.sectionVisibility.${sectionVisibilityKey(section)}`,
-          visible,
-        );
+        draft = {
+          ...draft,
+          websitePages: setSectionVisibility(draft.websitePages, section, visible),
+        };
         touchedRoots.add('websitePages');
       }
 
