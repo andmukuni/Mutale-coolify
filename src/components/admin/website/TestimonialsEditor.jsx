@@ -64,7 +64,16 @@ export default function TestimonialsEditor({ items = [], onChange, section = {} 
                       &ldquo;{item.quote || 'Quote preview…'}&rdquo;
                     </p>
                     <div>
-                      <p className="text-base font-semibold text-navy-900">{item.name || 'Name'}</p>
+                      {item.name ? (
+                        <p className="text-base font-semibold text-navy-900">{item.name}</p>
+                      ) : item.jobTitle ? (
+                        <p className="text-base font-semibold text-navy-900">{item.jobTitle}</p>
+                      ) : (
+                        <p className="text-base font-semibold text-navy-900">Full name</p>
+                      )}
+                      {item.name && item.jobTitle && (
+                        <p className="text-sm text-navy-600">{item.jobTitle}</p>
+                      )}
                       <p className="text-sm text-navy-500">{item.org || 'Organization'}</p>
                     </div>
                   </article>
@@ -118,12 +127,18 @@ export default function TestimonialsEditor({ items = [], onChange, section = {} 
                   textarea
                   rows={4}
                 />
-                <div className="grid sm:grid-cols-2 gap-4">
+                <div className="grid sm:grid-cols-3 gap-4">
                   <FormField
-                    label="Name / role"
+                    label="Full name"
                     name={`testimonial-name-${safeIndex}`}
                     value={active.name || ''}
                     onChange={(e) => updateAt(safeIndex, { name: e.target.value })}
+                  />
+                  <FormField
+                    label="Job title"
+                    name={`testimonial-job-title-${safeIndex}`}
+                    value={active.jobTitle || ''}
+                    onChange={(e) => updateAt(safeIndex, { jobTitle: e.target.value })}
                   />
                   <FormField
                     label="Organization"

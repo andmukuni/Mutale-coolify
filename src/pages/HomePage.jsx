@@ -502,8 +502,15 @@ export default function HomePage() {
                   </div>
                   <p className="text-lg sm:text-xl leading-relaxed text-navy-700 mb-6">“{item.quote}”</p>
                   <div>
-                    <p className="text-base font-semibold text-navy-900">{item.name}</p>
-                    <p className="text-sm text-navy-500">{item.org}</p>
+                    {item.name ? (
+                      <p className="text-base font-semibold text-navy-900">{item.name}</p>
+                    ) : (
+                      item.jobTitle && <p className="text-base font-semibold text-navy-900">{item.jobTitle}</p>
+                    )}
+                    {item.name && item.jobTitle && (
+                      <p className="text-sm text-navy-600">{item.jobTitle}</p>
+                    )}
+                    {item.org && <p className="text-sm text-navy-500">{item.org}</p>}
                   </div>
                 </article>
               ))}
