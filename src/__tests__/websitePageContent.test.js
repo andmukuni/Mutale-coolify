@@ -32,6 +32,21 @@ describe('websitePageContent', () => {
     const result = normalizeTestimonial({ quote: 'Great', name: 'Director', org: 'Org' }, 0);
     expect(result.id).toBeTruthy();
     expect(result.quote).toBe('Great');
+    expect(result.jobTitle).toBe('Director');
+    expect(result.name).toBe('');
+    expect(result.org).toBe('Org');
+  });
+
+  it('normalizeTestimonial keeps full name and job title separate', () => {
+    const result = normalizeTestimonial({
+      quote: 'Great',
+      name: 'Jane Doe',
+      jobTitle: 'Laboratory Director',
+      org: 'Regional Programme',
+    }, 0);
+    expect(result.name).toBe('Jane Doe');
+    expect(result.jobTitle).toBe('Laboratory Director');
+    expect(result.org).toBe('Regional Programme');
   });
 
   it('normalizeExperienceItem parses responsibilities from lines', () => {

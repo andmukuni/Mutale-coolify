@@ -32,11 +32,28 @@ export function normalizeExpertiseArea(item = {}, index = 0) {
 }
 
 export function normalizeTestimonial(item = {}, index = 0) {
+  const org = clean(item.org);
+  const hasJobTitleField = Object.prototype.hasOwnProperty.call(item, 'jobTitle');
+  const jobTitle = clean(item.jobTitle || item.title || item.role);
+  const name = clean(item.fullName || item.name);
+
+  // Legacy records stored job title in `name` before `jobTitle` existed.
+  if (!hasJobTitleField && name) {
+    return {
+      id: ensureId('t', item.id, index),
+      quote: clean(item.quote),
+      name: '',
+      jobTitle: name,
+      org,
+    };
+  }
+
   return {
     id: ensureId('t', item.id, index),
     quote: clean(item.quote),
-    name: clean(item.name),
-    org: clean(item.org),
+    name,
+    jobTitle,
+    org,
   };
 }
 
@@ -103,7 +120,7 @@ export function createEmptyExpertiseArea() {
 }
 
 export function createEmptyTestimonial() {
-  return normalizeTestimonial({ quote: '', name: '', org: '' });
+  return normalizeTestimonial({ quote: '', name: '', jobTitle: '', org: '' });
 }
 
 export function createEmptyEducationEntry() {
