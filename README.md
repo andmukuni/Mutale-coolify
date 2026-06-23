@@ -65,24 +65,27 @@ If connected, you should see:
 
 ## Zoom Integration Setup
 
-To create Zoom meetings from admin pages and allow secure attendee join, set these backend env vars:
+Zoom meetings are created from admin using **Server-to-Server OAuth** credentials. In-page attendee join uses the **Meeting SDK** (configured in Admin → Settings → Video, or via env vars below).
 
 ```bash
+# OAuth — create/manage Zoom meetings from admin
 ZOOM_ACCOUNT_ID=
 ZOOM_CLIENT_ID=
 ZOOM_CLIENT_SECRET=
 ZOOM_DEFAULT_HOST_EMAIL=
 ZOOM_WEBHOOK_SECRET_TOKEN=
 
-# Optional but recommended for embedded in-app meeting join (Meeting SDK)
+# Meeting SDK — in-page join on /events/:slug/join (optional env override; admin UI preferred)
 ZOOM_MEETING_SDK_KEY=
 ZOOM_MEETING_SDK_SECRET=
 ```
 
 Notes:
-- If `ZOOM_MEETING_SDK_KEY`/`ZOOM_MEETING_SDK_SECRET` are present, `/events/:slug/join` uses embedded Zoom SDK.
-- If SDK vars are missing, the app securely falls back to Zoom `join_url` redirect.
+- Default join mode is **embed in Mutale** when Meeting SDK credentials are present.
+- If SDK credentials are missing or signature generation fails, the join page falls back to opening Zoom `join_url` in a new tab.
+- Add **mutalemubanga.org** to the Zoom Meeting SDK app domain allowlist before testing embed.
 - Configure Zoom webhook URL to: `POST /api/webhooks/zoom` (public HTTPS endpoint in production).
+- See [DEPLOY_COOLIFY.md](DEPLOY_COOLIFY.md) for Marketplace setup and CSP notes.
 
 ## Routes
 

@@ -117,12 +117,37 @@ export default function WebsitePagesPage() {
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const dirtyRef = useRef(false);
+  const saveButtonRef = useRef(null);
+  const [showStickySave, setShowStickySave] = useState(false);
 
   const baseline = useMemo(() => profileToForm(profile), [profile]);
 
   useEffect(() => {
     if (!dirtyRef.current) setForm(baseline);
   }, [baseline]);
+
+  useEffect(() => {
+    const updateStickySave = () => {
+      const saveEl = saveButtonRef.current;
+      if (!saveEl) {
+        setShowStickySave(false);
+        return;
+      }
+
+      const rect = saveEl.getBoundingClientRect();
+      const saveVisible = rect.top < window.innerHeight && rect.bottom > 0;
+      setShowStickySave(window.scrollY > 100 && !saveVisible);
+    };
+
+    updateStickySave();
+    window.addEventListener('scroll', updateStickySave, { passive: true });
+    window.addEventListener('resize', updateStickySave);
+
+    return () => {
+      window.removeEventListener('scroll', updateStickySave);
+      window.removeEventListener('resize', updateStickySave);
+    };
+  }, [activeTab]);
 
   const setField = (name, value) => {
     dirtyRef.current = true;
@@ -471,7 +496,7 @@ export default function WebsitePagesPage() {
             </div>
           )}
 
-          <div className="flex items-center gap-3 pt-4 border-t border-navy-100">
+          <div ref={saveButtonRef} className="flex items-center gap-3 pt-4 border-t border-navy-100">
             <button
               type="submit"
               disabled={saving}
@@ -483,6 +508,25 @@ export default function WebsitePagesPage() {
           </div>
         </form>
       </Card>
+
+      <div
+        className={`fixed bottom-0 left-0 right-0 md:left-72 z-30 border-t border-navy-200 bg-white/95 backdrop-blur shadow-[0_-4px_20px_rgba(15,23,42,0.08)] transition-transform duration-300 ease-out ${
+          showStickySave ? 'translate-y-0' : 'translate-y-full pointer-events-none'
+        }`}
+        aria-hidden={!showStickySave}
+      >
+        <div className="px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-end">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="inline-flex items-center gap-2 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-70 disabled:cursor-not-allowed text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-colors shadow-sm"
+          >
+            {saving ? <Spinner size={16} /> : <Save size={16} />}
+            {saving ? 'Saving...' : 'Save Website Pages'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

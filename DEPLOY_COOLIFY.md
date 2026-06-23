@@ -189,6 +189,41 @@ Keep **separate** databases and secrets. Do not point staging at production MySQ
 
 ---
 
+## Zoom Meeting SDK (in-platform join)
+
+Attendees stay on **mutalemubanga.org** when Zoom embed is configured. Redirect to zoom.us remains the fallback.
+
+### 1. Zoom Marketplace setup (manual)
+
+1. Open [Zoom Marketplace](https://marketplace.zoom.us/develop/create) and create or use a **Meeting SDK** app (not Server-to-Server OAuth alone).
+2. In the app settings, add your production domain to the **SDK domain allowlist**:
+   - `mutalemubanga.org`
+   - Add staging domains too if you test on Coolify sslip.io or a staging subdomain.
+3. Copy **SDK Key** and **SDK Secret** (Meeting SDK credentials — not OAuth Client ID/Secret unless from a Meeting SDK-capable app).
+4. In **Admin → Settings → Video → Zoom → Meeting SDK**, paste the credentials and run **Test SDK Signature**.
+5. Keep **OAuth** credentials (Account ID, Client ID, Client Secret, host email) for creating meetings from admin.
+
+### 2. Join behavior
+
+| Setting | Result |
+|---|---|
+| `joinMode: embed` (default) + SDK configured | Meeting renders on `/events/:slug/join` |
+| SDK missing or signature fails | Opens Zoom `joinUrl` in a new tab with a notice |
+| `joinMode: redirect` | Always opens Zoom in a new tab |
+| Daily.co event | Unchanged — embeds via Daily iframe |
+
+The join page relaxes `Permissions-Policy` for camera/microphone on `/events/*/join` only.
+
+### 3. Content Security Policy (when enforcing CSP)
+
+Report-Only CSP is fine for first rollout. When moving to enforced CSP, allow Zoom Web SDK domains including:
+
+- `https://source.zoom.us`
+- `https://*.zoom.us`
+- WebSocket endpoints used by Zoom (`wss://*.zoom.us`)
+
+---
+
 ## Troubleshooting
 
 | Issue | Fix |

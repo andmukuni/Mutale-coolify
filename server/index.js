@@ -101,11 +101,19 @@ const CORS_ORIGINS = String(process.env.CORS_ORIGINS || '').split(',').map((v) =
 
 app.disable('x-powered-by');
 
-app.use((_, res, next) => {
+function isEventJoinPagePath(pathname = '') {
+  return /^\/events\/[^/]+\/join\/?$/i.test(String(pathname || ''));
+}
+
+app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  if (isEventJoinPagePath(req.path)) {
+    res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=()');
+  } else {
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  }
   if (IS_PRODUCTION) {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   }
@@ -642,7 +650,7 @@ const SYSTEM_SETTINGS_DEFAULTS = {
   video: {
     defaultProvider: 'zoom',
     enabledProviders: ['zoom', 'daily'],
-    joinMode: 'redirect',
+    joinMode: 'embed',
   },
   zoom: {
     accountId: process.env.ZOOM_ACCOUNT_ID || '',
@@ -6368,6 +6376,20 @@ app.post('/api/events/:eventId/video/join-auth', async (req, res) => {
 
       const finalRegistration = attendanceUpdated || registration;
       const videoSettingsResolved = await getVideoSettings();
+      const wantsEmbed = videoSettingsResolved.joinMode === 'embed';
+      const canEmbed = Boolean(
+        zoomConfig.sdkKey && zoomConfig.sdkSecret && meetingNumber && signature,
+      );
+      let embedReason = null;
+      if (wantsEmbed && !canEmbed) {
+        if (!zoomConfig.sdkKey || !zoomConfig.sdkSecret) {
+          embedReason = 'Meeting SDK credentials are not configured in Admin Settings.';
+        } else if (!meetingNumber) {
+          embedReason = 'Could not resolve the Zoom meeting number for this event.';
+        } else if (!signature) {
+          embedReason = 'Could not generate a Meeting SDK signature.';
+        }
+      }
 
       return res.json({
         ok: true,
@@ -6384,6 +6406,8 @@ app.post('/api/events/:eventId/video/join-auth', async (req, res) => {
         registration: mapDbRegistration(finalRegistration),
         joinWindow: windowState,
         joinMode: videoSettingsResolved.joinMode,
+        embedAvailable: wantsEmbed && canEmbed,
+        embedReason,
       });
     }
 
@@ -8272,6 +8296,7 @@ app.get('/api/settings/video/status', async (_req, res) => {
       defaultProvider: video.defaultProvider,
       enabledProviders: video.enabledProviders,
       joinMode: video.joinMode,
+      sdkReady: Boolean(zoom.sdk),
       providers: { zoom, daily },
     });
   } catch {
@@ -8279,7 +8304,8 @@ app.get('/api/settings/video/status', async (_req, res) => {
       ok: false,
       defaultProvider: 'zoom',
       enabledProviders: ['zoom'],
-      joinMode: 'redirect',
+      joinMode: 'embed',
+      sdkReady: false,
       providers: {
         zoom: { configured: false, oauth: false, hostEmail: false, sdk: false, webhook: false },
         daily: { configured: false, apiKey: false, domain: false, webhook: false },

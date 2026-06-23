@@ -18,17 +18,11 @@ export default defineConfig({
     },
   },
   build: {
-    modulePreload: {
-      resolveDependencies(filename, deps) {
-        return deps.filter((dep) => !dep.includes('zoom-sdk'));
-      },
-    },
     rollupOptions: {
-      // Exclude Zoom SDK from the bundle — it's served as a static file from public/zoom-sdk/
-      external: ['@zoom/meetingsdk', '@zoom/meetingsdk/embedded'],
       output: {
         manualChunks(id) {
           if (!id.includes('node_modules')) return undefined;
+          if (id.includes('@zoom/meetingsdk')) return 'zoom-sdk';
           if (id.includes('react-router-dom')) return 'router';
           if (id.includes('react-dom') || id.includes('/react/')) return 'react';
           if (id.includes('lucide-react')) return 'icons';

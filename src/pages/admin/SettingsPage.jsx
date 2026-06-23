@@ -94,7 +94,7 @@ const defaultSystemConfig = {
   video: {
     defaultProvider: 'zoom',
     enabledProviders: ['zoom', 'daily'],
-    joinMode: 'redirect',
+    joinMode: 'embed',
   },
   zoom: {
     accountId: '',
@@ -196,6 +196,7 @@ export default function SettingsPage() {
   const [testingSmartData, setTestingSmartData] = useState(false);
   const [smartDataTestStatus, setSmartDataTestStatus] = useState(null);
   const [testNrcNumber, setTestNrcNumber] = useState('');
+  const [videoStatus, setVideoStatus] = useState(null);
 
   useEffect(() => {
     const tab = String(searchParams.get('tab') || '').trim();
@@ -231,6 +232,28 @@ export default function SettingsPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'video') return undefined;
+    let cancelled = false;
+
+    const loadVideoStatus = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/settings/video/status`, {
+          headers: getAdminAuthHeaders(),
+        });
+        const json = await response.json().catch(() => ({}));
+        if (!cancelled) setVideoStatus(json);
+      } catch {
+        if (!cancelled) setVideoStatus(null);
+      }
+    };
+
+    loadVideoStatus();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, systemSaving]);
 
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -1050,8 +1073,16 @@ export default function SettingsPage() {
                   <div className="rounded-xl border border-cyan-100 bg-cyan-50/60 p-4 text-sm text-cyan-900 space-y-2">
                     <p className="font-medium">Site-wide default</p>
                     <p className="text-cyan-800 text-xs">
-                      Attendees join via the event&apos;s meeting platform. Change the default here, or pick Zoom / Daily per event when creating workshops.
+                      Attendees join via the event&apos;s meeting platform. Zoom embeds in Mutale by default when Meeting SDK credentials are configured; otherwise attendees are sent to Zoom in a new tab.
                     </p>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${videoStatus?.sdkReady ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                        Meeting SDK: {videoStatus?.sdkReady ? 'configured' : 'not configured'}
+                      </span>
+                      <span className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-navy-100 text-navy-700">
+                        Join mode: {systemForm.video.joinMode === 'embed' ? 'embed in Mutale' : 'open Zoom in new tab'}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="space-y-2">
@@ -1091,10 +1122,10 @@ export default function SettingsPage() {
                       value={systemForm.video.joinMode}
                       onChange={(e) => handleSystemChange('video', e)}
                       options={[
-                        { value: 'redirect', label: 'Open Zoom in new tab' },
-                        { value: 'embed', label: 'Embed in app (when SDK configured)' },
+                        { value: 'embed', label: 'Embed in Mutale (recommended)' },
+                        { value: 'redirect', label: 'Always open Zoom in new tab' },
                       ]}
-                      helpText="Daily.co always embeds on the join page when selected for an event."
+                      helpText="Embed requires Meeting SDK credentials and mutalemubanga.org on the Zoom domain allowlist. Daily.co always embeds on the join page."
                     />
                   </div>
 
@@ -1339,16 +1370,15 @@ export default function SettingsPage() {
 
             {/* ── Meeting SDK (Optional) ── */}
             {zoomSubTab === 'sdk' && (
-              <Card title="Meeting SDK" subtitle="Enable embedded in-app meetings instead of redirecting to zoom.us — optional">
+              <Card title="Meeting SDK" subtitle="Required for in-page Zoom join on mutalemubanga.org">
                 <form onSubmit={handleSaveSystem} className="space-y-4">
                   <div className="rounded-xl bg-amber-50 border border-amber-200 p-4">
                     <div className="flex gap-2">
                       <Info size={16} className="text-amber-600 shrink-0 mt-0.5" />
                       <div className="text-sm text-amber-800">
-                        <p className="font-medium">This section is optional.</p>
+                        <p className="font-medium">Embed is the default join mode.</p>
                         <p className="mt-1 text-amber-700">
-                          Without SDK credentials, attendees are redirected to Zoom&apos;s web client to join — which works perfectly fine.
-                          With SDK credentials, they can join directly inside your platform for a seamless experience.
+                          Save Meeting SDK Key and Secret here, add <strong>mutalemubanga.org</strong> to your Zoom app&apos;s domain allowlist, then run Test SDK Signature. Without SDK credentials, attendees fall back to opening Zoom in a new tab.
                         </p>
                       </div>
                     </div>
@@ -1363,8 +1393,9 @@ export default function SettingsPage() {
                       <ol className="list-decimal list-inside space-y-1 ml-1">
                         <li>Go to <a href="https://marketplace.zoom.us/develop/create" target="_blank" rel="noopener noreferrer" className="text-cyan-600 hover:underline">marketplace.zoom.us/develop/create</a></li>
                         <li>Choose <strong>&quot;Meeting SDK&quot;</strong> app type (or enable Meeting SDK in your General App)</li>
+                        <li>Add <strong>mutalemubanga.org</strong> (and staging domains) to the SDK <strong>domain allowlist</strong></li>
                         <li>Copy the app&apos;s <strong>SDK Key</strong> / <strong>SDK Secret</strong> (or Client ID / Client Secret for Meeting SDK-capable app)</li>
-                        <li>Activate the app</li>
+                        <li>Activate the app, save credentials below, and run <strong>Test SDK Signature</strong></li>
                       </ol>
                     </div>
                   </details>
@@ -1398,6 +1429,11 @@ export default function SettingsPage() {
                   {zoomSdkTestStatus && (
                     <div className={`mt-3 rounded-xl px-4 py-3 text-sm font-medium ${zoomSdkTestStatus.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
                       {zoomSdkTestStatus.message}
+                      {zoomSdkTestStatus.type === 'success' && (
+                        <p className="mt-2 text-xs font-normal text-emerald-800">
+                          Next: register for a Zoom event and open <code className="bg-emerald-100 px-1 rounded">/events/&lt;slug&gt;/join</code> to confirm in-page join works on your domain.
+                        </p>
+                      )}
                     </div>
                   )}
                   <SaveButton loading={systemSaving} disabled={systemLoading} />
