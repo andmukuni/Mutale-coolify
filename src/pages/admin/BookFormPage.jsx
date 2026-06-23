@@ -739,11 +739,6 @@ export default function BookFormPage() {
     return list.length > 0 ? list : FALLBACK_TYPE_OPTIONS;
   }, [activeProductTypes]);
 
-  const categoryOptions = useMemo(() => {
-    const scope = form.product_type === 'book' ? 'book' : 'merch';
-    return getCategoriesForScope(scope).map((cat) => cat.name);
-  }, [form.product_type, getCategoriesForScope]);
-
   const [form, setForm]                   = useState(emptyProduct);
   const [step, setStep]                   = useState(0);
   const [saved, setSaved]                 = useState(false);
@@ -754,6 +749,11 @@ export default function BookFormPage() {
   const [uploadingGallery, setUploadingGallery] = useState(false);
   const fileInputRef = useRef(null);
   const galleryInputRef = useRef(null);
+
+  const categoryOptions = useMemo(() => {
+    const scope = form.product_type === 'book' ? 'book' : 'merch';
+    return getCategoriesForScope(scope).map((cat) => cat.name);
+  }, [form.product_type, getCategoriesForScope]);
 
   const attachedEvent = useMemo(
     () => events.find(e => e.id === form.event_id),
