@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
+import { NavLink, Outlet, Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   CalendarDays,
@@ -11,9 +11,6 @@ import {
   Settings,
   Menu,
   X,
-  ExternalLink,
-  User,
-  LogOut,
   ChevronDown,
   Receipt,
   ReceiptText,
@@ -36,6 +33,7 @@ import {
 } from 'lucide-react';
 import SiteLogo from '../components/SiteLogo';
 import ThemeToggle from '../components/ThemeToggle';
+import AdminUserMenu from '../components/admin/AdminUserMenu';
 import { useAuth } from '../context/AuthContext';
 import { NAV_PERMISSION_MAP } from '../../shared/rbacPermissions.js';
 import { getApiBase } from '../utils/apiBase';
@@ -101,7 +99,6 @@ const SYSTEM_NAVIGATION = [
   { key: 'settlement-accounts', name: 'Settlement Accounts', to: '/admin/finance/settlement-accounts', icon: Landmark },
   { key: 'payouts', name: 'Payouts', to: '/admin/finance/payouts', icon: Landmark },
   { key: 'access-control', name: 'Access control', to: '/admin/access-control', icon: Shield },
-  { key: 'settings', name: 'Settings', to: '/admin/settings', icon: Settings },
 ];
 
 function navItemAllowed(navKey, hasPermission) {
@@ -126,8 +123,7 @@ function filterContentNav(items, hasPermission) {
 
 export default function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { user, logout, hasPermission } = useAuth();
-  const navigate = useNavigate();
+  const { user, hasPermission } = useAuth();
   const location = useLocation();
   const [eventsOpen, setEventsOpen] = useState(true);
   const [blogOpen, setBlogOpen] = useState(true);
@@ -138,6 +134,7 @@ export default function AdminLayout() {
 
   const contentNavigation = filterContentNav(CONTENT_NAVIGATION, hasPermission);
   const systemNavigation = SYSTEM_NAVIGATION.filter((item) => navItemAllowed(item.key, hasPermission));
+  const canManageSettings = navItemAllowed('settings', hasPermission);
 
   useEffect(() => {
     let cancelled = false;
@@ -229,11 +226,6 @@ export default function AdminLayout() {
     return pathname.startsWith('/admin/books')
       || pathname.startsWith('/admin/shipping')
       || pathname.startsWith('/admin/shop');
-  };
-
-  const handleLogout = () => {
-    logout();
-    navigate('/admin/login');
   };
 
   useEffect(() => {
@@ -559,35 +551,24 @@ export default function AdminLayout() {
           </div>
         </nav>
 
-        {/* Sidebar footer — user info + view site link */}
-        <div className="border-t border-navy-800 p-4 space-y-3">
-          <Link
-            to="/"
-            target="_blank"
-            className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-navy-400 hover:text-cyan-400 hover:bg-navy-800 transition-colors"
-          >
-            <ExternalLink size={16} />
-            View Website
-          </Link>
-          <div className="flex items-center gap-3 px-3">
-            <div className="h-8 w-8 rounded-full bg-navy-700 flex items-center justify-center">
-              <User size={16} className="text-navy-300" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white truncate">
-                {user?.name || 'Admin'}
-              </p>
-              <p className="text-xs text-navy-400 truncate">{user?.role || 'Administrator'}</p>
-            </div>
+        {canManageSettings && (
+          <div className="shrink-0 border-t border-navy-800 p-4">
+            <NavLink
+              to="/admin/settings"
+              onClick={() => setSidebarOpen(false)}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-cyan-600/10 text-cyan-400'
+                    : 'text-navy-300 hover:bg-navy-800 hover:text-white'
+                }`
+              }
+            >
+              <Settings size={18} />
+              System Settings
+            </NavLink>
           </div>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 w-full px-3 py-2 rounded-xl text-sm text-navy-400 hover:text-red-400 hover:bg-navy-800 transition-colors"
-          >
-            <LogOut size={16} />
-            Sign out
-          </button>
-        </div>
+        )}
       </aside>
 
       {/* ─── Mobile overlay ─── */}
@@ -614,7 +595,7 @@ export default function AdminLayout() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 ml-auto">
           <ThemeToggle variant="admin" />
           {videoStatus && (
             <Link
@@ -641,22 +622,7 @@ export default function AdminLayout() {
               </span>
             </Link>
           )}
-
-          <Link
-            to="/"
-            className="hidden sm:inline-flex items-center gap-1.5 text-sm text-navy-500 hover:text-cyan-600 transition-colors"
-          >
-            <ExternalLink size={14} />
-            View Site
-          </Link>
-          <button
-            onClick={handleLogout}
-            className="inline-flex items-center gap-1.5 text-sm text-navy-500 hover:text-red-600 transition-colors"
-            title="Sign out"
-          >
-            <LogOut size={14} />
-            <span className="hidden sm:inline">Sign out</span>
-          </button>
+          <AdminUserMenu />
           <Link to="/admin" className="md:hidden shrink-0" aria-label="Admin home">
             <SiteLogo variant="primary" className="h-8 w-auto" />
           </Link>
