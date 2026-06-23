@@ -20,7 +20,7 @@ import {
 import { BlogImage } from './blogImageExtension';
 import BlogImageControlsBar from './BlogImageControlsBar';
 import TextFormatToolbar from '../shared/TextFormatToolbar.jsx';
-import { prepareContentForEditor } from '../../../utils/blogContent';
+import { prepareContentForEditor, sanitizePastedHtml, shouldHandleClipboardImagePaste } from '../../../utils/blogContent';
 import { clampFreeImagePosition } from '../../../../shared/blogImageLayout.js';
 import { readFileAsDataUrl, uploadBlogInlineImage } from '../../../utils/uploadBlogImage';
 
@@ -106,12 +106,14 @@ export default function BlogRichTextEditor({
       },
       handlePaste: (view, event) => {
         if (disabled) return false;
-        const file = event.clipboardData?.files?.[0];
-        if (!file?.type?.startsWith('image/')) return false;
+        const clipboard = event.clipboardData;
+        if (!shouldHandleClipboardImagePaste(clipboard)) return false;
+        const file = clipboard.files?.[0];
         event.preventDefault();
         void insertImageRef.current?.(file, null);
         return true;
       },
+      transformPastedHTML: (html) => sanitizePastedHtml(html),
     },
   });
 
