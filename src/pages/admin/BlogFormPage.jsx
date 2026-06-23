@@ -154,7 +154,7 @@ export default function BlogFormPage() {
         </div>
       )}
 
-  <Card className="max-w-3xl mx-auto">
+      <Card className="w-full">
         <form onSubmit={handleSubmit} className="space-y-5 pb-24 sm:pb-0">
           <FormField
             label="Title"
