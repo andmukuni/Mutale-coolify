@@ -43,6 +43,14 @@ export function truncateText(text, maxLength = 150) {
   return text.slice(0, maxLength).trim() + '...';
 }
 
+/** Format Zambian NRC as XXXXXX/XX/X while typing (max 9 digits). */
+export function formatNrcNumber(raw) {
+  const digits = String(raw || '').replace(/\D/g, '').slice(0, 9);
+  if (digits.length <= 6) return digits;
+  if (digits.length <= 8) return `${digits.slice(0, 6)}/${digits.slice(6)}`;
+  return `${digits.slice(0, 6)}/${digits.slice(6, 8)}/${digits.slice(8)}`;
+}
+
 export function getFromLocalStorage(key, fallback) {
   try {
     const stored = localStorage.getItem(key);

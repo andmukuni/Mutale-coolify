@@ -101,11 +101,19 @@ const CORS_ORIGINS = String(process.env.CORS_ORIGINS || '').split(',').map((v) =
 
 app.disable('x-powered-by');
 
-app.use((_, res, next) => {
+function isEventJoinPagePath(pathname = '') {
+  return /^\/events\/[^/]+\/join\/?$/i.test(String(pathname || ''));
+}
+
+app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  if (isEventJoinPagePath(req.path)) {
+    res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=()');
+  } else {
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  }
   if (IS_PRODUCTION) {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   }
@@ -635,13 +643,14 @@ const SYSTEM_SETTINGS_DEFAULTS = {
     metaPixelId: process.env.META_PIXEL_ID || '',
     slackWebhook: process.env.SLACK_WEBHOOK || '',
     zapierWebhook: process.env.ZAPIER_WEBHOOK || '',
+    nrcVerificationEnabled: process.env.NRC_VERIFICATION_ENABLED !== 'false',
     smartdataApiKey: process.env.SMARTDATA_API_KEY || '',
     smartdataBaseUrl: process.env.SMARTDATA_BASE_URL || 'https://mysmartdata.tech/api/v1',
   },
   video: {
     defaultProvider: 'zoom',
     enabledProviders: ['zoom', 'daily'],
-    joinMode: 'redirect',
+    joinMode: 'embed',
   },
   zoom: {
     accountId: process.env.ZOOM_ACCOUNT_ID || '',
@@ -794,6 +803,23 @@ function parseJsonColumn(value, fallback = {}) {
   return parsed;
 }
 
+function normalizeSectionVisibility(map = {}) {
+  const flat = {};
+  const walk = (node, prefix) => {
+    if (!node || typeof node !== 'object' || Array.isArray(node)) return;
+    for (const [key, value] of Object.entries(node)) {
+      const path = prefix ? `${prefix}.${key}` : key;
+      if (typeof value === 'boolean') {
+        flat[path] = value;
+      } else if (value && typeof value === 'object') {
+        walk(value, path);
+      }
+    }
+  };
+  walk(map, '');
+  return flat;
+}
+
 function mergeWebsitePagesProfile(existingPages = {}, nextPages = {}) {
   if (!nextPages || typeof nextPages !== 'object') return existingPages || {};
   const existing = existingPages && typeof existingPages === 'object' ? existingPages : {};
@@ -808,7 +834,10 @@ function mergeWebsitePagesProfile(existingPages = {}, nextPages = {}) {
     shop: { ...(existing.shop || {}), ...(nextPages.shop || {}) },
     contact: { ...(existing.contact || {}), ...(nextPages.contact || {}) },
     global: { ...(existing.global || {}), ...(nextPages.global || {}) },
-    sectionVisibility: { ...(existing.sectionVisibility || {}), ...(nextPages.sectionVisibility || {}) },
+    sectionVisibility: {
+      ...normalizeSectionVisibility(existing.sectionVisibility || {}),
+      ...normalizeSectionVisibility(nextPages.sectionVisibility || {}),
+    },
     customPages: Array.isArray(nextPages.customPages)
       ? nextPages.customPages
       : (Array.isArray(existing.customPages) ? existing.customPages : []),
@@ -1654,7 +1683,7 @@ async function saveSystemSettings(payload = {}) {
   const stored = await getSystemSettings();
   const withSecrets = preserveMaskedSecrets(payload, stored);
   const merged = mergeSystemSettings(withSecrets);
-  await validateVideoSettingsBeforeSave(merged);
+  validateVideoSettingsBeforeSave(merged);
   await pool.query(
     'INSERT INTO system_settings (id, data) VALUES (1, ?) ON DUPLICATE KEY UPDATE data = VALUES(data)',
     [JSON.stringify(merged)],
@@ -2481,20 +2510,7 @@ async function validateVideoSettingsBeforeSave(merged = {}) {
     throw new Error('Default video provider must be included in enabled providers.');
   }
 
-  if (video.defaultProvider === 'zoom') {
-    const zoomStatus = await getZoomProviderStatus();
-    if (!zoomStatus.configured) {
-      throw new Error('Zoom is the default video provider but Server-to-Server OAuth and host email are not fully configured.');
-    }
-  }
-
-  if (video.defaultProvider === 'daily') {
-    const dailyStatus = await getDailyProviderStatus();
-    if (!dailyStatus.configured) {
-      throw new Error('Daily.co is the default video provider but API key and domain are not fully configured.');
-    }
-  }
-
+  // Provider credentials are validated when creating meetings, not when saving email/payment settings.
   return merged;
 }
 
@@ -4413,6 +4429,56 @@ function generatePasswordResetToken() {
   return crypto.randomBytes(32).toString('hex');
 }
 
+function getSmartDataConfig(settings = {}) {
+  const integrations = settings?.integrations || {};
+  return {
+    enabled: integrations.nrcVerificationEnabled !== false && integrations.nrcVerificationEnabled !== 0,
+    apiKey: String(integrations.smartdataApiKey || process.env.SMARTDATA_API_KEY || '').trim(),
+    baseUrl: String(integrations.smartdataBaseUrl || process.env.SMARTDATA_BASE_URL || 'https://mysmartdata.tech/api/v1').trim().replace(/\/$/, ''),
+  };
+}
+
+async function verifyNrcWithSmartData({ apiKey, baseUrl, nrcNumber }) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const response = await fetch(`${baseUrl}/nrc/verify`, {
+      method: 'POST',
+      headers: {
+        'X-API-Key': apiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ nrc_number: nrcNumber, country: 'ZM' }),
+      signal: controller.signal,
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (response.status === 401 || response.status === 403) {
+      return { ok: false, message: 'SmartData rejected the API key. Check Admin Settings → NRC Verification.' };
+    }
+
+    if (data.success && data.data) {
+      return {
+        ok: true,
+        data: {
+          fullName: data.data.full_name || '',
+          firstName: data.data.first_name || '',
+          lastName: data.data.last_name || '',
+          dateOfBirth: data.data.date_of_birth || '',
+          gender: data.data.gender || '',
+          nrcNumber,
+        },
+      };
+    }
+
+    return { ok: false, message: 'NRC verification failed. Check the number and try again.' };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // POST /api/nrc/verify — Proxy NRC verification via SmartData API
 app.post('/api/nrc/verify', rateLimitNrcVerify, async (req, res) => {
   try {
@@ -4422,47 +4488,27 @@ app.post('/api/nrc/verify', rateLimitNrcVerify, async (req, res) => {
     }
 
     const settings = await getSystemSettings();
-    const apiKey = String(settings?.integrations?.smartdataApiKey || '').trim();
-    const baseUrl = String(settings?.integrations?.smartdataBaseUrl || 'https://mysmartdata.tech/api/v1').trim().replace(/\/$/, '');
+    const smartData = getSmartDataConfig(settings);
 
-    if (!apiKey) {
+    if (!smartData.enabled) {
+      return res.status(503).json({ ok: false, message: 'NRC verification is currently disabled.' });
+    }
+
+    if (!smartData.apiKey) {
       return res.status(500).json({ ok: false, message: 'NRC verification service is not configured. Contact the administrator.' });
     }
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15000);
+    const result = await verifyNrcWithSmartData({
+      apiKey: smartData.apiKey,
+      baseUrl: smartData.baseUrl,
+      nrcNumber,
+    });
 
-    try {
-      const response = await fetch(`${baseUrl}/nrc/verify`, {
-        method: 'POST',
-        headers: {
-          'X-API-Key': apiKey,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ nrc_number: nrcNumber, country: 'ZM' }),
-        signal: controller.signal,
-      });
-
-      const data = await response.json().catch(() => ({}));
-
-      if (data.success && data.data) {
-        return res.json({
-          ok: true,
-          data: {
-            fullName: data.data.full_name || '',
-            firstName: data.data.first_name || '',
-            lastName: data.data.last_name || '',
-            dateOfBirth: data.data.date_of_birth || '',
-            gender: data.data.gender || '',
-            nrcNumber,
-          },
-        });
-      }
-
-      return res.status(400).json({ ok: false, message: 'NRC verification failed. Check the number and try again.' });
-    } finally {
-      clearTimeout(timer);
+    if (result.ok) {
+      return res.json({ ok: true, data: result.data });
     }
+
+    return res.status(400).json({ ok: false, message: result.message });
   } catch (error) {
     console.error('[nrc/verify]', error.message);
     return res.status(500).json(apiErrorPayload(IS_PRODUCTION, error, 'NRC verification service unavailable. Please try again.'));
@@ -6330,6 +6376,20 @@ app.post('/api/events/:eventId/video/join-auth', async (req, res) => {
 
       const finalRegistration = attendanceUpdated || registration;
       const videoSettingsResolved = await getVideoSettings();
+      const wantsEmbed = videoSettingsResolved.joinMode === 'embed';
+      const canEmbed = Boolean(
+        zoomConfig.sdkKey && zoomConfig.sdkSecret && meetingNumber && signature,
+      );
+      let embedReason = null;
+      if (wantsEmbed && !canEmbed) {
+        if (!zoomConfig.sdkKey || !zoomConfig.sdkSecret) {
+          embedReason = 'Meeting SDK credentials are not configured in Admin Settings.';
+        } else if (!meetingNumber) {
+          embedReason = 'Could not resolve the Zoom meeting number for this event.';
+        } else if (!signature) {
+          embedReason = 'Could not generate a Meeting SDK signature.';
+        }
+      }
 
       return res.json({
         ok: true,
@@ -6346,6 +6406,8 @@ app.post('/api/events/:eventId/video/join-auth', async (req, res) => {
         registration: mapDbRegistration(finalRegistration),
         joinWindow: windowState,
         joinMode: videoSettingsResolved.joinMode,
+        embedAvailable: wantsEmbed && canEmbed,
+        embedReason,
       });
     }
 
@@ -7900,7 +7962,7 @@ app.put('/api/profile', async (req, res) => {
       values: [json],
       timeout: 15000,
     });
-    return res.json({ ok: true, data: payload });
+    return res.json({ ok: true, data: nextProfile });
   } catch (error) {
     return res.status(500).json({ ok: false, message: 'Failed to save profile', error: error.message });
   }
@@ -7921,7 +7983,9 @@ app.put('/api/settings/system', async (req, res) => {
     const settings = await saveSystemSettings(payload);
     return res.json({ ok: true, data: settings });
   } catch (error) {
-    return res.status(500).json({ ok: false, message: 'Failed to save system settings', error: error.message });
+    const message = error?.message || 'Failed to save system settings';
+    const status = message.includes('must be') ? 400 : 500;
+    return res.status(status).json({ ok: false, message, error: message });
   }
 });
 
@@ -8232,6 +8296,7 @@ app.get('/api/settings/video/status', async (_req, res) => {
       defaultProvider: video.defaultProvider,
       enabledProviders: video.enabledProviders,
       joinMode: video.joinMode,
+      sdkReady: Boolean(zoom.sdk),
       providers: { zoom, daily },
     });
   } catch {
@@ -8239,7 +8304,8 @@ app.get('/api/settings/video/status', async (_req, res) => {
       ok: false,
       defaultProvider: 'zoom',
       enabledProviders: ['zoom'],
-      joinMode: 'redirect',
+      joinMode: 'embed',
+      sdkReady: false,
       providers: {
         zoom: { configured: false, oauth: false, hostEmail: false, sdk: false, webhook: false },
         daily: { configured: false, apiKey: false, domain: false, webhook: false },
@@ -8265,6 +8331,46 @@ app.post('/api/settings/daily/test', async (_req, res) => {
     });
   } catch (error) {
     return res.status(502).json({ ok: false, message: 'Daily credential test failed', error: error.message });
+  }
+});
+
+app.post('/api/settings/smartdata/test', async (req, res) => {
+  try {
+    const settings = await getSystemSettings();
+    const smartData = getSmartDataConfig(settings);
+    const testNrc = String(req.body?.nrc_number || '').trim();
+
+    if (!smartData.apiKey) {
+      return res.status(400).json({ ok: false, message: 'SmartData API key is missing. Save your key first.' });
+    }
+
+    if (!testNrc) {
+      return res.status(400).json({
+        ok: false,
+        message: 'Enter a test NRC number (e.g. 123456/78/1) to verify the SmartData connection.',
+      });
+    }
+
+    const result = await verifyNrcWithSmartData({
+      apiKey: smartData.apiKey,
+      baseUrl: smartData.baseUrl,
+      nrcNumber: testNrc,
+    });
+
+    if (!result.ok) {
+      return res.status(502).json({ ok: false, message: result.message });
+    }
+
+    const fullName = result.data?.fullName || '';
+    return res.json({
+      ok: true,
+      message: fullName
+        ? `SmartData connection successful. Verified: ${fullName}.`
+        : 'SmartData connection successful.',
+      data: result.data,
+    });
+  } catch (error) {
+    return res.status(502).json({ ok: false, message: 'SmartData test failed', error: error.message });
   }
 });
 

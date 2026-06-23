@@ -1,12 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { AlertCircle, Loader2, Video } from 'lucide-react';
+import { AlertCircle, ExternalLink, Loader2, Video } from 'lucide-react';
 import DailyIframe from '@daily-co/daily-js';
 import { useData } from '../context/DataContext';
 import { useUserAuth } from '../context/UserAuthContext';
 import { useBooking } from '../context/BookingContext';
 import { getApiBase } from '../utils/apiBase';
 import { getUserAuthHeaders } from '../utils/authHeaders';
+import { canEmbedZoomJoin, isMobileBrowser, openZoomJoinUrl } from '../utils/zoomMeeting';
+
+const ZoomMeetingEmbed = lazy(() => import('../components/meetings/ZoomMeetingEmbed'));
 
 const API_BASE = getApiBase();
 
@@ -26,12 +29,16 @@ export default function EventJoinPage() {
   const event = useMemo(() => events.find((item) => item.slug === slug), [events, slug]);
   const [loading, setLoading] = useState(false);
   const [joinError, setJoinError] = useState('');
+  const [joinNotice, setJoinNotice] = useState('');
   const [joinSession, setJoinSession] = useState(null);
+  const [pendingZoomAuth, setPendingZoomAuth] = useState(null);
   const dailyContainerRef = useRef(null);
   const dailyFrameRef = useRef(null);
+  const zoomEmbedRef = useRef(null);
 
   const videoProvider = event ? resolveEventVideoProvider(event) : 'zoom';
   const providerLabel = videoProvider === 'daily' ? 'Daily.co' : 'Zoom';
+  const isMobile = isMobileBrowser();
 
   const isRegistered = event ? isUserRegistered(currentUser?.id, event.id, 'subscription') : false;
 
@@ -91,9 +98,26 @@ export default function EventJoinPage() {
     );
   }
 
-  const handleJoin = async () => {
+  const startZoomEmbed = (json) => {
+    setJoinSession({ provider: 'zoom', auth: json.auth, registration: json.registration });
+    setPendingZoomAuth(null);
+    setJoinNotice('');
+  };
+
+  const fallbackToZoomRedirect = (json, reason) => {
+    const joinUrl = String(json?.auth?.joinUrl || '').trim();
+    if (!joinUrl) {
+      throw new Error(reason || `${providerLabel} join link is not available for this event. Please contact the organizer.`);
+    }
+    setJoinNotice(reason || 'Opening Zoom in a new tab…');
+    openZoomJoinUrl(joinUrl);
+  };
+
+  const handleJoin = async ({ forceEmbed = false } = {}) => {
     setJoinError('');
+    setJoinNotice('');
     setJoinSession(null);
+    setPendingZoomAuth(null);
     setLoading(true);
 
     try {
@@ -115,15 +139,26 @@ export default function EventJoinPage() {
         return;
       }
 
-      const joinUrl = String(json?.auth?.joinUrl || '').trim();
-      if (!joinUrl) {
-        throw new Error(`${providerLabel} join link is not available for this event. Please contact the organizer.`);
+      const embedReady = canEmbedZoomJoin({
+        joinMode: json.joinMode,
+        embedAvailable: json.embedAvailable,
+        auth: json.auth,
+      });
+
+      if (embedReady && isMobile && !forceEmbed) {
+        setPendingZoomAuth(json);
+        return;
       }
 
-      const newTab = window.open(joinUrl, '_blank', 'noopener,noreferrer');
-      if (!newTab) {
-        window.location.assign(joinUrl);
+      if (embedReady && (!isMobile || forceEmbed)) {
+        startZoomEmbed(json);
+        return;
       }
+
+      const reason = json.embedReason
+        ? `${json.embedReason} Opening Zoom in a new tab instead.`
+        : 'In-page Zoom join is unavailable. Opening Zoom in a new tab…';
+      fallbackToZoomRedirect(json, reason);
     } catch (error) {
       const msg = String(error?.message || '').trim() || `Unable to open this ${providerLabel} meeting right now.`;
       setJoinError(msg);
@@ -132,7 +167,21 @@ export default function EventJoinPage() {
     }
   };
 
-  const inDailyCall = joinSession?.provider === 'daily';
+  const handleLeaveMeeting = async () => {
+    if (joinSession?.provider === 'zoom') {
+      try {
+        await zoomEmbedRef.current?.leave?.();
+      } catch { /* ignore */ }
+    }
+    setJoinSession(null);
+    setPendingZoomAuth(null);
+    setJoinNotice('');
+  };
+
+  const inMeeting = joinSession?.provider === 'daily' || joinSession?.provider === 'zoom';
+  const zoomJoinCopy = videoProvider === 'zoom'
+    ? 'Click below to verify access and join the meeting on this page. If in-page join is unavailable, we open Zoom in a new tab.'
+    : 'Click below to verify access and join the meeting in this page.';
 
   return (
     <section className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
@@ -163,7 +212,7 @@ export default function EventJoinPage() {
           </div>
         )}
 
-        {isUserAuthenticated && isRegistered && !inDailyCall && (
+        {isUserAuthenticated && isRegistered && !inMeeting && !pendingZoomAuth && (
           <div className="space-y-4">
             {joinError && (
               <div className="rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm text-red-700 flex items-start gap-2">
@@ -172,16 +221,18 @@ export default function EventJoinPage() {
               </div>
             )}
 
+            {joinNotice && (
+              <div className="rounded-xl border border-cyan-200 bg-cyan-50 p-3.5 text-sm text-cyan-800">
+                {joinNotice}
+              </div>
+            )}
+
             <div className="rounded-xl bg-navy-50 border border-navy-100 p-4">
-              <p className="text-sm text-navy-700 font-medium">
-                {videoProvider === 'daily'
-                  ? 'Click below to verify access and join the meeting in this page.'
-                  : `Click below to verify access and open ${providerLabel} in a new tab.`}
-              </p>
+              <p className="text-sm text-navy-700 font-medium">{zoomJoinCopy}</p>
             </div>
 
             <button
-              onClick={handleJoin}
+              onClick={() => handleJoin()}
               disabled={loading}
               className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold text-base transition-colors"
             >
@@ -191,7 +242,52 @@ export default function EventJoinPage() {
           </div>
         )}
 
-        {isUserAuthenticated && isRegistered && inDailyCall && (
+        {isUserAuthenticated && isRegistered && pendingZoomAuth && (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 space-y-2">
+              <p className="font-medium">Mobile device detected</p>
+              <p>
+                Zoom works best in the Zoom app or mobile browser. You can open Zoom directly, or try joining in this page.
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    fallbackToZoomRedirect(pendingZoomAuth, 'Opening Zoom…');
+                  } catch (error) {
+                    setJoinError(String(error?.message || 'Unable to open Zoom.'));
+                  }
+                }}
+                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-sm transition-colors"
+              >
+                <ExternalLink size={16} />
+                Open in Zoom
+              </button>
+              <button
+                type="button"
+                onClick={() => handleJoin({ forceEmbed: true })}
+                disabled={loading}
+                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl border border-navy-200 hover:bg-navy-50 text-navy-700 font-medium text-sm transition-colors"
+              >
+                {loading ? <Loader2 size={16} className="animate-spin" /> : null}
+                Try in-page join
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setPendingZoomAuth(null)}
+              className="text-sm text-navy-500 hover:text-navy-700"
+            >
+              Back
+            </button>
+          </div>
+        )}
+
+        {isUserAuthenticated && isRegistered && joinSession?.provider === 'daily' && (
           <div className="space-y-4">
             {joinError && (
               <div className="rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm text-red-700 flex items-start gap-2">
@@ -205,7 +301,46 @@ export default function EventJoinPage() {
             />
             <button
               type="button"
-              onClick={() => setJoinSession(null)}
+              onClick={handleLeaveMeeting}
+              className="text-sm text-navy-500 hover:text-navy-700"
+            >
+              Leave and return to join options
+            </button>
+          </div>
+        )}
+
+        {isUserAuthenticated && isRegistered && joinSession?.provider === 'zoom' && (
+          <div className="space-y-4">
+            {joinError && (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm text-red-700 flex items-start gap-2">
+                <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                <span>{joinError}</span>
+              </div>
+            )}
+            <Suspense
+              fallback={(
+                <div className="w-full min-h-[420px] sm:min-h-[480px] rounded-xl bg-navy-900 flex items-center justify-center text-white/80 text-sm">
+                  <Loader2 size={20} className="animate-spin mr-2" />
+                  Loading Zoom meeting…
+                </div>
+              )}
+            >
+              <ZoomMeetingEmbed
+                ref={zoomEmbedRef}
+                auth={joinSession.auth}
+                onError={(error) => {
+                  const msg = String(error?.message || error?.reason || 'Unable to join in-page. Opening Zoom in a new tab…');
+                  setJoinError(msg);
+                  try {
+                    fallbackToZoomRedirect(joinSession, msg);
+                  } catch { /* ignore */ }
+                  setJoinSession(null);
+                }}
+              />
+            </Suspense>
+            <button
+              type="button"
+              onClick={handleLeaveMeeting}
               className="text-sm text-navy-500 hover:text-navy-700"
             >
               Leave and return to join options

@@ -9,8 +9,7 @@ import {
   SECTION_REGISTRY,
   SECTION_PAGE_ORDER,
   getSectionVisibility,
-  sectionVisibilityKey,
-  setByPath,
+  setSectionVisibility,
 } from '../../config/sectionRegistry';
 
 export default function SectionsPage() {
@@ -34,12 +33,7 @@ export default function SectionsPage() {
     const nextVisible = !getSectionVisibility(profile, section);
     setTogglingId(section.id);
     try {
-      const draft = JSON.parse(JSON.stringify(profile || {}));
-      const nextWebsitePages = setByPath(
-        draft.websitePages || {},
-        `sectionVisibility.${sectionVisibilityKey(section)}`,
-        nextVisible,
-      );
+      const nextWebsitePages = setSectionVisibility(profile?.websitePages, section, nextVisible);
       await updateProfile({ websitePages: nextWebsitePages });
       toast.success(nextVisible ? 'Section shown.' : 'Section hidden.');
     } catch (err) {

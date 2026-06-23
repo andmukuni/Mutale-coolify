@@ -25,6 +25,7 @@
  */
 
 import heroPortrait from '../assets/herophoto.JPG';
+import { normalizeSectionVisibility } from '../data/websitePages';
 
 // Current hardcoded defaults shown on the public site (used for live previews).
 const HOME_HERO_BG_DEFAULT = 'https://images.unsplash.com/photo-1579154204601-01588f351e67?auto=format&fit=crop&w=1920&q=80';
@@ -371,8 +372,21 @@ export function sectionVisibilityKey(section) {
 
 export function getSectionVisibility(profile, section) {
   if (!section.toggleable) return true;
-  const map = profile?.websitePages?.sectionVisibility || {};
+  const map = normalizeSectionVisibility(profile?.websitePages?.sectionVisibility || {});
   return map[sectionVisibilityKey(section)] !== false;
+}
+
+/** Update visibility using flat section ids (e.g. home.trusted-by). */
+export function setSectionVisibility(websitePages, section, visible) {
+  const key = sectionVisibilityKey(section);
+  const current = normalizeSectionVisibility(websitePages?.sectionVisibility || {});
+  return {
+    ...(websitePages || {}),
+    sectionVisibility: {
+      ...current,
+      [key]: visible,
+    },
+  };
 }
 
 /** Read a dot-path value from the profile object. */

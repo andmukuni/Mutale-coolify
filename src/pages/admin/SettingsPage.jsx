@@ -7,6 +7,7 @@ import { PageHeader, Card, FormField, ConfirmDialog, LoadingButton } from '../..
 import ThemeToggle from '../../components/ThemeToggle';
 import { getApiBase } from '../../utils/apiBase';
 import { getAdminAuthHeaders } from '../../utils/authHeaders';
+import { formatNrcNumber } from '../../utils/helpers';
 
 const tabs = [
   { key: 'profile', label: 'Profile' },
@@ -16,6 +17,7 @@ const tabs = [
   { key: 'cv', label: 'CV Generator' },
   { key: 'sms', label: 'SMS Configuration' },
   { key: 'whatsapp', label: 'WhatsApp Configuration' },
+  { key: 'nrc', label: 'NRC Verification' },
   { key: 'notifications', label: 'Notifications' },
   { key: 'security', label: 'Security' },
   { key: 'integrations', label: 'Integrations' },
@@ -85,13 +87,14 @@ const defaultSystemConfig = {
     metaPixelId: '',
     slackWebhook: '',
     zapierWebhook: '',
+    nrcVerificationEnabled: true,
     smartdataApiKey: '',
     smartdataBaseUrl: 'https://mysmartdata.tech/api/v1',
   },
   video: {
     defaultProvider: 'zoom',
     enabledProviders: ['zoom', 'daily'],
-    joinMode: 'redirect',
+    joinMode: 'embed',
   },
   zoom: {
     accountId: '',
@@ -190,6 +193,10 @@ export default function SettingsPage() {
   const [zoomSubTab, setZoomSubTab] = useState('getting-started');
   const [dailyTestStatus, setDailyTestStatus] = useState(null);
   const [testingDaily, setTestingDaily] = useState(false);
+  const [testingSmartData, setTestingSmartData] = useState(false);
+  const [smartDataTestStatus, setSmartDataTestStatus] = useState(null);
+  const [testNrcNumber, setTestNrcNumber] = useState('');
+  const [videoStatus, setVideoStatus] = useState(null);
 
   useEffect(() => {
     const tab = String(searchParams.get('tab') || '').trim();
@@ -225,6 +232,28 @@ export default function SettingsPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'video') return undefined;
+    let cancelled = false;
+
+    const loadVideoStatus = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/settings/video/status`, {
+          headers: getAdminAuthHeaders(),
+        });
+        const json = await response.json().catch(() => ({}));
+        if (!cancelled) setVideoStatus(json);
+      } catch {
+        if (!cancelled) setVideoStatus(null);
+      }
+    };
+
+    loadVideoStatus();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, systemSaving]);
 
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -319,7 +348,10 @@ export default function SettingsPage() {
         body: JSON.stringify(systemForm),
       });
 
-      if (!response.ok) throw new Error(`Failed to save settings (${response.status})`);
+      if (!response.ok) {
+        const json = await response.json().catch(() => ({}));
+        throw new Error(json?.message || json?.error || `Failed to save settings (${response.status})`);
+      }
 
       const json = await response.json();
       setSystemForm(mergeSystemConfig(json?.data || systemForm));
@@ -327,8 +359,8 @@ export default function SettingsPage() {
       toast.success('System configuration saved.');
       if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
       savedTimerRef.current = setTimeout(() => setSaved(''), 3000);
-    } catch {
-      const msg = 'Failed to save settings. Please verify the backend is running.';
+    } catch (error) {
+      const msg = error?.message || 'Failed to save settings. Please verify the backend is running.';
       setSaved(msg);
       toast.error(msg);
       if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
@@ -375,6 +407,48 @@ export default function SettingsPage() {
       });
     } finally {
       setTestingConnection(false);
+    }
+  };
+
+  const handleTestSmartDataConnection = async () => {
+    setTestingSmartData(true);
+    setSmartDataTestStatus(null);
+
+    try {
+      const persistResponse = await fetch(`${API_BASE}/settings/system`, {
+        method: 'PUT',
+        headers: getAdminAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(systemForm),
+      });
+
+      if (!persistResponse.ok) {
+        const json = await persistResponse.json().catch(() => ({}));
+        throw new Error(json?.message || `Failed to save settings before test (${persistResponse.status})`);
+      }
+
+      const response = await fetch(`${API_BASE}/settings/smartdata/test`, {
+        method: 'POST',
+        headers: getAdminAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ nrc_number: testNrcNumber.trim() }),
+      });
+
+      const json = await response.json().catch(() => ({}));
+
+      if (!response.ok || !json?.ok) {
+        throw new Error(json?.message || json?.error || `SmartData test failed (${response.status})`);
+      }
+
+      setSmartDataTestStatus({
+        type: 'success',
+        message: json?.message || 'SmartData connection successful.',
+      });
+    } catch (error) {
+      setSmartDataTestStatus({
+        type: 'error',
+        message: error?.message || 'Unable to validate SmartData connection right now.',
+      });
+    } finally {
+      setTestingSmartData(false);
     }
   };
 
@@ -866,6 +940,93 @@ export default function SettingsPage() {
           </Card>
         )}
 
+        {activeTab === 'nrc' && (
+          <Card title="NRC Verification" subtitle="MySmartData API — verify Zambian NRC numbers during local user registration">
+            <form onSubmit={handleSaveSystem} className="space-y-4">
+              <div className="rounded-xl border border-cyan-100 bg-cyan-50/70 p-4 text-sm text-cyan-900 space-y-2">
+                <p className="font-medium">Registration lookup</p>
+                <p className="text-cyan-800 text-xs">
+                  When enabled, Zambian users can verify their NRC on the registration page and auto-fill their legal name.
+                  Get an API key from{' '}
+                  <a href="https://mysmartdata.tech" target="_blank" rel="noopener noreferrer" className="underline font-medium">
+                    mysmartdata.tech
+                  </a>.
+                </p>
+              </div>
+
+              <BooleanField
+                label="Enable NRC verification on registration"
+                name="nrcVerificationEnabled"
+                checked={systemForm.integrations.nrcVerificationEnabled !== false}
+                onChange={(e) => handleSystemChange('integrations', e)}
+              />
+
+              <div className="grid sm:grid-cols-2 gap-4">
+                <FormField
+                  label="SmartData API Key"
+                  name="smartdataApiKey"
+                  value={systemForm.integrations.smartdataApiKey}
+                  onChange={(e) => handleSystemChange('integrations', e)}
+                  placeholder="sk_..."
+                  type="password"
+                  helpText="Sent as X-API-Key header to MySmartData"
+                />
+                <FormField
+                  label="SmartData Base URL"
+                  name="smartdataBaseUrl"
+                  value={systemForm.integrations.smartdataBaseUrl}
+                  onChange={(e) => handleSystemChange('integrations', e)}
+                  placeholder="https://mysmartdata.tech/api/v1"
+                />
+              </div>
+
+              <FormField
+                label="Test NRC number"
+                name="testNrcNumber"
+                value={testNrcNumber}
+                onChange={(e) => setTestNrcNumber(formatNrcNumber(e.target.value))}
+                placeholder="123456/78/1"
+                helpText="Used only for Test Connection — not saved"
+              />
+
+              {smartDataTestStatus && (
+                <div
+                  className={`rounded-xl border p-3 text-sm ${
+                    smartDataTestStatus.type === 'success'
+                      ? 'border-green-200 bg-green-50 text-green-700'
+                      : 'border-red-200 bg-red-50 text-red-700'
+                  }`}
+                >
+                  {smartDataTestStatus.message}
+                </div>
+              )}
+
+              <div className="pt-4 border-t border-navy-100 flex flex-wrap items-center gap-3">
+                <LoadingButton
+                  type="button"
+                  onClick={handleTestSmartDataConnection}
+                  loading={testingSmartData}
+                  loadingLabel="Testing SmartData…"
+                  disabled={systemLoading}
+                  className="border border-cyan-200 text-cyan-700 hover:bg-cyan-50 px-5 py-2.5 rounded-xl text-sm font-medium transition-colors"
+                >
+                  Test Connection
+                </LoadingButton>
+                <LoadingButton
+                  type="submit"
+                  loading={systemSaving}
+                  loadingLabel="Saving…"
+                  icon={Save}
+                  disabled={systemLoading}
+                  className="bg-cyan-600 hover:bg-cyan-500 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-colors"
+                >
+                  Save NRC Configuration
+                </LoadingButton>
+              </div>
+            </form>
+          </Card>
+        )}
+
         {activeTab === 'integrations' && (
           <Card title="Integrations" subtitle="Analytics, tracking, and automation webhooks">
             <form onSubmit={handleSaveSystem} className="space-y-4">
@@ -874,15 +1035,6 @@ export default function SettingsPage() {
                 <FormField label="Meta Pixel ID" name="metaPixelId" value={systemForm.integrations.metaPixelId} onChange={(e) => handleSystemChange('integrations', e)} />
                 <FormField label="Slack Webhook URL" name="slackWebhook" value={systemForm.integrations.slackWebhook} onChange={(e) => handleSystemChange('integrations', e)} placeholder="https://hooks.slack.com/services/..." />
                 <FormField label="Zapier Webhook URL" name="zapierWebhook" value={systemForm.integrations.zapierWebhook} onChange={(e) => handleSystemChange('integrations', e)} placeholder="https://hooks.zapier.com/hooks/catch/..." />
-              </div>
-
-              <div className="pt-4 border-t border-navy-100">
-                <h4 className="text-sm font-semibold text-navy-800 mb-1">SmartData NRC Verification</h4>
-                <p className="text-xs text-navy-500 mb-3">Used to verify Zambian NRC numbers during user registration.</p>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <FormField label="SmartData API Key" name="smartdataApiKey" value={systemForm.integrations.smartdataApiKey} onChange={(e) => handleSystemChange('integrations', e)} placeholder="sk_..." type="password" />
-                  <FormField label="SmartData Base URL" name="smartdataBaseUrl" value={systemForm.integrations.smartdataBaseUrl} onChange={(e) => handleSystemChange('integrations', e)} placeholder="https://mysmartdata.tech/api/v1" />
-                </div>
               </div>
 
               <SaveButton loading={systemSaving} disabled={systemLoading} />
@@ -921,8 +1073,16 @@ export default function SettingsPage() {
                   <div className="rounded-xl border border-cyan-100 bg-cyan-50/60 p-4 text-sm text-cyan-900 space-y-2">
                     <p className="font-medium">Site-wide default</p>
                     <p className="text-cyan-800 text-xs">
-                      Attendees join via the event&apos;s meeting platform. Change the default here, or pick Zoom / Daily per event when creating workshops.
+                      Attendees join via the event&apos;s meeting platform. Zoom embeds in Mutale by default when Meeting SDK credentials are configured; otherwise attendees are sent to Zoom in a new tab.
                     </p>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${videoStatus?.sdkReady ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                        Meeting SDK: {videoStatus?.sdkReady ? 'configured' : 'not configured'}
+                      </span>
+                      <span className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-navy-100 text-navy-700">
+                        Join mode: {systemForm.video.joinMode === 'embed' ? 'embed in Mutale' : 'open Zoom in new tab'}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="space-y-2">
@@ -962,10 +1122,10 @@ export default function SettingsPage() {
                       value={systemForm.video.joinMode}
                       onChange={(e) => handleSystemChange('video', e)}
                       options={[
-                        { value: 'redirect', label: 'Open Zoom in new tab' },
-                        { value: 'embed', label: 'Embed in app (when SDK configured)' },
+                        { value: 'embed', label: 'Embed in Mutale (recommended)' },
+                        { value: 'redirect', label: 'Always open Zoom in new tab' },
                       ]}
-                      helpText="Daily.co always embeds on the join page when selected for an event."
+                      helpText="Embed requires Meeting SDK credentials and mutalemubanga.org on the Zoom domain allowlist. Daily.co always embeds on the join page."
                     />
                   </div>
 
@@ -1210,16 +1370,15 @@ export default function SettingsPage() {
 
             {/* ── Meeting SDK (Optional) ── */}
             {zoomSubTab === 'sdk' && (
-              <Card title="Meeting SDK" subtitle="Enable embedded in-app meetings instead of redirecting to zoom.us — optional">
+              <Card title="Meeting SDK" subtitle="Required for in-page Zoom join on mutalemubanga.org">
                 <form onSubmit={handleSaveSystem} className="space-y-4">
                   <div className="rounded-xl bg-amber-50 border border-amber-200 p-4">
                     <div className="flex gap-2">
                       <Info size={16} className="text-amber-600 shrink-0 mt-0.5" />
                       <div className="text-sm text-amber-800">
-                        <p className="font-medium">This section is optional.</p>
+                        <p className="font-medium">Embed is the default join mode.</p>
                         <p className="mt-1 text-amber-700">
-                          Without SDK credentials, attendees are redirected to Zoom&apos;s web client to join — which works perfectly fine.
-                          With SDK credentials, they can join directly inside your platform for a seamless experience.
+                          Save Meeting SDK Key and Secret here, add <strong>mutalemubanga.org</strong> to your Zoom app&apos;s domain allowlist, then run Test SDK Signature. Without SDK credentials, attendees fall back to opening Zoom in a new tab.
                         </p>
                       </div>
                     </div>
@@ -1234,8 +1393,9 @@ export default function SettingsPage() {
                       <ol className="list-decimal list-inside space-y-1 ml-1">
                         <li>Go to <a href="https://marketplace.zoom.us/develop/create" target="_blank" rel="noopener noreferrer" className="text-cyan-600 hover:underline">marketplace.zoom.us/develop/create</a></li>
                         <li>Choose <strong>&quot;Meeting SDK&quot;</strong> app type (or enable Meeting SDK in your General App)</li>
+                        <li>Add <strong>mutalemubanga.org</strong> (and staging domains) to the SDK <strong>domain allowlist</strong></li>
                         <li>Copy the app&apos;s <strong>SDK Key</strong> / <strong>SDK Secret</strong> (or Client ID / Client Secret for Meeting SDK-capable app)</li>
-                        <li>Activate the app</li>
+                        <li>Activate the app, save credentials below, and run <strong>Test SDK Signature</strong></li>
                       </ol>
                     </div>
                   </details>
@@ -1269,6 +1429,11 @@ export default function SettingsPage() {
                   {zoomSdkTestStatus && (
                     <div className={`mt-3 rounded-xl px-4 py-3 text-sm font-medium ${zoomSdkTestStatus.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
                       {zoomSdkTestStatus.message}
+                      {zoomSdkTestStatus.type === 'success' && (
+                        <p className="mt-2 text-xs font-normal text-emerald-800">
+                          Next: register for a Zoom event and open <code className="bg-emerald-100 px-1 rounded">/events/&lt;slug&gt;/join</code> to confirm in-page join works on your domain.
+                        </p>
+                      )}
                     </div>
                   )}
                   <SaveButton loading={systemSaving} disabled={systemLoading} />
