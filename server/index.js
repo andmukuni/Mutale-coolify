@@ -1654,7 +1654,7 @@ async function saveSystemSettings(payload = {}) {
   const stored = await getSystemSettings();
   const withSecrets = preserveMaskedSecrets(payload, stored);
   const merged = mergeSystemSettings(withSecrets);
-  await validateVideoSettingsBeforeSave(merged);
+  validateVideoSettingsBeforeSave(merged);
   await pool.query(
     'INSERT INTO system_settings (id, data) VALUES (1, ?) ON DUPLICATE KEY UPDATE data = VALUES(data)',
     [JSON.stringify(merged)],
@@ -2481,20 +2481,7 @@ async function validateVideoSettingsBeforeSave(merged = {}) {
     throw new Error('Default video provider must be included in enabled providers.');
   }
 
-  if (video.defaultProvider === 'zoom') {
-    const zoomStatus = await getZoomProviderStatus();
-    if (!zoomStatus.configured) {
-      throw new Error('Zoom is the default video provider but Server-to-Server OAuth and host email are not fully configured.');
-    }
-  }
-
-  if (video.defaultProvider === 'daily') {
-    const dailyStatus = await getDailyProviderStatus();
-    if (!dailyStatus.configured) {
-      throw new Error('Daily.co is the default video provider but API key and domain are not fully configured.');
-    }
-  }
-
+  // Provider credentials are validated when creating meetings, not when saving email/payment settings.
   return merged;
 }
 
@@ -7921,7 +7908,9 @@ app.put('/api/settings/system', async (req, res) => {
     const settings = await saveSystemSettings(payload);
     return res.json({ ok: true, data: settings });
   } catch (error) {
-    return res.status(500).json({ ok: false, message: 'Failed to save system settings', error: error.message });
+    const message = error?.message || 'Failed to save system settings';
+    const status = message.includes('must be') ? 400 : 500;
+    return res.status(status).json({ ok: false, message, error: message });
   }
 });
 

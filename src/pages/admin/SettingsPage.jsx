@@ -319,7 +319,10 @@ export default function SettingsPage() {
         body: JSON.stringify(systemForm),
       });
 
-      if (!response.ok) throw new Error(`Failed to save settings (${response.status})`);
+      if (!response.ok) {
+        const json = await response.json().catch(() => ({}));
+        throw new Error(json?.message || json?.error || `Failed to save settings (${response.status})`);
+      }
 
       const json = await response.json();
       setSystemForm(mergeSystemConfig(json?.data || systemForm));
@@ -327,8 +330,8 @@ export default function SettingsPage() {
       toast.success('System configuration saved.');
       if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
       savedTimerRef.current = setTimeout(() => setSaved(''), 3000);
-    } catch {
-      const msg = 'Failed to save settings. Please verify the backend is running.';
+    } catch (error) {
+      const msg = error?.message || 'Failed to save settings. Please verify the backend is running.';
       setSaved(msg);
       toast.error(msg);
       if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
