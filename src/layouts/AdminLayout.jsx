@@ -26,6 +26,7 @@ import {
   Video,
   Percent,
   Tags,
+  FolderOpen,
   Award,
   Shield,
   Handshake,
@@ -79,6 +80,7 @@ const CONTENT_NAVIGATION = [
       { key: 'create-book', name: 'Add Product', to: '/admin/books/new', icon: PlusCircle, end: true },
       { key: 'book-orders', name: 'Orders', to: '/admin/books/orders', icon: ShoppingCart },
       { key: 'product-types', name: 'Product Types', to: '/admin/shop/product-types', icon: Tags },
+      { key: 'product-categories', name: 'Categories', to: '/admin/shop/product-categories', icon: FolderOpen },
       { key: 'shipping-settings', name: 'Shipping', to: '/admin/shipping', icon: Truck },
     ],
   },
@@ -206,12 +208,18 @@ export default function AdminLayout() {
       return pathname.startsWith('/admin/books')
         && pathname !== '/admin/books/new'
         && pathname !== '/admin/books/orders'
-        && !pathname.startsWith('/admin/books/product-types');
+        && !pathname.startsWith('/admin/books/product-types')
+        && !pathname.startsWith('/admin/books/product-categories');
     }
 
     if (item.key === 'product-types') {
       return pathname.startsWith('/admin/shop/product-types')
         || pathname.startsWith('/admin/books/product-types');
+    }
+
+    if (item.key === 'product-categories') {
+      return pathname.startsWith('/admin/shop/product-categories')
+        || pathname.startsWith('/admin/books/product-categories');
     }
 
     return defaultIsActive;

@@ -45,7 +45,7 @@ export function rateLimitByKey({ windowMs = 60_000, max = 10, routeKey, getKey }
 export function isCatalogAdminMutation(routePath, method) {
   const m = String(method || '').toUpperCase();
   if (!['POST', 'PUT', 'DELETE'].includes(m)) return false;
-  return routePath.startsWith('/api/products') || routePath.startsWith('/api/product-types');
+  return routePath.startsWith('/api/products') || routePath.startsWith('/api/product-types') || routePath.startsWith('/api/product-categories');
 }
 
 export function evaluateCorsOrigin(origin, { corsOrigins, serverOrigin, nodeEnv }) {

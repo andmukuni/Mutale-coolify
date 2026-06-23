@@ -8,6 +8,7 @@ import { BookingProvider } from './context/BookingContext'
 import { BookStoreProvider } from './context/BookStoreContext'
 import { CurrencyProvider } from './context/CurrencyContext'
 import { ProductTypesProvider } from './context/ProductTypesContext'
+import { ProductCategoriesProvider } from './context/ProductCategoriesContext'
 import { ToastProvider } from './context/ToastContext'
 import { ThemeProvider } from './context/ThemeContext'
 import './index.css'
@@ -24,11 +25,13 @@ createRoot(document.getElementById('root')).render(
             <CurrencyProvider>
               <DataProvider>
                 <ProductTypesProvider>
+                  <ProductCategoriesProvider>
                   <BookingProvider>
                     <BookStoreProvider>
                       <App />
                     </BookStoreProvider>
                   </BookingProvider>
+                  </ProductCategoriesProvider>
                 </ProductTypesProvider>
               </DataProvider>
             </CurrencyProvider>

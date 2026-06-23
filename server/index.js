@@ -4162,6 +4162,51 @@ async function ensureSchema() {
     }
   }
 
+  // ─── product_categories catalogue ─────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS product_categories (
+      id VARCHAR(80) PRIMARY KEY,
+      name VARCHAR(120) NOT NULL UNIQUE,
+      scope ENUM('book', 'merch', 'both') NOT NULL DEFAULT 'merch',
+      is_active TINYINT(1) NOT NULL DEFAULT 1,
+      sort_order INT NOT NULL DEFAULT 100,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_product_categories_active (is_active),
+      INDEX idx_product_categories_scope (scope),
+      INDEX idx_product_categories_sort (sort_order)
+    )
+  `);
+
+  const defaultProductCategories = [
+    { id: 'pc_lab_science', name: 'Laboratory Science', scope: 'book', sort_order: 10 },
+    { id: 'pc_diagnostics', name: 'Diagnostics', scope: 'book', sort_order: 20 },
+    { id: 'pc_health_policy', name: 'Health Policy', scope: 'book', sort_order: 30 },
+    { id: 'pc_quality_systems', name: 'Quality Systems', scope: 'book', sort_order: 40 },
+    { id: 'pc_public_health', name: 'Public Health', scope: 'book', sort_order: 50 },
+    { id: 'pc_prof_dev', name: 'Professional Development', scope: 'book', sort_order: 60 },
+    { id: 'pc_education', name: 'Education', scope: 'book', sort_order: 70 },
+    { id: 'pc_apparel', name: 'Apparel', scope: 'merch', sort_order: 10 },
+    { id: 'pc_drinkware', name: 'Drinkware', scope: 'merch', sort_order: 20 },
+    { id: 'pc_accessories', name: 'Accessories', scope: 'merch', sort_order: 30 },
+    { id: 'pc_stickers', name: 'Stickers', scope: 'merch', sort_order: 40 },
+    { id: 'pc_event_merch', name: 'Event Merchandise', scope: 'merch', sort_order: 50 },
+    { id: 'pc_other', name: 'Other', scope: 'both', sort_order: 999 },
+  ];
+  for (const cat of defaultProductCategories) {
+    try {
+      await pool.query(
+        `INSERT INTO product_categories (id, name, scope, is_active, sort_order)
+         VALUES (?, ?, ?, 1, ?)
+         ON DUPLICATE KEY UPDATE
+           scope = IF(scope = VALUES(scope) OR scope = 'merch', VALUES(scope), scope)`,
+        [cat.id, cat.name, cat.scope, cat.sort_order],
+      );
+    } catch (error) {
+      console.warn(`[product_categories seed] failed for ${cat.name}: ${error.message}`);
+    }
+  }
+
   // ─── partner_logos (home page trusted-by) ─────────────────────────
   await pool.query(`
     CREATE TABLE IF NOT EXISTS partner_logos (
@@ -9904,6 +9949,128 @@ app.delete('/api/product-types/:id', async (req, res) => {
     return res.json({ ok: true });
   } catch (error) {
     return res.status(500).json({ ok: false, message: 'Failed to delete product type', error: error.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// ─── PRODUCT CATEGORIES (catalogue) ───────────────────────
+// Dynamic shop/book categories for the product form dropdown.
+// Admins manage these from /admin/shop/product-categories.
+// ═══════════════════════════════════════════════════════════
+
+function normalizeProductCategoryPayload(payload = {}, fallbackId = null) {
+  const name = String(payload.name || '').trim();
+  const rawScope = String(payload.scope || 'merch').toLowerCase();
+  const scope = ['book', 'merch', 'both'].includes(rawScope) ? rawScope : 'merch';
+  return {
+    id: String(payload.id || fallbackId || `pc_${Date.now().toString(36)}`),
+    name,
+    scope,
+    is_active: payload.is_active === false || payload.is_active === 0 || payload.is_active === '0' ? 0 : 1,
+    sort_order: Number.isFinite(Number(payload.sort_order)) ? Number(payload.sort_order) : 100,
+  };
+}
+
+function mapProductCategoryRow(row) {
+  if (!row) return row;
+  return {
+    ...row,
+    is_active: Boolean(Number(row.is_active)),
+    sort_order: Number(row.sort_order ?? 100),
+  };
+}
+
+app.get('/api/product-categories', async (req, res) => {
+  try {
+    const includeInactive = String(req.query?.all || '').toLowerCase() === '1'
+      || String(req.query?.all || '').toLowerCase() === 'true';
+    const scope = String(req.query?.scope || '').toLowerCase();
+    const clauses = [];
+    if (!includeInactive) clauses.push('is_active = 1');
+    if (['book', 'merch', 'both'].includes(scope)) {
+      clauses.push(`(scope = '${scope}' OR scope = 'both')`);
+    }
+    const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+    const [rows] = await pool.query(
+      `SELECT * FROM product_categories ${where} ORDER BY sort_order ASC, name ASC`,
+    );
+    return res.json({ ok: true, data: rows.map(mapProductCategoryRow) });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: 'Failed to fetch product categories', error: error.message });
+  }
+});
+
+app.post('/api/product-categories', async (req, res) => {
+  try {
+    const payload = normalizeProductCategoryPayload(req.body || {});
+    if (!payload.name) {
+      return res.status(400).json({ ok: false, message: 'Name is required.' });
+    }
+    try {
+      await pool.query(
+        `INSERT INTO product_categories (id, name, scope, is_active, sort_order)
+         VALUES (?, ?, ?, ?, ?)`,
+        [payload.id, payload.name, payload.scope, payload.is_active, payload.sort_order],
+      );
+    } catch (err) {
+      if (err?.code === 'ER_DUP_ENTRY') {
+        return res.status(409).json({ ok: false, message: 'A category with that name already exists.' });
+      }
+      throw err;
+    }
+    const [[row]] = await pool.query('SELECT * FROM product_categories WHERE id = ?', [payload.id]);
+    return res.status(201).json({ ok: true, data: mapProductCategoryRow(row) });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: 'Failed to create product category', error: error.message });
+  }
+});
+
+app.put('/api/product-categories/:id', async (req, res) => {
+  try {
+    const payload = normalizeProductCategoryPayload({ ...(req.body || {}), id: req.params.id }, req.params.id);
+    if (!payload.name) {
+      return res.status(400).json({ ok: false, message: 'Name is required.' });
+    }
+    try {
+      await pool.query(
+        `UPDATE product_categories SET name=?, scope=?, is_active=?, sort_order=? WHERE id=?`,
+        [payload.name, payload.scope, payload.is_active, payload.sort_order, payload.id],
+      );
+    } catch (err) {
+      if (err?.code === 'ER_DUP_ENTRY') {
+        return res.status(409).json({ ok: false, message: 'Another category already uses that name.' });
+      }
+      throw err;
+    }
+    const [[row]] = await pool.query('SELECT * FROM product_categories WHERE id = ?', [payload.id]);
+    if (!row) return res.status(404).json({ ok: false, message: 'Category not found.' });
+    return res.json({ ok: true, data: mapProductCategoryRow(row) });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: 'Failed to update product category', error: error.message });
+  }
+});
+
+app.delete('/api/product-categories/:id', async (req, res) => {
+  try {
+    const [[category]] = await pool.query('SELECT * FROM product_categories WHERE id = ?', [req.params.id]);
+    if (!category) return res.status(404).json({ ok: false, message: 'Category not found.' });
+
+    const [[{ count }]] = await pool.query(
+      'SELECT COUNT(*) AS count FROM books WHERE category = ?',
+      [category.name],
+    );
+    if (Number(count) > 0) {
+      return res.status(409).json({
+        ok: false,
+        message: `${count} product${Number(count) === 1 ? '' : 's'} use this category. Reassign them first.`,
+        in_use: Number(count),
+      });
+    }
+
+    await pool.query('DELETE FROM product_categories WHERE id = ?', [req.params.id]);
+    return res.json({ ok: true });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: 'Failed to delete product category', error: error.message });
   }
 });
 

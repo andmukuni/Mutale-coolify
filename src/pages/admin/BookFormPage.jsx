@@ -12,6 +12,7 @@ import { getApiBase } from '../../utils/apiBase';
 import { getAdminAuthHeaders } from '../../utils/authHeaders';
 import { useData } from '../../context/DataContext';
 import { useProductTypes } from '../../context/ProductTypesContext';
+import { useProductCategories } from '../../context/ProductCategoriesContext';
 import { useToast } from '../../context/ToastContext';
 import { getProductTypeIcon } from '../../utils/productTypeIcons';
 
@@ -25,26 +26,6 @@ const API_BASE = getApiBase();
 // the form still renders something usable.
 const FALLBACK_TYPE_OPTIONS = [
   { value: 'book', label: 'Book', icon: 'book', default_category: 'Laboratory Science' },
-];
-
-const bookCategories = [
-  'Laboratory Science',
-  'Diagnostics',
-  'Health Policy',
-  'Quality Systems',
-  'Public Health',
-  'Professional Development',
-  'Education',
-  'Other',
-];
-
-const merchCategories = [
-  'Apparel',
-  'Drinkware',
-  'Accessories',
-  'Stickers',
-  'Event Merchandise',
-  'Other',
 ];
 
 const bookFormats = [
@@ -169,9 +150,9 @@ const inputCls =
 /*  Step 1 — Product Details                                 */
 /* ────────────────────────────────────────────────────────── */
 
-function StepDetails({ form, onChange, onTypeChange, onSelectEvent, events, productTypeOptions }) {
+function StepDetails({ form, onChange, onTypeChange, onSelectEvent, events, productTypeOptions, categoryOptions }) {
   const isBook = form.product_type === 'book';
-  const categories = isBook ? bookCategories : merchCategories;
+  const categories = categoryOptions.length > 0 ? categoryOptions : ['Other'];
 
   return (
     <div className="space-y-5">
@@ -226,9 +207,20 @@ function StepDetails({ form, onChange, onTypeChange, onSelectEvent, events, prod
           </>
         )}
 
-        <Field label="Category" name="category">
+        <Field label="Category" name="category" helpText={(
+          <a
+            href="/admin/shop/product-categories"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-cyan-700 hover:text-cyan-800"
+          >
+            <Settings size={11} />
+            Manage categories →
+          </a>
+        )}
+        >
           <select name="category" value={form.category} onChange={onChange} className={inputCls}>
-            {categories.map(c => <option key={c} value={c}>{c}</option>)}
+            {categories.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </Field>
 
@@ -735,6 +727,7 @@ export default function BookFormPage() {
   const isEditing = Boolean(id);
   const { events } = useData();
   const { activeProductTypes, productTypesByValue } = useProductTypes();
+  const { getCategoriesForScope } = useProductCategories();
   const toast = useToast();
 
   // Sorted, normalised list of selectable options for the wizard. Falls back to
@@ -745,6 +738,11 @@ export default function BookFormPage() {
       .sort((a, b) => (a.sort_order ?? 100) - (b.sort_order ?? 100));
     return list.length > 0 ? list : FALLBACK_TYPE_OPTIONS;
   }, [activeProductTypes]);
+
+  const categoryOptions = useMemo(() => {
+    const scope = form.product_type === 'book' ? 'book' : 'merch';
+    return getCategoriesForScope(scope).map((cat) => cat.name);
+  }, [form.product_type, getCategoriesForScope]);
 
   const [form, setForm]                   = useState(emptyProduct);
   const [step, setStep]                   = useState(0);
@@ -806,7 +804,12 @@ export default function BookFormPage() {
     setForm(prev => {
       const typeMeta = productTypesByValue?.[newType]
         || productTypeOptions.find(o => o.value === newType);
-      const defaultCategory = typeMeta?.default_category || prev.category;
+      const scope = newType === 'book' ? 'book' : 'merch';
+      const scopedNames = getCategoriesForScope(scope).map((cat) => cat.name);
+      const preferred = typeMeta?.default_category;
+      const defaultCategory = scopedNames.includes(preferred)
+        ? preferred
+        : (scopedNames[0] || preferred || prev.category || 'Other');
       // Switching away from book? Clear book-only metadata for cleanliness.
       const merchDefaults = newType !== 'book'
         ? { author: '', isbn: '', pages: 0, publisher: '', publish_year: 0, format: 'paperback' }
@@ -995,7 +998,7 @@ export default function BookFormPage() {
 
   /* ── Step content map ───────────────────────────────────── */
   const stepContent = {
-    details:    <StepDetails form={form} onChange={handleChange} onTypeChange={handleTypeChange} onSelectEvent={handleSelectEvent} events={events} productTypeOptions={productTypeOptions} />,
+    details:    <StepDetails form={form} onChange={handleChange} onTypeChange={handleTypeChange} onSelectEvent={handleSelectEvent} events={events} productTypeOptions={productTypeOptions} categoryOptions={categoryOptions} />,
     images:     <StepImages
                   form={form}
                   onImageUpload={handleImageUpload}

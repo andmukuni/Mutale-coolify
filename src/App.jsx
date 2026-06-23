@@ -66,6 +66,7 @@ const BookListPage = lazy(() => import('./pages/admin/BookListPage'));
 const BookFormPage = lazy(() => import('./pages/admin/BookFormPage'));
 const BookOrdersPage = lazy(() => import('./pages/admin/BookOrdersPage'));
 const ProductTypesPage = lazyWithRetry(() => import('./pages/admin/ProductTypesPage'));
+const ProductCategoriesPage = lazyWithRetry(() => import('./pages/admin/ProductCategoriesPage'));
 const ShippingSettingsPage = lazy(() => import('./pages/admin/ShippingSettingsPage'));
 const WebsitePagesPage = lazy(() => import('./pages/admin/WebsitePagesPage'));
 const SectionsPage = lazy(() => import('./pages/admin/SectionsPage'));
@@ -240,12 +241,14 @@ export default function App() {
   <Route path="messages" element={<ContactMessagesPage />} />
         <Route path="books/orders" element={<BookOrdersPage />} />
         <Route path="books/product-types" element={<ProductTypesPage />} />
+        <Route path="books/product-categories" element={<ProductCategoriesPage />} />
         <Route path="books/new" element={<BookFormPage />} />
         <Route path="books/:id/edit" element={<BookFormPage />} />
         <Route path="books" element={<BookListPage />} />
         {/* /admin/shop* mirrors of /admin/books* — same lazy components. */}
         <Route path="shop/orders" element={<BookOrdersPage />} />
         <Route path="shop/product-types" element={<ProductTypesPage />} />
+        <Route path="shop/product-categories" element={<ProductCategoriesPage />} />
         <Route path="shop/new" element={<BookFormPage />} />
         <Route path="shop/:id/edit" element={<BookFormPage />} />
         <Route path="shop" element={<BookListPage />} />

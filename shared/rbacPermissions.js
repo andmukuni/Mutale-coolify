@@ -102,6 +102,7 @@ export const NAV_PERMISSION_MAP = {
   'shop-create': 'shop.manage',
   'book-orders': 'shop.orders',
   'product-types': 'shop.manage',
+  'product-categories': 'shop.manage',
   shipping: 'shop.manage',
   users: 'users.view',
   messages: 'messages.view',
