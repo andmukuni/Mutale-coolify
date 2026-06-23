@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Plus, Pencil, Trash2, RefreshCw } from 'lucide-react';
 import {
   PageHeader,
@@ -41,6 +42,7 @@ function slugify(raw) {
 }
 
 export default function ProductTypesPage() {
+  const location = useLocation();
   const { productTypes, loaded, reload } = useProductTypes();
   const toast = useToast();
   const [rows, setRows] = useState([]);
@@ -84,8 +86,7 @@ export default function ProductTypesPage() {
 
   useEffect(() => {
     void fetchTypes();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [location.pathname]);
 
   // Re-seed local rows if the context hot-reloads
   useEffect(() => {

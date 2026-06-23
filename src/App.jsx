@@ -6,6 +6,7 @@ import { Modal } from './components/ui';
 import TopProgressBar from './components/ui/TopProgressBar';
 import { useUserAuth } from './context/UserAuthContext';
 import { useAuth } from './context/AuthContext';
+import { lazyWithRetry } from './utils/lazyWithRetry';
 
 const MainLayout = lazy(() => import('./layouts/MainLayout'));
 const AdminLayout = lazy(() => import('./layouts/AdminLayout'));
@@ -64,7 +65,7 @@ const ContactMessagesPage = lazy(() => import('./pages/admin/ContactMessagesPage
 const BookListPage = lazy(() => import('./pages/admin/BookListPage'));
 const BookFormPage = lazy(() => import('./pages/admin/BookFormPage'));
 const BookOrdersPage = lazy(() => import('./pages/admin/BookOrdersPage'));
-const ProductTypesPage = lazy(() => import('./pages/admin/ProductTypesPage'));
+const ProductTypesPage = lazyWithRetry(() => import('./pages/admin/ProductTypesPage'));
 const ShippingSettingsPage = lazy(() => import('./pages/admin/ShippingSettingsPage'));
 const WebsitePagesPage = lazy(() => import('./pages/admin/WebsitePagesPage'));
 const SectionsPage = lazy(() => import('./pages/admin/SectionsPage'));
@@ -237,17 +238,17 @@ export default function App() {
         <Route path="users" element={<UsersListPage />} />
         <Route path="users/:id" element={<AdminUserProfilePage />} />
   <Route path="messages" element={<ContactMessagesPage />} />
-        <Route path="books" element={<BookListPage />} />
+        <Route path="books/orders" element={<BookOrdersPage />} />
+        <Route path="books/product-types" element={<ProductTypesPage />} />
         <Route path="books/new" element={<BookFormPage />} />
         <Route path="books/:id/edit" element={<BookFormPage />} />
-        <Route path="books/orders" element={<BookOrdersPage />} />
+        <Route path="books" element={<BookListPage />} />
         {/* /admin/shop* mirrors of /admin/books* — same lazy components. */}
-        <Route path="shop" element={<BookListPage />} />
-        <Route path="shop/new" element={<BookFormPage />} />
-        <Route path="shop/:id/edit" element={<BookFormPage />} />
         <Route path="shop/orders" element={<BookOrdersPage />} />
         <Route path="shop/product-types" element={<ProductTypesPage />} />
-        <Route path="books/product-types" element={<ProductTypesPage />} />
+        <Route path="shop/new" element={<BookFormPage />} />
+        <Route path="shop/:id/edit" element={<BookFormPage />} />
+        <Route path="shop" element={<BookListPage />} />
         <Route path="shipping" element={<ShippingSettingsPage />} />
         <Route path="website-pages" element={<WebsitePagesPage />} />
         <Route path="sections" element={<SectionsPage />} />

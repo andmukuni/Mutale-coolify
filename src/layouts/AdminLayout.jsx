@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { NavLink, Outlet, Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -119,6 +119,17 @@ function filterContentNav(items, hasPermission) {
       return navItemAllowed(item.key, hasPermission) ? item : null;
     })
     .filter(Boolean);
+}
+
+function AdminOutletLoader() {
+  return (
+    <div className="flex min-h-[320px] items-center justify-center">
+      <div className="flex flex-col items-center gap-3">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-navy-100 border-t-cyan-600" />
+        <p className="text-sm text-navy-500">Loading page…</p>
+      </div>
+    </div>
+  );
 }
 
 export default function AdminLayout() {
@@ -631,8 +642,10 @@ export default function AdminLayout() {
 
       {/* ─── Main content ─── */}
       <main className="md:ml-72 mt-16 min-h-[calc(100vh-4rem)] overflow-x-clip">
-        <div className="p-4 sm:p-6 lg:p-8">
-          <Outlet />
+        <div className="p-4 sm:p-6 lg:px-8">
+          <Suspense fallback={<AdminOutletLoader />}>
+            <Outlet key={location.pathname} />
+          </Suspense>
         </div>
       </main>
     </div>
