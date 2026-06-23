@@ -16,6 +16,7 @@ const tabs = [
   { key: 'cv', label: 'CV Generator' },
   { key: 'sms', label: 'SMS Configuration' },
   { key: 'whatsapp', label: 'WhatsApp Configuration' },
+  { key: 'nrc', label: 'NRC Verification' },
   { key: 'notifications', label: 'Notifications' },
   { key: 'security', label: 'Security' },
   { key: 'integrations', label: 'Integrations' },
@@ -85,6 +86,7 @@ const defaultSystemConfig = {
     metaPixelId: '',
     slackWebhook: '',
     zapierWebhook: '',
+    nrcVerificationEnabled: true,
     smartdataApiKey: '',
     smartdataBaseUrl: 'https://mysmartdata.tech/api/v1',
   },
@@ -190,6 +192,9 @@ export default function SettingsPage() {
   const [zoomSubTab, setZoomSubTab] = useState('getting-started');
   const [dailyTestStatus, setDailyTestStatus] = useState(null);
   const [testingDaily, setTestingDaily] = useState(false);
+  const [testingSmartData, setTestingSmartData] = useState(false);
+  const [smartDataTestStatus, setSmartDataTestStatus] = useState(null);
+  const [testNrcNumber, setTestNrcNumber] = useState('');
 
   useEffect(() => {
     const tab = String(searchParams.get('tab') || '').trim();
@@ -378,6 +383,48 @@ export default function SettingsPage() {
       });
     } finally {
       setTestingConnection(false);
+    }
+  };
+
+  const handleTestSmartDataConnection = async () => {
+    setTestingSmartData(true);
+    setSmartDataTestStatus(null);
+
+    try {
+      const persistResponse = await fetch(`${API_BASE}/settings/system`, {
+        method: 'PUT',
+        headers: getAdminAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(systemForm),
+      });
+
+      if (!persistResponse.ok) {
+        const json = await persistResponse.json().catch(() => ({}));
+        throw new Error(json?.message || `Failed to save settings before test (${persistResponse.status})`);
+      }
+
+      const response = await fetch(`${API_BASE}/settings/smartdata/test`, {
+        method: 'POST',
+        headers: getAdminAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ nrc_number: testNrcNumber.trim() }),
+      });
+
+      const json = await response.json().catch(() => ({}));
+
+      if (!response.ok || !json?.ok) {
+        throw new Error(json?.message || json?.error || `SmartData test failed (${response.status})`);
+      }
+
+      setSmartDataTestStatus({
+        type: 'success',
+        message: json?.message || 'SmartData connection successful.',
+      });
+    } catch (error) {
+      setSmartDataTestStatus({
+        type: 'error',
+        message: error?.message || 'Unable to validate SmartData connection right now.',
+      });
+    } finally {
+      setTestingSmartData(false);
     }
   };
 
@@ -869,6 +916,93 @@ export default function SettingsPage() {
           </Card>
         )}
 
+        {activeTab === 'nrc' && (
+          <Card title="NRC Verification" subtitle="MySmartData API — verify Zambian NRC numbers during local user registration">
+            <form onSubmit={handleSaveSystem} className="space-y-4">
+              <div className="rounded-xl border border-cyan-100 bg-cyan-50/70 p-4 text-sm text-cyan-900 space-y-2">
+                <p className="font-medium">Registration lookup</p>
+                <p className="text-cyan-800 text-xs">
+                  When enabled, Zambian users can verify their NRC on the registration page and auto-fill their legal name.
+                  Get an API key from{' '}
+                  <a href="https://mysmartdata.tech" target="_blank" rel="noopener noreferrer" className="underline font-medium">
+                    mysmartdata.tech
+                  </a>.
+                </p>
+              </div>
+
+              <BooleanField
+                label="Enable NRC verification on registration"
+                name="nrcVerificationEnabled"
+                checked={systemForm.integrations.nrcVerificationEnabled !== false}
+                onChange={(e) => handleSystemChange('integrations', e)}
+              />
+
+              <div className="grid sm:grid-cols-2 gap-4">
+                <FormField
+                  label="SmartData API Key"
+                  name="smartdataApiKey"
+                  value={systemForm.integrations.smartdataApiKey}
+                  onChange={(e) => handleSystemChange('integrations', e)}
+                  placeholder="sk_..."
+                  type="password"
+                  helpText="Sent as X-API-Key header to MySmartData"
+                />
+                <FormField
+                  label="SmartData Base URL"
+                  name="smartdataBaseUrl"
+                  value={systemForm.integrations.smartdataBaseUrl}
+                  onChange={(e) => handleSystemChange('integrations', e)}
+                  placeholder="https://mysmartdata.tech/api/v1"
+                />
+              </div>
+
+              <FormField
+                label="Test NRC number"
+                name="testNrcNumber"
+                value={testNrcNumber}
+                onChange={(e) => setTestNrcNumber(e.target.value)}
+                placeholder="123456/78/1"
+                helpText="Used only for Test Connection — not saved"
+              />
+
+              {smartDataTestStatus && (
+                <div
+                  className={`rounded-xl border p-3 text-sm ${
+                    smartDataTestStatus.type === 'success'
+                      ? 'border-green-200 bg-green-50 text-green-700'
+                      : 'border-red-200 bg-red-50 text-red-700'
+                  }`}
+                >
+                  {smartDataTestStatus.message}
+                </div>
+              )}
+
+              <div className="pt-4 border-t border-navy-100 flex flex-wrap items-center gap-3">
+                <LoadingButton
+                  type="button"
+                  onClick={handleTestSmartDataConnection}
+                  loading={testingSmartData}
+                  loadingLabel="Testing SmartData…"
+                  disabled={systemLoading}
+                  className="border border-cyan-200 text-cyan-700 hover:bg-cyan-50 px-5 py-2.5 rounded-xl text-sm font-medium transition-colors"
+                >
+                  Test Connection
+                </LoadingButton>
+                <LoadingButton
+                  type="submit"
+                  loading={systemSaving}
+                  loadingLabel="Saving…"
+                  icon={Save}
+                  disabled={systemLoading}
+                  className="bg-cyan-600 hover:bg-cyan-500 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-colors"
+                >
+                  Save NRC Configuration
+                </LoadingButton>
+              </div>
+            </form>
+          </Card>
+        )}
+
         {activeTab === 'integrations' && (
           <Card title="Integrations" subtitle="Analytics, tracking, and automation webhooks">
             <form onSubmit={handleSaveSystem} className="space-y-4">
@@ -877,15 +1011,6 @@ export default function SettingsPage() {
                 <FormField label="Meta Pixel ID" name="metaPixelId" value={systemForm.integrations.metaPixelId} onChange={(e) => handleSystemChange('integrations', e)} />
                 <FormField label="Slack Webhook URL" name="slackWebhook" value={systemForm.integrations.slackWebhook} onChange={(e) => handleSystemChange('integrations', e)} placeholder="https://hooks.slack.com/services/..." />
                 <FormField label="Zapier Webhook URL" name="zapierWebhook" value={systemForm.integrations.zapierWebhook} onChange={(e) => handleSystemChange('integrations', e)} placeholder="https://hooks.zapier.com/hooks/catch/..." />
-              </div>
-
-              <div className="pt-4 border-t border-navy-100">
-                <h4 className="text-sm font-semibold text-navy-800 mb-1">SmartData NRC Verification</h4>
-                <p className="text-xs text-navy-500 mb-3">Used to verify Zambian NRC numbers during user registration.</p>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <FormField label="SmartData API Key" name="smartdataApiKey" value={systemForm.integrations.smartdataApiKey} onChange={(e) => handleSystemChange('integrations', e)} placeholder="sk_..." type="password" />
-                  <FormField label="SmartData Base URL" name="smartdataBaseUrl" value={systemForm.integrations.smartdataBaseUrl} onChange={(e) => handleSystemChange('integrations', e)} placeholder="https://mysmartdata.tech/api/v1" />
-                </div>
               </div>
 
               <SaveButton loading={systemSaving} disabled={systemLoading} />

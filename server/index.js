@@ -635,6 +635,7 @@ const SYSTEM_SETTINGS_DEFAULTS = {
     metaPixelId: process.env.META_PIXEL_ID || '',
     slackWebhook: process.env.SLACK_WEBHOOK || '',
     zapierWebhook: process.env.ZAPIER_WEBHOOK || '',
+    nrcVerificationEnabled: process.env.NRC_VERIFICATION_ENABLED !== 'false',
     smartdataApiKey: process.env.SMARTDATA_API_KEY || '',
     smartdataBaseUrl: process.env.SMARTDATA_BASE_URL || 'https://mysmartdata.tech/api/v1',
   },
@@ -4400,6 +4401,56 @@ function generatePasswordResetToken() {
   return crypto.randomBytes(32).toString('hex');
 }
 
+function getSmartDataConfig(settings = {}) {
+  const integrations = settings?.integrations || {};
+  return {
+    enabled: integrations.nrcVerificationEnabled !== false && integrations.nrcVerificationEnabled !== 0,
+    apiKey: String(integrations.smartdataApiKey || process.env.SMARTDATA_API_KEY || '').trim(),
+    baseUrl: String(integrations.smartdataBaseUrl || process.env.SMARTDATA_BASE_URL || 'https://mysmartdata.tech/api/v1').trim().replace(/\/$/, ''),
+  };
+}
+
+async function verifyNrcWithSmartData({ apiKey, baseUrl, nrcNumber }) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const response = await fetch(`${baseUrl}/nrc/verify`, {
+      method: 'POST',
+      headers: {
+        'X-API-Key': apiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ nrc_number: nrcNumber, country: 'ZM' }),
+      signal: controller.signal,
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (response.status === 401 || response.status === 403) {
+      return { ok: false, message: 'SmartData rejected the API key. Check Admin Settings → NRC Verification.' };
+    }
+
+    if (data.success && data.data) {
+      return {
+        ok: true,
+        data: {
+          fullName: data.data.full_name || '',
+          firstName: data.data.first_name || '',
+          lastName: data.data.last_name || '',
+          dateOfBirth: data.data.date_of_birth || '',
+          gender: data.data.gender || '',
+          nrcNumber,
+        },
+      };
+    }
+
+    return { ok: false, message: 'NRC verification failed. Check the number and try again.' };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // POST /api/nrc/verify — Proxy NRC verification via SmartData API
 app.post('/api/nrc/verify', rateLimitNrcVerify, async (req, res) => {
   try {
@@ -4409,47 +4460,27 @@ app.post('/api/nrc/verify', rateLimitNrcVerify, async (req, res) => {
     }
 
     const settings = await getSystemSettings();
-    const apiKey = String(settings?.integrations?.smartdataApiKey || '').trim();
-    const baseUrl = String(settings?.integrations?.smartdataBaseUrl || 'https://mysmartdata.tech/api/v1').trim().replace(/\/$/, '');
+    const smartData = getSmartDataConfig(settings);
 
-    if (!apiKey) {
+    if (!smartData.enabled) {
+      return res.status(503).json({ ok: false, message: 'NRC verification is currently disabled.' });
+    }
+
+    if (!smartData.apiKey) {
       return res.status(500).json({ ok: false, message: 'NRC verification service is not configured. Contact the administrator.' });
     }
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15000);
+    const result = await verifyNrcWithSmartData({
+      apiKey: smartData.apiKey,
+      baseUrl: smartData.baseUrl,
+      nrcNumber,
+    });
 
-    try {
-      const response = await fetch(`${baseUrl}/nrc/verify`, {
-        method: 'POST',
-        headers: {
-          'X-API-Key': apiKey,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ nrc_number: nrcNumber, country: 'ZM' }),
-        signal: controller.signal,
-      });
-
-      const data = await response.json().catch(() => ({}));
-
-      if (data.success && data.data) {
-        return res.json({
-          ok: true,
-          data: {
-            fullName: data.data.full_name || '',
-            firstName: data.data.first_name || '',
-            lastName: data.data.last_name || '',
-            dateOfBirth: data.data.date_of_birth || '',
-            gender: data.data.gender || '',
-            nrcNumber,
-          },
-        });
-      }
-
-      return res.status(400).json({ ok: false, message: 'NRC verification failed. Check the number and try again.' });
-    } finally {
-      clearTimeout(timer);
+    if (result.ok) {
+      return res.json({ ok: true, data: result.data });
     }
+
+    return res.status(400).json({ ok: false, message: result.message });
   } catch (error) {
     console.error('[nrc/verify]', error.message);
     return res.status(500).json(apiErrorPayload(IS_PRODUCTION, error, 'NRC verification service unavailable. Please try again.'));
@@ -8254,6 +8285,46 @@ app.post('/api/settings/daily/test', async (_req, res) => {
     });
   } catch (error) {
     return res.status(502).json({ ok: false, message: 'Daily credential test failed', error: error.message });
+  }
+});
+
+app.post('/api/settings/smartdata/test', async (req, res) => {
+  try {
+    const settings = await getSystemSettings();
+    const smartData = getSmartDataConfig(settings);
+    const testNrc = String(req.body?.nrc_number || '').trim();
+
+    if (!smartData.apiKey) {
+      return res.status(400).json({ ok: false, message: 'SmartData API key is missing. Save your key first.' });
+    }
+
+    if (!testNrc) {
+      return res.status(400).json({
+        ok: false,
+        message: 'Enter a test NRC number (e.g. 123456/78/1) to verify the SmartData connection.',
+      });
+    }
+
+    const result = await verifyNrcWithSmartData({
+      apiKey: smartData.apiKey,
+      baseUrl: smartData.baseUrl,
+      nrcNumber: testNrc,
+    });
+
+    if (!result.ok) {
+      return res.status(502).json({ ok: false, message: result.message });
+    }
+
+    const fullName = result.data?.fullName || '';
+    return res.json({
+      ok: true,
+      message: fullName
+        ? `SmartData connection successful. Verified: ${fullName}.`
+        : 'SmartData connection successful.',
+      data: result.data,
+    });
+  } catch (error) {
+    return res.status(502).json({ ok: false, message: 'SmartData test failed', error: error.message });
   }
 });
 
