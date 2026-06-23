@@ -7,6 +7,7 @@ import { PageHeader, Card, FormField, ConfirmDialog, LoadingButton } from '../..
 import ThemeToggle from '../../components/ThemeToggle';
 import { getApiBase } from '../../utils/apiBase';
 import { getAdminAuthHeaders } from '../../utils/authHeaders';
+import { formatNrcNumber } from '../../utils/helpers';
 
 const tabs = [
   { key: 'profile', label: 'Profile' },
@@ -960,7 +961,7 @@ export default function SettingsPage() {
                 label="Test NRC number"
                 name="testNrcNumber"
                 value={testNrcNumber}
-                onChange={(e) => setTestNrcNumber(e.target.value)}
+                onChange={(e) => setTestNrcNumber(formatNrcNumber(e.target.value))}
                 placeholder="123456/78/1"
                 helpText="Used only for Test Connection — not saved"
               />
