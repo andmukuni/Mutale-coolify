@@ -65,8 +65,8 @@ const ContactMessagesPage = lazy(() => import('./pages/admin/ContactMessagesPage
 const BookListPage = lazy(() => import('./pages/admin/BookListPage'));
 const BookFormPage = lazy(() => import('./pages/admin/BookFormPage'));
 const BookOrdersPage = lazy(() => import('./pages/admin/BookOrdersPage'));
-const ProductTypesPage = lazyWithRetry(() => import('./pages/admin/ProductTypesPage'));
-const ProductCategoriesPage = lazyWithRetry(() => import('./pages/admin/ProductCategoriesPage'));
+const ProductTypesPage = lazyWithRetry(() => import('./pages/admin/shopCatalogPages').then((m) => ({ default: m.ProductTypesPage })));
+const ProductCategoriesPage = lazyWithRetry(() => import('./pages/admin/shopCatalogPages').then((m) => ({ default: m.ProductCategoriesPage })));
 const ShippingSettingsPage = lazy(() => import('./pages/admin/ShippingSettingsPage'));
 const WebsitePagesPage = lazy(() => import('./pages/admin/WebsitePagesPage'));
 const SectionsPage = lazy(() => import('./pages/admin/SectionsPage'));
@@ -90,6 +90,11 @@ class ErrorBoundary extends Component {
   }
   static getDerivedStateFromError(error) {
     return { hasError: true, error };
+  }
+  componentDidUpdate(prevProps) {
+    if (prevProps.resetKey !== this.props.resetKey && this.state.hasError) {
+      this.setState({ hasError: false, error: null });
+    }
   }
   render() {
     if (this.state.hasError) {
@@ -137,10 +142,14 @@ export default function App() {
     navigate('/admin/login', { state: { from: { pathname: location.pathname } } });
   };
 
+  useEffect(() => {
+    sessionStorage.removeItem('lazy-chunk-reload');
+  }, []);
+
   return (
     <>
     <TopProgressBar />
-    <ErrorBoundary>
+    <ErrorBoundary resetKey={location.pathname}>
     <Suspense fallback={<RouteLoader />}>
       <Routes>
       {/* Public portfolio routes */}

@@ -173,6 +173,12 @@ export default function AdminLayout() {
     return () => { cancelled = true; };
   }, [location.pathname]);
 
+  // Preload shop catalogue admin pages so sidebar nav (Types/Categories) does not
+  // stall on a second lazy chunk during client-side routing.
+  useEffect(() => {
+    void import('../pages/admin/shopCatalogPages');
+  }, []);
+
   const activeVideoProvider = videoStatus?.defaultProvider === 'daily' ? 'daily' : 'zoom';
   const activeProviderStatus = videoStatus?.providers?.[activeVideoProvider] || {};
   const videoConfigured = Boolean(activeProviderStatus?.configured);
