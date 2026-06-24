@@ -1,4 +1,4 @@
-import { Suspense, lazy, Component } from 'react';
+import { Suspense, lazy, Component, useEffect } from 'react';
 import { Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import ProtectedRoute from './components/ProtectedRoute';
 import RequireUserAuth from './components/RequireUserAuth';
