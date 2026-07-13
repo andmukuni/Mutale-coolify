@@ -26,6 +26,18 @@ function normalizeVisibility(visibility) {
   return String(visibility || 'public').toLowerCase();
 }
 
+export function resolveEventMode(event) {
+  const explicit = String(event?.event_mode || '').trim().toLowerCase();
+  if (explicit) return explicit;
+  return String(event?.location || '').toLowerCase().includes('virtual') ? 'virtual' : 'in_person';
+}
+
+/** Virtual and hybrid events are treated as online — no guest registration. */
+export function isOnlineEvent(event) {
+  const mode = resolveEventMode(event);
+  return mode === 'virtual' || mode === 'hybrid';
+}
+
 /** Mirrors server deriveAttendeeSlotKey — lowercase name slice, empty → __self__. */
 export function deriveAttendeeSlotKey(bookedForNameRaw = '') {
   const raw = String(bookedForNameRaw || '').trim();

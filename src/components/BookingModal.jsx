@@ -10,7 +10,12 @@ import { useBooking } from '../context/BookingContext';
 import { useUserAuth } from '../context/UserAuthContext';
 import { useCurrency } from '../context/CurrencyContext';
 import { useToast } from '../context/ToastContext';
-import { checkEventAvailability, deriveAttendeeSlotKey, getRegistrationAttendeeSlotKey } from '../utils/eventServices';
+import {
+  checkEventAvailability,
+  deriveAttendeeSlotKey,
+  getRegistrationAttendeeSlotKey,
+  isOnlineEvent,
+} from '../utils/eventServices';
 import { formatDate, formatTime } from '../utils/helpers';
 import { getApiBase } from '../utils/apiBase';
 import { getSessionAuthHeaders } from '../utils/authHeaders';
@@ -147,6 +152,19 @@ export default function BookingModal({ event, isOpen, onClose }) {
   const [appliedCouponMeta, setAppliedCouponMeta] = useState(null);
   const [couponBusy, setCouponBusy] = useState(false);
   const [couponFieldError, setCouponFieldError] = useState('');
+  const [registrationStep, setRegistrationStep] = useState('details');
+
+  const isOnline = isOnlineEvent(event);
+  const couponLiveNorm = normalizeCouponCodeInput(couponInput);
+  const couponPreviewOk = Boolean(appliedCouponMeta && appliedCouponMeta.codeNorm === couponLiveNorm);
+  const effectiveZmwDisplay = couponPreviewOk
+    ? getNumericAmount(appliedCouponMeta.preview.final_zmw)
+    : getNumericAmount(event?.price);
+  const isFullyWaived = !event?.is_free && effectiveZmwDisplay <= 0.005 && couponPreviewOk;
+  const needsPaymentStage = Boolean(
+    event && !isOnline && !event.is_free && !isFullyWaived,
+  );
+  const onPaymentStep = needsPaymentStage && registrationStep === 'payment';
 
   // Update payment method when geo detection completes
   useEffect(() => {
@@ -173,7 +191,15 @@ export default function BookingModal({ event, isOpen, onClose }) {
     setCouponInput('');
     setAppliedCouponMeta(null);
     setCouponFieldError('');
+    setRegistrationStep('details');
+    setBookingTarget('self');
   }, [isOpen, event?.id]);
+
+  useEffect(() => {
+    if (isOnline && bookingTarget !== 'self') {
+      setBookingTarget('self');
+    }
+  }, [isOnline, bookingTarget]);
 
   // Prefetch event-attached merch when the registration succeeds with a paid status,
   // so we can offer the post-payment upsell modal.
@@ -301,20 +327,13 @@ export default function BookingModal({ event, isOpen, onClose }) {
     return { success: false, timeout: true };
   };
 
-  const handleSubmit = async () => {
-    setLoading(true);
-    setResult(null);
-
+  const validateRegistrationDetails = () => {
     if (!baseAvailability.canBook) {
-      setResult({ success: false, error: baseAvailability.reason || 'This event is not available for registration.' });
-      setLoading(false);
-      return;
+      return baseAvailability.reason || 'This event is not available for registration.';
     }
 
     if (bookingTarget === 'other' && !attendeeName.trim()) {
-      setResult({ success: false, error: 'Enter the name of the person you are registering.' });
-      setLoading(false);
-      return;
+      return 'Enter the name of the person you are registering.';
     }
 
     const slotKey = bookingTarget === 'other' ? deriveAttendeeSlotKey(attendeeName) : '__self__';
@@ -322,7 +341,36 @@ export default function BookingModal({ event, isOpen, onClose }) {
       attendeeSlotKey: slotKey,
     });
     if (!slotAvailability.canBook) {
-      setResult({ success: false, error: slotAvailability.reason });
+      return slotAvailability.reason;
+    }
+
+    const liveNorm = normalizeCouponCodeInput(couponInput);
+    const previewOk = Boolean(appliedCouponMeta && appliedCouponMeta.codeNorm === liveNorm);
+
+    if (!event.is_free && liveNorm && !previewOk) {
+      return 'Press “Apply coupon” to validate this code, or clear the coupon field.';
+    }
+
+    return null;
+  };
+
+  const handleContinueToPayment = () => {
+    setResult(null);
+    const validationError = validateRegistrationDetails();
+    if (validationError) {
+      setResult({ success: false, error: validationError });
+      return;
+    }
+    setRegistrationStep('payment');
+  };
+
+  const handleSubmit = async () => {
+    setLoading(true);
+    setResult(null);
+
+    const validationError = validateRegistrationDetails();
+    if (validationError) {
+      setResult({ success: false, error: validationError });
       setLoading(false);
       return;
     }
@@ -334,12 +382,6 @@ export default function BookingModal({ event, isOpen, onClose }) {
     const liveNorm = normalizeCouponCodeInput(couponInput);
     const previewOk = Boolean(appliedCouponMeta && appliedCouponMeta.codeNorm === liveNorm);
     const couponForRegistration = previewOk ? liveNorm : '';
-
-    if (!event.is_free && liveNorm && !previewOk) {
-      setResult({ success: false, error: 'Press “Apply coupon” to validate this code, or clear the coupon field.' });
-      setLoading(false);
-      return;
-    }
 
     try {
       await new Promise(r => setTimeout(r, 250));
@@ -589,6 +631,7 @@ export default function BookingModal({ event, isOpen, onClose }) {
     setCouponInput('');
     setAppliedCouponMeta(null);
     setCouponFieldError('');
+    setRegistrationStep('details');
     onClose();
   };
 
@@ -770,32 +813,44 @@ export default function BookingModal({ event, isOpen, onClose }) {
     ? `1 ZMW ≈ $${Number(exchangeRate).toFixed(4)}`
     : 'Using fallback FX rate';
 
-  const couponLiveNorm = normalizeCouponCodeInput(couponInput);
-  const couponPreviewOk = Boolean(appliedCouponMeta && appliedCouponMeta.codeNorm === couponLiveNorm);
-  const effectiveZmwDisplay = couponPreviewOk
-    ? getNumericAmount(appliedCouponMeta.preview.final_zmw)
-    : getNumericAmount(event.price);
   const showDiscountBreakdown = Boolean(
     couponPreviewOk && getNumericAmount(appliedCouponMeta.preview.discount_zmw) > 0.005,
   );
   const displayPriceEffective = getPriceBoth(effectiveZmwDisplay, Boolean(!event.is_free && effectiveZmwDisplay <= 0.005));
+  const confirmLabel = event.is_free || isFullyWaived
+    ? 'Confirm Registration'
+    : (needsPaymentStage && !onPaymentStep ? 'Continue to Payment' : 'Proceed to Payment');
+  const primaryAction = needsPaymentStage && !onPaymentStep ? handleContinueToPayment : handleSubmit;
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title="Register for Event"
+      title={onPaymentStep ? 'Complete Payment' : 'Register for Event'}
       size="md"
       footer={
         <>
+          {onPaymentStep ? (
+            <button
+              type="button"
+              onClick={() => {
+                setResult(null);
+                setRegistrationStep('details');
+              }}
+              className="px-5 py-2.5 rounded-xl text-sm font-medium text-navy-600 hover:bg-navy-100 transition-colors"
+            >
+              Back
+            </button>
+          ) : (
+            <button
+              onClick={handleClose}
+              className="px-5 py-2.5 rounded-xl text-sm font-medium text-navy-600 hover:bg-navy-100 transition-colors"
+            >
+              Cancel
+            </button>
+          )}
           <button
-            onClick={handleClose}
-            className="px-5 py-2.5 rounded-xl text-sm font-medium text-navy-600 hover:bg-navy-100 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
+            onClick={primaryAction}
             disabled={
               loading
               || !baseAvailability.canBook
@@ -804,9 +859,7 @@ export default function BookingModal({ event, isOpen, onClose }) {
             className="px-6 py-2.5 rounded-xl text-sm font-medium bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors flex items-center gap-2"
           >
             {loading && <span className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-            {event.is_free || (!event.is_free && effectiveZmwDisplay <= 0.005 && couponPreviewOk)
-              ? 'Confirm Registration'
-              : 'Proceed to Payment'}
+            {confirmLabel}
           </button>
         </>
       }
@@ -849,54 +902,56 @@ export default function BookingModal({ event, isOpen, onClose }) {
         Registration type: <span className="font-semibold text-cyan-700">Subscription</span>
       </div>
 
-      <div className="mb-4 space-y-2">
-        <label className="block text-sm font-medium text-navy-700">Registering for</label>
-        <div className="grid sm:grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={() => setBookingTarget('self')}
-            className={`px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors ${bookingTarget === 'self' ? 'bg-cyan-50 text-cyan-700 border-cyan-300' : 'bg-white text-navy-600 border-navy-200 hover:bg-navy-50'}`}
-          >
-            Myself
-          </button>
-          <button
-            type="button"
-            onClick={() => setBookingTarget('other')}
-            className={`px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors ${bookingTarget === 'other' ? 'bg-cyan-50 text-cyan-700 border-cyan-300' : 'bg-white text-navy-600 border-navy-200 hover:bg-navy-50'}`}
-          >
-            Someone else
-          </button>
-        </div>
-        {bookingTarget === 'other' && (
-          <div className="space-y-2 pt-1">
-            <div>
-              <label className="block text-xs font-medium text-navy-600 mb-1">Their full name</label>
-              <input
-                type="text"
-                value={attendeeName}
-                onChange={(e) => setAttendeeName(e.target.value)}
-                placeholder="e.g. child or guest name"
-                className="w-full px-4 py-2.5 rounded-xl border border-navy-200 bg-navy-50 text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-navy-600 mb-1">Relationship <span className="text-navy-400 font-normal">(optional)</span></label>
-              <input
-                type="text"
-                value={attendeeRelation}
-                onChange={(e) => setAttendeeRelation(e.target.value)}
-                placeholder="e.g. child, spouse"
-                className="w-full px-4 py-2.5 rounded-xl border border-navy-200 bg-navy-50 text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-              />
-            </div>
-            <p className="text-[11px] text-navy-400">
-              You stay the account holder; Zoom join still uses your signed-in profile.
-            </p>
+      {!isOnline && !onPaymentStep && (
+        <div className="mb-4 space-y-2">
+          <label className="block text-sm font-medium text-navy-700">Registering for</label>
+          <div className="grid sm:grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setBookingTarget('self')}
+              className={`px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors ${bookingTarget === 'self' ? 'bg-cyan-50 text-cyan-700 border-cyan-300' : 'bg-white text-navy-600 border-navy-200 hover:bg-navy-50'}`}
+            >
+              Myself
+            </button>
+            <button
+              type="button"
+              onClick={() => setBookingTarget('other')}
+              className={`px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors ${bookingTarget === 'other' ? 'bg-cyan-50 text-cyan-700 border-cyan-300' : 'bg-white text-navy-600 border-navy-200 hover:bg-navy-50'}`}
+            >
+              Someone else
+            </button>
           </div>
-        )}
-      </div>
+          {bookingTarget === 'other' && (
+            <div className="space-y-2 pt-1">
+              <div>
+                <label className="block text-xs font-medium text-navy-600 mb-1">Their full name</label>
+                <input
+                  type="text"
+                  value={attendeeName}
+                  onChange={(e) => setAttendeeName(e.target.value)}
+                  placeholder="e.g. child or guest name"
+                  className="w-full px-4 py-2.5 rounded-xl border border-navy-200 bg-navy-50 text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-navy-600 mb-1">Relationship <span className="text-navy-400 font-normal">(optional)</span></label>
+                <input
+                  type="text"
+                  value={attendeeRelation}
+                  onChange={(e) => setAttendeeRelation(e.target.value)}
+                  placeholder="e.g. child, spouse"
+                  className="w-full px-4 py-2.5 rounded-xl border border-navy-200 bg-navy-50 text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                />
+              </div>
+              <p className="text-[11px] text-navy-400">
+                You stay the account holder; the attendee name appears on their ticket.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
-      {!event.is_free && (
+      {!event.is_free && !onPaymentStep && (
         <div className="mb-4 space-y-2">
           <label className="block text-sm font-medium text-navy-700">Discount code</label>
           <div className="flex flex-col sm:flex-row gap-2">
@@ -985,7 +1040,7 @@ export default function BookingModal({ event, isOpen, onClose }) {
         )}
       </div>
 
-      {!event.is_free && !isZambia && (
+      {!event.is_free && (onPaymentStep || isOnline || !needsPaymentStage) && !isZambia && (
         <div className="-mt-2 mb-4 space-y-1">
           <p className="text-xs text-navy-500">
             Checkout (ZMW): <span className="font-medium">{displayPriceEffective.zmw}</span>
@@ -1000,7 +1055,7 @@ export default function BookingModal({ event, isOpen, onClose }) {
         </div>
       )}
 
-      {!event.is_free && (
+      {!event.is_free && (onPaymentStep || isOnline || !needsPaymentStage) && (
         <div className="mb-4 space-y-3">
           <label className="block text-sm font-medium text-navy-700">Checkout method</label>
           
@@ -1057,19 +1112,31 @@ export default function BookingModal({ event, isOpen, onClose }) {
         </div>
       )}
 
+      {onPaymentStep && bookingTarget === 'other' && attendeeName.trim() && (
+        <div className="mb-4 rounded-xl border border-navy-100 bg-navy-50 px-4 py-3 text-sm">
+          <p className="text-navy-500">Registering for</p>
+          <p className="font-medium text-navy-900">
+            {attendeeName.trim()}
+            {attendeeRelation.trim() ? ` (${attendeeRelation.trim()})` : ''}
+          </p>
+        </div>
+      )}
+
       {/* Optional notes */}
-      <div>
-        <label className="block text-sm font-medium text-navy-700 mb-1.5">
-          Additional notes <span className="text-navy-400 font-normal">(optional)</span>
-        </label>
-        <textarea
-          rows={2}
-          value={notes}
-          onChange={e => setNotes(e.target.value)}
-          placeholder="Any special requirements or messages…"
-          className="w-full px-4 py-2.5 rounded-xl border border-navy-200 bg-navy-50 text-sm text-navy-900 resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-        />
-      </div>
+      {!onPaymentStep && (
+        <div>
+          <label className="block text-sm font-medium text-navy-700 mb-1.5">
+            Additional notes <span className="text-navy-400 font-normal">(optional)</span>
+          </label>
+          <textarea
+            rows={2}
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            placeholder="Any special requirements or messages…"
+            className="w-full px-4 py-2.5 rounded-xl border border-navy-200 bg-navy-50 text-sm text-navy-900 resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+          />
+        </div>
+      )}
 
       {/* Error from booking attempt */}
       {result?.error && (
