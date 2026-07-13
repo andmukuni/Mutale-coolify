@@ -1081,29 +1081,40 @@ export default function EventRegistrationFlow({
       })}
     >
       {/* Event summary */}
-      <div className="bg-navy-50 rounded-xl p-4 mb-5">
-        <h3 className="font-semibold text-navy-900 text-sm mb-2">{event.title}</h3>
-        <div className="space-y-1">
-          <div className="flex items-center gap-2 text-xs text-navy-500">
-            <Calendar size={12} />
-            {formatDate(event.start_date || event.date)}
-            {event.start_time && ` · ${formatTime(event.start_time)}`}
-          </div>
-          <div className="flex items-center gap-2 text-xs text-navy-500">
-            <MapPin size={12} />
-            {event.venue ? `${event.venue}, ${event.location}` : event.location}
-          </div>
-          {spotsLeft !== null && (
+      <div className="bg-navy-50 rounded-xl p-4 mb-5 flex gap-4 items-start">
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold text-navy-900 text-sm mb-2">{event.title}</h3>
+          <div className="space-y-1">
             <div className="flex items-center gap-2 text-xs text-navy-500">
-              <Ticket size={12} />
-              {spotsLeft === 0 ? (
-                <span className="text-red-600 font-medium">No spots remaining</span>
-              ) : (
-                <span>{spotsLeft} of {event.capacity} spots remaining</span>
-              )}
+              <Calendar size={12} />
+              {formatDate(event.start_date || event.date)}
+              {event.start_time && ` · ${formatTime(event.start_time)}`}
             </div>
-          )}
+            <div className="flex items-center gap-2 text-xs text-navy-500">
+              <MapPin size={12} />
+              {event.venue ? `${event.venue}, ${event.location}` : event.location}
+            </div>
+            {spotsLeft !== null && (
+              <div className="flex items-center gap-2 text-xs text-navy-500">
+                <Ticket size={12} />
+                {spotsLeft === 0 ? (
+                  <span className="text-red-600 font-medium">No spots remaining</span>
+                ) : (
+                  <span>{spotsLeft} of {event.capacity} spots remaining</span>
+                )}
+              </div>
+            )}
+          </div>
         </div>
+        {event.cover_image ? (
+          <img
+            src={event.cover_image}
+            alt=""
+            className={`shrink-0 rounded-xl object-cover border border-navy-100 bg-white shadow-sm ${
+              isPage ? 'w-24 h-24 sm:w-32 sm:h-32' : 'w-20 h-20'
+            }`}
+          />
+        ) : null}
       </div>
 
       {/* Availability error */}
