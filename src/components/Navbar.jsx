@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   Menu,
@@ -392,10 +392,14 @@ function AccountMenu({ user, profilePhotoUrl, accountOpen, setAccountOpen, onLog
   );
 }
 
+const SCROLL_COMPACT_THRESHOLD = 24;
+
 export default function Navbar() {
   const [open, setOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [eventsMenuOpen, setEventsMenuOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const isScrolledRef = useRef(false);
   const { mainNavLinks: navLinks } = useSiteMenu();
   const { currentUser: user, userLogout } = useUserAuth();
   const { cartItemCount } = useBookStore();
@@ -424,6 +428,25 @@ export default function Navbar() {
     };
   }, [open]);
 
+  useEffect(() => {
+    const updateScrolled = () => {
+      const next = window.scrollY > SCROLL_COMPACT_THRESHOLD;
+      if (next !== isScrolledRef.current) {
+        isScrolledRef.current = next;
+        setIsScrolled(next);
+      }
+    };
+
+    updateScrolled();
+    window.addEventListener('scroll', updateScrolled, { passive: true });
+    return () => window.removeEventListener('scroll', updateScrolled);
+  }, []);
+
+  useEffect(() => {
+    isScrolledRef.current = false;
+    setIsScrolled(false);
+  }, [location.pathname]);
+
   const handleLogout = () => {
     userLogout();
     setAccountOpen(false);
@@ -445,14 +468,47 @@ export default function Navbar() {
 
   return (
     <header className="theme-fixed sticky top-0 z-50 shadow-md">
-      <HeaderUtilityBar />
+      <div
+        className={`overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out ${
+          isScrolled ? 'max-h-0 opacity-0 pointer-events-none' : 'max-h-48 opacity-100'
+        }`}
+        aria-hidden={isScrolled}
+      >
+        <HeaderUtilityBar />
+        <HeaderBrandBar
+          onMenuToggle={() => setOpen(!open)}
+          menuOpen={open}
+          showMobileActions
+          cartSlot={mobileCart}
+        />
+      </div>
 
-      <HeaderBrandBar
-        onMenuToggle={() => setOpen(!open)}
-        menuOpen={open}
-        showMobileActions
-        cartSlot={mobileCart}
-      />
+      {isScrolled && (
+        <div className="md:hidden theme-fixed bg-navy-900 border-b border-navy-800/80">
+          <div className={`${containerClass} flex items-center justify-between gap-3 py-2`}>
+            <Link to="/" className="group flex items-center gap-2 min-w-0" aria-label="Home">
+              <SiteLogo
+                variant="white"
+                className="h-9 w-auto shrink-0 transition-opacity duration-200 group-hover:opacity-90"
+                alt={headerBrand.name}
+              />
+              <span className="text-sm font-semibold text-white truncate">{headerBrand.name}</span>
+            </Link>
+            <div className="flex items-center gap-1 shrink-0">
+              {mobileCart}
+              <button
+                type="button"
+                onClick={() => setOpen(!open)}
+                className="text-navy-200 hover:text-white transition-colors p-2"
+                aria-label="Toggle menu"
+                aria-expanded={open}
+              >
+                {open ? <X size={24} /> : <Menu size={24} />}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tier 3 — main navigation (desktop) */}
       <div className="theme-fixed hidden md:block bg-navy-800 border-b border-navy-700/80 overflow-visible">
