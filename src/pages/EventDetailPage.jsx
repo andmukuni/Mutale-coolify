@@ -15,7 +15,6 @@ import {
 } from '../utils/eventServices';
 import { formatDate, formatTime } from '../utils/helpers';
 import { resolveUserBearerToken } from '../utils/authHeaders';
-import BookingModal from '../components/BookingModal';
 import EventMerchStrip from '../components/EventMerchStrip';
 import EventForumPanel from '../components/EventForumPanel';
 import StatusBadge from '../components/ui/StatusBadge';
@@ -30,8 +29,6 @@ export default function EventDetailPage() {
     formatEventPrice,
   } = useCurrency();
 
-  const [bookingOpen, setBookingOpen] = useState(false);
-  const [bookingSession, setBookingSession] = useState(0);
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -84,11 +81,10 @@ export default function EventDetailPage() {
 
   const handleBookClick = () => {
     if (!isUserAuthenticated || !resolveUserBearerToken()) {
-      navigate('/account/login', { state: { from: { pathname: `/events/${slug}` } } });
+      navigate('/account/login', { state: { from: { pathname: `/events/${slug}/register` } } });
       return;
     }
-    setBookingSession((prev) => prev + 1);
-    setBookingOpen(true);
+    navigate(`/events/${slug}/register`);
   };
 
   return (
@@ -469,14 +465,6 @@ export default function EventDetailPage() {
           </button>
         </div>
       )}
-
-      {/* Booking modal */}
-      <BookingModal
-        key={`${event.id}-${bookingSession}`}
-        event={event}
-        isOpen={bookingOpen}
-        onClose={() => setBookingOpen(false)}
-      />
     </div>
   );
 }

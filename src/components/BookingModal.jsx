@@ -1,10 +1,10 @@
 /**
- * BookingModal — handles the event booking / subscription flow.
- * Shows registration type selection, confirms, and submits.
+ * Event registration flow — booking / subscription for events.
+ * Renders as a modal or full page depending on `layout`.
  */
 import { useState, useEffect, useRef } from 'react';
 import { CheckCircle, AlertCircle, Calendar, MapPin, Ticket, ShoppingBag } from 'lucide-react';
-import Modal from './ui/Modal';
+import RegistrationShell from './RegistrationShell';
 import EventMerchUpsellModal from './EventMerchUpsellModal';
 import { useBooking } from '../context/BookingContext';
 import { useUserAuth } from '../context/UserAuthContext';
@@ -114,7 +114,15 @@ function resizeGuestList(current = [], nextCount = 0) {
   return next;
 }
 
-export default function BookingModal({ event, isOpen, onClose }) {
+export default function EventRegistrationFlow({
+  event,
+  isOpen = true,
+  onClose,
+  layout = 'modal',
+  backHref = '',
+}) {
+  const isPage = layout === 'page';
+  const isActive = isPage || isOpen;
   const { currentUser } = useUserAuth();
   const { registerForEvent, registerForEventBatch, updateRegistration, getEventRegistrationCount, registrations } = useBooking();
   const {
@@ -212,8 +220,8 @@ export default function BookingModal({ event, isOpen, onClose }) {
 
   // Auto-fill mobile payment number from user profile when booking opens.
   useEffect(() => {
-    if (!isOpen) {
-      // Cancel any in-progress payment polling when modal is closed
+    if (!isActive) {
+      // Cancel any in-progress payment polling when flow is closed
       pollCancelledRef.current = true;
       return;
     }
@@ -221,17 +229,17 @@ export default function BookingModal({ event, isOpen, onClose }) {
     if (phone.trim()) return;
     if (!profilePhone) return;
     setPhone(profilePhone);
-  }, [isOpen, paymentMethod, isZambia, phone, profilePhone]);
+  }, [isActive, paymentMethod, isZambia, phone, profilePhone]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isActive) return;
     setCouponInput('');
     setAppliedCouponMeta(null);
     setCouponFieldError('');
     setRegistrationStep('details');
     setIncludeSelf(!selfRegistration);
     setGuestAttendees([]);
-  }, [isOpen, event?.id, selfRegistration]);
+  }, [isActive, event?.id, selfRegistration]);
 
   useEffect(() => {
     if (!isInPerson) return;
@@ -241,7 +249,7 @@ export default function BookingModal({ event, isOpen, onClose }) {
   // Prefetch event-attached merch when the registration succeeds with a paid status,
   // so we can offer the post-payment upsell modal.
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isActive) return;
     if (!result?.success) return;
     if (merchPrefetched) return;
     const reg = result.registration;
@@ -267,7 +275,16 @@ export default function BookingModal({ event, isOpen, onClose }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [isOpen, result, merchPrefetched, event?.id]);
+  }, [isActive, result, merchPrefetched, event?.id]);
+
+  const shellProps = (overrides = {}) => ({
+    layout,
+    isOpen,
+    onClose: handleClose,
+    backHref,
+    backLabel: 'Back to event',
+    ...overrides,
+  });
 
   const applyCouponPreview = async () => {
     setCouponFieldError('');
@@ -820,7 +837,7 @@ export default function BookingModal({ event, isOpen, onClose }) {
 
   if (!loading && !result?.success && !isInPerson && selfRegistration) {
     return (
-      <Modal isOpen={isOpen} onClose={handleClose} size="sm">
+      <RegistrationShell {...shellProps({ size: 'sm' })}>
         <div className="text-center py-4">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-cyan-50 text-cyan-600 mb-4">
             <CheckCircle size={32} />
@@ -856,7 +873,7 @@ export default function BookingModal({ event, isOpen, onClose }) {
             Done
           </button>
         </div>
-      </Modal>
+      </RegistrationShell>
     );
   }
 
@@ -869,7 +886,13 @@ export default function BookingModal({ event, isOpen, onClose }) {
     const ticketSummaryCount = result.ticketCount || batchRegs.length || 1;
     return (
       <>
-        <Modal isOpen={isOpen && !showMerchUpsell} onClose={handleClose} size="sm">
+        <RegistrationShell
+          {...shellProps({
+            size: isPage ? 'xl' : 'sm',
+            isOpen: isActive && !showMerchUpsell,
+            title: isPage ? 'Registration confirmed' : undefined,
+          })}
+        >
           <div className="text-center py-4">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-green-50 text-green-600 mb-4">
               <CheckCircle size={32} />
@@ -945,10 +968,10 @@ export default function BookingModal({ event, isOpen, onClose }) {
               </button>
             )}
           </div>
-        </Modal>
+        </RegistrationShell>
 
         <EventMerchUpsellModal
-          isOpen={isOpen && showMerchUpsell}
+          isOpen={isActive && showMerchUpsell}
           onClose={() => {
             setShowMerchUpsell(false);
             handleClose();
@@ -966,7 +989,7 @@ export default function BookingModal({ event, isOpen, onClose }) {
     const reference = paymentJourney.reference;
 
     return (
-      <Modal isOpen={isOpen} onClose={handleClose} size="sm" title="Processing Payment">
+      <RegistrationShell {...shellProps({ size: 'sm', title: 'Processing Payment' })}>
         <div className="py-4 space-y-4">
           <div className="flex items-center justify-center">
             <div className="h-16 w-16 rounded-full border-4 border-cyan-200 border-t-cyan-600 animate-spin" />
@@ -993,7 +1016,7 @@ export default function BookingModal({ event, isOpen, onClose }) {
             )}
           </div>
         </div>
-      </Modal>
+      </RegistrationShell>
     );
   }
 
@@ -1016,46 +1039,46 @@ export default function BookingModal({ event, isOpen, onClose }) {
   const primaryAction = needsPaymentStage && !onPaymentStep ? handleContinueToPayment : handleSubmit;
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={handleClose}
-      title={onPaymentStep ? 'Complete Payment' : 'Register for Event'}
-      size="md"
-      footer={
-        <>
-          {onPaymentStep ? (
+    <RegistrationShell
+      {...shellProps({
+        title: onPaymentStep ? 'Complete Payment' : 'Register for Event',
+        size: isPage ? 'xl' : 'md',
+        footer: (
+          <>
+            {onPaymentStep ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setResult(null);
+                  setRegistrationStep('details');
+                }}
+                className="px-5 py-2.5 rounded-xl text-sm font-medium text-navy-600 hover:bg-navy-100 transition-colors"
+              >
+                Back
+              </button>
+            ) : (
+              <button
+                onClick={handleClose}
+                className="px-5 py-2.5 rounded-xl text-sm font-medium text-navy-600 hover:bg-navy-100 transition-colors"
+              >
+                Cancel
+              </button>
+            )}
             <button
-              type="button"
-              onClick={() => {
-                setResult(null);
-                setRegistrationStep('details');
-              }}
-              className="px-5 py-2.5 rounded-xl text-sm font-medium text-navy-600 hover:bg-navy-100 transition-colors"
+              onClick={primaryAction}
+              disabled={
+                loading
+                || !baseAvailability.canBook
+                || !canSubmitTickets
+              }
+              className="px-6 py-2.5 rounded-xl text-sm font-medium bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors flex items-center gap-2"
             >
-              Back
+              {loading && <span className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+              {confirmLabel}
             </button>
-          ) : (
-            <button
-              onClick={handleClose}
-              className="px-5 py-2.5 rounded-xl text-sm font-medium text-navy-600 hover:bg-navy-100 transition-colors"
-            >
-              Cancel
-            </button>
-          )}
-          <button
-            onClick={primaryAction}
-            disabled={
-              loading
-              || !baseAvailability.canBook
-              || !canSubmitTickets
-            }
-            className="px-6 py-2.5 rounded-xl text-sm font-medium bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors flex items-center gap-2"
-          >
-            {loading && <span className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-            {confirmLabel}
-          </button>
-        </>
-      }
+          </>
+        ),
+      })}
     >
       {/* Event summary */}
       <div className="bg-navy-50 rounded-xl p-4 mb-5">
@@ -1141,7 +1164,7 @@ export default function BookingModal({ event, isOpen, onClose }) {
           </div>
 
           {guestAttendees.length > 0 && (
-            <div className="space-y-3">
+            <div className={isPage ? 'grid lg:grid-cols-2 gap-3' : 'space-y-3'}>
               {guestAttendees.map((guest, index) => (
                 <div key={guest.key} className="rounded-xl border border-navy-100 bg-navy-50/60 p-3 space-y-2">
                   <p className="text-xs font-semibold text-navy-600">Guest {index + 1}</p>
@@ -1393,6 +1416,6 @@ export default function BookingModal({ event, isOpen, onClose }) {
           {result.error}
         </div>
       )}
-    </Modal>
+    </RegistrationShell>
   );
 }

@@ -16,6 +16,7 @@ const AboutPage = lazy(() => import('./pages/AboutPage'));
 const ExperiencePage = lazy(() => import('./pages/ExperiencePage'));
 const EventsPage = lazy(() => import('./pages/EventsPage'));
 const EventDetailPage = lazy(() => import('./pages/EventDetailPage'));
+const EventRegisterPage = lazy(() => import('./pages/EventRegisterPage'));
 const EventForumPage = lazy(() => import('./pages/EventForumPage'));
 const EventJoinPage = lazy(() => import('./pages/EventJoinPage'));
 const BlogPage = lazy(() => import('./pages/BlogPage'));
@@ -159,6 +160,7 @@ export default function App() {
         <Route path="/experience" element={<ExperiencePage />} />
         <Route path="/events" element={<EventsPage />} />
         <Route path="/events/:slug" element={<EventDetailPage />} />
+        <Route path="/events/:slug/register" element={<EventRegisterPage />} />
         <Route path="/events/:slug/forum" element={<EventForumPage />} />
         <Route
           path="/events/:slug/join"
