@@ -18,6 +18,7 @@ import {
   Upload,
   PowerOff,
   FileDown,
+  Ticket,
 } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { useBooking } from '../../context/BookingContext';
@@ -30,6 +31,7 @@ import { useToast } from '../../context/ToastContext';
 import EventProfileSummaryHero from '../../components/admin/event/EventProfileSummaryHero';
 import EventProfileQuickActions from '../../components/admin/event/EventProfileQuickActions';
 import EventProfileSidebar from '../../components/admin/event/EventProfileSidebar';
+import EventTicketsPanel from '../../components/admin/event/EventTicketsPanel';
 import EventForumPanel from '../../components/EventForumPanel';
 import CertificatePreviewModal from '../../components/admin/certificate/CertificatePreviewModal';
 import CertificateTemplateThumbnail from '../../components/admin/certificate/CertificateTemplateThumbnail';
@@ -49,6 +51,7 @@ const PROFILE_TABS = [
   { id: 'overview', label: 'Overview', icon: LayoutGrid },
   { id: 'certificates', label: 'Certificates', icon: Award },
   { id: 'attendees', label: 'Attendees', icon: Users },
+  { id: 'tickets', label: 'Tickets', icon: Ticket },
   { id: 'forum', label: 'Forum', icon: MessageSquare },
   { id: 'marketing', label: 'Marketing', icon: Percent },
   { id: 'activity', label: 'Activity', icon: Activity },
@@ -951,6 +954,23 @@ export default function EventProfilePage() {
             ))}
           </ul>
         )}
+      </FeedCard>
+          )}
+
+          {activeTab === 'tickets' && (
+      <FeedCard
+        title="Tickets sold"
+        subtitle="Every registration is one ticket — download the ticket card or QR for gate entry"
+        actions={(
+          <Link
+            to={`/admin/events/${event.id}/check-in`}
+            className="text-xs text-cyan-600 hover:text-cyan-700 font-medium"
+          >
+            Gate check-in →
+          </Link>
+        )}
+      >
+        <EventTicketsPanel event={event} registrations={registrations} />
       </FeedCard>
           )}
 
