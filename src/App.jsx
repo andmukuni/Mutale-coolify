@@ -17,6 +17,7 @@ const ExperiencePage = lazy(() => import('./pages/ExperiencePage'));
 const EventsPage = lazy(() => import('./pages/EventsPage'));
 const EventDetailPage = lazy(() => import('./pages/EventDetailPage'));
 const EventRegisterPage = lazy(() => import('./pages/EventRegisterPage'));
+const TicketPage = lazy(() => import('./pages/TicketPage'));
 const EventForumPage = lazy(() => import('./pages/EventForumPage'));
 const EventJoinPage = lazy(() => import('./pages/EventJoinPage'));
 const BlogPage = lazy(() => import('./pages/BlogPage'));
@@ -44,6 +45,7 @@ const EventsListPage = lazy(() => import('./pages/admin/EventsListPage'));
 const EventProfilePage = lazy(() => import('./pages/admin/EventProfilePage'));
 const EventFormPage = lazy(() => import('./pages/admin/EventFormPage'));
 const EventAttendeesPage = lazy(() => import('./pages/admin/EventAttendeesPage'));
+const EventCheckInPage = lazy(() => import('./pages/admin/EventCheckInPage'));
 const AttendeeProfilePage = lazy(() => import('./pages/admin/AttendeeProfilePage'));
 const CouponsPage = lazy(() => import('./pages/admin/CouponsPage'));
 const BlogListPage = lazy(() => import('./pages/admin/BlogListPage'));
@@ -184,6 +186,7 @@ export default function App() {
         <Route path="/shop/:slug" element={<BookDetailPage />} />
         <Route path="/pages/:slug" element={<CustomPage />} />
         <Route path="/certificates/verify/:code" element={<CertificateVerifyPage />} />
+        <Route path="/tickets/:code" element={<TicketPage />} />
 
         {/* Public user account routes */}
         <Route path="/account/login" element={<UserLoginPage />} />
@@ -238,6 +241,7 @@ export default function App() {
         <Route path="events/:eventId/certificate-designer" element={<CertificateDesignerPage />} />
         <Route path="events/:id/edit" element={<EventFormPage />} />
         <Route path="events/:id/attendees" element={<EventAttendeesPage />} />
+        <Route path="events/:id/check-in" element={<EventCheckInPage />} />
   <Route path="events/:id/attendees/:registrationId" element={<AttendeeProfilePage />} />
         <Route path="coupons" element={<CouponsPage />} />
         <Route path="certificates" element={<CertificatesListPage />} />

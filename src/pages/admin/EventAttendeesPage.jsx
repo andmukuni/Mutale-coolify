@@ -1,5 +1,5 @@
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Users, Download, CheckCircle2, Video } from 'lucide-react';
+import { Users, Download, CheckCircle2, Video, QrCode } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { useBooking } from '../../context/BookingContext';
 import { PageHeader, Card } from '../../components/ui';
@@ -87,17 +87,26 @@ export default function EventAttendeesPage() {
           { label: 'Events', to: '/admin/events' },
           { label: 'Attendees' },
         ]}
-        actions={
-          registrations.length > 0 && (
-            <button
-              onClick={handleExport}
-              className="inline-flex items-center gap-2 text-sm font-medium bg-white border border-navy-200 text-navy-700 hover:border-cyan-400 hover:text-cyan-700 px-4 py-2 rounded-xl transition-colors"
+        actions={(
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              to={`/admin/events/${id}/check-in`}
+              className="inline-flex items-center gap-2 text-sm font-medium bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2 rounded-xl transition-colors"
             >
-              <Download size={15} />
-              Export CSV
-            </button>
-          )
-        }
+              <QrCode size={15} />
+              Gate check-in
+            </Link>
+            {registrations.length > 0 && (
+              <button
+                onClick={handleExport}
+                className="inline-flex items-center gap-2 text-sm font-medium bg-white border border-navy-200 text-navy-700 hover:border-cyan-400 hover:text-cyan-700 px-4 py-2 rounded-xl transition-colors"
+              >
+                <Download size={15} />
+                Export CSV
+              </button>
+            )}
+          </div>
+        )}
       />
 
       {/* Quick stat tiles */}

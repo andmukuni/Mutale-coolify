@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
-import { Calendar, MapPin, Ticket } from 'lucide-react';
+import { Calendar, MapPin, Ticket, QrCode } from 'lucide-react';
 import { formatDate } from '../../utils/helpers';
+import { isInPersonEvent } from '../../utils/eventServices';
 
 const paymentColors = {
   paid: 'bg-green-50 text-green-700',
@@ -23,6 +24,8 @@ export default function RegistrationRow({ reg, onCancel, isPast }) {
   if (!event) return null;
 
   const paymentLabel = String(reg.payment_status || '').replace(/_/g, ' ');
+  const isInPerson = event ? isInPersonEvent(event) : false;
+  const hasTicketQr = Boolean(reg.reference_code) && reg.status !== 'cancelled';
 
   return (
     <div className="bg-white rounded-2xl border border-navy-100 p-5 flex flex-col sm:flex-row sm:items-center gap-4">
@@ -76,6 +79,15 @@ export default function RegistrationRow({ reg, onCancel, isPast }) {
       </div>
 
       <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end sm:justify-start">
+        {hasTicketQr && isInPerson && (
+          <Link
+            to={`/tickets/${encodeURIComponent(reg.reference_code)}`}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-cyan-700 hover:text-cyan-800 hover:bg-cyan-50 transition-colors"
+          >
+            <QrCode size={12} />
+            Ticket
+          </Link>
+        )}
         <Link
           to={`/events/${event.slug}`}
           className="inline-flex items-center px-2.5 py-1.5 rounded-lg text-xs font-medium text-cyan-600 hover:text-cyan-700 hover:bg-cyan-50 transition-colors"

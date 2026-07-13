@@ -2143,7 +2143,7 @@ function normalizeRegistrationPayload(payload = {}, idOverride) {
     event_id: eventId,
     event_title: String(payload.event_title || '').trim(),
     event_slug: String(payload.event_slug || '').trim(),
-    reference_code: String(payload.reference_code || payload.payment_reference || generatePaymentReference('REG')).trim(),
+    reference_code: String(payload.reference_code || generatePaymentReference('REG')).trim(),
     registration_type: String(payload.registration_type || 'subscription').trim().toLowerCase(),
     status: String(payload.status || 'confirmed').trim().toLowerCase(),
     amount: normalizedAmount,
@@ -2527,6 +2527,36 @@ async function markEventRegistrationAttendance(registrationId, joinSource = 'zoo
     [registrationId],
   );
   return refreshed || null;
+}
+
+const VALID_TICKET_PAYMENT_STATUSES = new Set(['paid', 'not_required', 'waived']);
+
+function isRegistrationTicketEligible(row = {}) {
+  const status = String(row.status || '').trim().toLowerCase();
+  if (status === 'cancelled') return false;
+  const paymentStatus = String(row.payment_status || '').trim().toLowerCase();
+  return VALID_TICKET_PAYMENT_STATUSES.has(paymentStatus);
+}
+
+function mapPublicTicketLookup(registration = {}, event = {}) {
+  const attendeeName = String(registration.booked_for_name || '').trim() || String(registration.user_name || '').trim();
+  const attendedAt = normalizeDateTimeText(registration.attended_at);
+  return {
+    valid: isRegistrationTicketEligible(registration),
+    reference_code: String(registration.reference_code || '').trim(),
+    attendee_name: attendeeName,
+    payer_name: String(registration.user_name || '').trim(),
+    event_id: String(registration.event_id || '').trim(),
+    event_title: String(event.title || registration.event_title || '').trim(),
+    event_slug: String(event.slug || registration.event_slug || '').trim(),
+    event_date: normalizeDateTimeText(event.start_date || event.date || ''),
+    event_time: String(event.start_time || event.time || '').trim(),
+    event_location: String(event.location || event.venue || '').trim(),
+    status: String(registration.status || '').trim().toLowerCase(),
+    payment_status: String(registration.payment_status || '').trim().toLowerCase(),
+    checked_in: Boolean(attendedAt) || String(registration.status || '').trim().toLowerCase() === 'attended',
+    checked_in_at: attendedAt,
+  };
 }
 
 async function validateVideoSettingsBeforeSave(merged = {}) {
@@ -7471,6 +7501,9 @@ app.post('/api/registrations', async (req, res) => {
         const eventLocation = event.location || event.venue || 'Online';
         const isFreeCatalog = parseBoolean(event.is_free, false);
         const refCode = enriched.reference_code || '';
+        const eventMode = String(event.event_mode || '').trim().toLowerCase()
+          || (String(event.location || '').toLowerCase().includes('virtual') ? 'virtual' : 'in_person');
+        const ticketUrl = refCode && eventMode === 'in_person' ? `${appUrl}/tickets/${encodeURIComponent(refCode)}` : '';
         const listZmwStored = enriched.list_price_zmw != null
           ? roundMoney2(toNumber(enriched.list_price_zmw, Number(event.price || 0)))
           : roundMoney2(toNumber(event.price, 0));
@@ -7513,6 +7546,7 @@ app.post('/api/registrations', async (req, res) => {
           `📍  Location: ${eventLocation}`,
           ...priceLinesPlain,
           refCode ? `🔖  Reference: ${refCode}` : '',
+          ticketUrl ? `📱  Entry ticket (QR): ${ticketUrl}` : '',
           '',
           `View event: ${eventUrl}`,
           '',
@@ -7878,6 +7912,86 @@ app.post('/api/registrations/batch', async (req, res) => {
     });
   } catch (error) {
     return res.status(500).json({ ok: false, message: 'Failed to create batch registration', error: error.message });
+  }
+});
+
+app.get('/api/tickets/:reference', async (req, res) => {
+  try {
+    const referenceCode = String(req.params.reference || '').trim();
+    if (!referenceCode) {
+      return res.status(400).json({ ok: false, message: 'Ticket reference is required.' });
+    }
+
+    const [[registration]] = await pool.query(
+      'SELECT * FROM event_registrations WHERE reference_code = ? LIMIT 1',
+      [referenceCode],
+    );
+    if (!registration) {
+      return res.status(404).json({ ok: false, message: 'Ticket not found.' });
+    }
+
+    const [[event]] = await pool.query('SELECT * FROM events WHERE id = ? LIMIT 1', [registration.event_id]);
+    const ticket = mapPublicTicketLookup(registration, event || {});
+
+    return res.json({ ok: true, data: ticket });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: 'Failed to look up ticket', error: error.message });
+  }
+});
+
+app.post('/api/registrations/check-in', async (req, res) => {
+  try {
+    const adminAuth = getAdminAuth(req);
+    if (!adminAuth.ok) return sendAuthFailure(res, adminAuth);
+
+    const incoming = req.body && typeof req.body === 'object' ? req.body : {};
+    const referenceCode = String(incoming.reference_code || incoming.referenceCode || '').trim();
+    const eventId = String(incoming.event_id || incoming.eventId || '').trim();
+
+    if (!referenceCode) {
+      return res.status(400).json({ ok: false, message: 'reference_code is required.' });
+    }
+
+    const [[registration]] = await pool.query(
+      'SELECT * FROM event_registrations WHERE reference_code = ? LIMIT 1',
+      [referenceCode],
+    );
+    if (!registration) {
+      return res.status(404).json({ ok: false, message: 'Ticket not found.' });
+    }
+
+    if (eventId && String(registration.event_id || '') !== eventId) {
+      return res.status(409).json({ ok: false, message: 'This ticket belongs to a different event.' });
+    }
+
+    if (!isRegistrationTicketEligible(registration)) {
+      return res.status(409).json({
+        ok: false,
+        message: 'Ticket is not valid for entry (cancelled or unpaid).',
+      });
+    }
+
+    const alreadyCheckedIn = Boolean(registration.attended_at)
+      || String(registration.status || '').trim().toLowerCase() === 'attended';
+
+    const refreshed = alreadyCheckedIn
+      ? registration
+      : await markEventRegistrationAttendance(registration.id, 'gate');
+
+    const [[event]] = await pool.query('SELECT * FROM events WHERE id = ? LIMIT 1', [registration.event_id]);
+    const mapped = mapDbRegistration(refreshed);
+    const ticket = mapPublicTicketLookup(mapped, event || {});
+
+    return res.json({
+      ok: true,
+      data: {
+        ...ticket,
+        already_checked_in: alreadyCheckedIn,
+        registration: mapped,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: 'Failed to check in ticket', error: error.message });
   }
 });
 

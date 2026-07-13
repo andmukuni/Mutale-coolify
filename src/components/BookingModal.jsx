@@ -6,6 +6,7 @@ import { useState, useEffect, useRef } from 'react';
 import { CheckCircle, AlertCircle, Calendar, MapPin, Ticket, ShoppingBag, X } from 'lucide-react';
 import RegistrationShell from './RegistrationShell';
 import EventMerchUpsellModal from './EventMerchUpsellModal';
+import TicketQrDisplay from './TicketQrDisplay';
 import { useBooking } from '../context/BookingContext';
 import { useUserAuth } from '../context/UserAuthContext';
 import { useCurrency } from '../context/CurrencyContext';
@@ -940,6 +941,28 @@ export default function EventRegistrationFlow({
                 </>
               )}
             </div>
+
+            {isInPerson && batchRegs.length > 0 && (
+              <div className="mb-6">
+                <p className="text-xs font-semibold uppercase tracking-wide text-navy-400 mb-3">
+                  Entry QR {batchRegs.length > 1 ? 'codes' : 'code'}
+                </p>
+                <div className={`grid gap-4 ${batchRegs.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+                  {batchRegs.map((row) => (
+                    <div key={`qr-${row.id || row.reference_code}`} className="rounded-xl border border-navy-100 bg-white p-3">
+                      <TicketQrDisplay
+                        referenceCode={row.reference_code}
+                        attendeeName={String(row.booked_for_name || '').trim() || 'You'}
+                        size={140}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[11px] text-navy-500 mt-3">
+                  Each ticket has its own QR code. Show the matching code at the gate for entry.
+                </p>
+              </div>
+            )}
 
             {hasMerch ? (
               <div className="space-y-2">
