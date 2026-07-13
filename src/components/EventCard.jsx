@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Calendar, Clock, MapPin, Tag, ArrowRight, Ticket, CheckCircle2 } from 'lucide-react';
 import { formatDate, formatTime } from '../utils/helpers';
-import { getEventDisplayStatus } from '../utils/eventServices';
+import { getEventDisplayStatus, isInPersonEvent } from '../utils/eventServices';
 import { useCurrency } from '../context/CurrencyContext';
 import { useUserAuth } from '../context/UserAuthContext';
 import { useBooking } from '../context/BookingContext';
@@ -24,7 +24,9 @@ export default function EventCard({ event }) {
   const isPast = displayStatus === 'past' || displayStatus === 'cancelled' || displayStatus === 'closed';
   const isLive = displayStatus === 'ongoing';
   const userAlreadyRegistered = isUserAuthenticated && isUserRegistered(currentUser?.id, event.id, 'subscription');
+  const isInPerson = isInPersonEvent(event);
   const detailPath = `/events/${event.slug}`;
+  const registerPath = `/events/${event.slug}/register`;
 
   const isInteractiveTarget = (target) => {
     if (!(target instanceof Element)) return false;
@@ -142,7 +144,7 @@ export default function EventCard({ event }) {
             View Details <ArrowRight size={13} />
           </Link>
           {!isPast && event.status === 'published' && (
-            userAlreadyRegistered ? (
+            userAlreadyRegistered && !isInPerson ? (
               <span
                 className="inline-flex items-center gap-1.5 text-xs font-medium bg-navy-200 text-navy-500 px-3.5 py-1.5 rounded-lg shrink-0 cursor-not-allowed"
                 aria-disabled="true"
@@ -153,11 +155,11 @@ export default function EventCard({ event }) {
               </span>
             ) : (
               <Link
-                to={`/events/${event.slug}`}
+                to={isInPerson ? registerPath : detailPath}
                 className="inline-flex items-center gap-1.5 text-xs font-medium bg-cyan-600 hover:bg-cyan-500 text-white px-3.5 py-1.5 rounded-lg transition-colors shrink-0"
               >
                 <Ticket size={12} />
-                Register
+                {isInPerson && userAlreadyRegistered ? 'Buy Tickets' : 'Register'}
               </Link>
             )
           )}

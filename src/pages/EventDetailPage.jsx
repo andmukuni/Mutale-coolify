@@ -12,6 +12,7 @@ import {
   checkEventAvailability,
   getEventDisplayStatus,
   isEventPubliclyVisible,
+  isInPersonEvent,
 } from '../utils/eventServices';
 import { formatDate, formatTime } from '../utils/helpers';
 import { resolveUserBearerToken } from '../utils/authHeaders';
@@ -70,6 +71,7 @@ export default function EventDetailPage() {
   const inferredMode =
     event.event_mode
     || (String(event.location || '').toLowerCase().includes('virtual') ? 'virtual' : 'in_person');
+  const isInPerson = isInPersonEvent(event);
 
   const startAt = getEventStartDateTime(event);
   const countdown = getCountdown(startAt, now);
@@ -78,6 +80,9 @@ export default function EventDetailPage() {
   const featuredSpeakersList = parseFeaturedSpeakers(event.featured_speakers).filter(
     (s) => speakerHasAnyDetail(s),
   );
+
+  const canShowRegisterCta = listingAvailability.canBook && canRegisterMore && (!userAlreadyRegistered || isInPerson);
+  const registerCtaLabel = isInPerson && userAlreadyRegistered ? 'Buy More Tickets' : 'Register Now';
 
   const handleBookClick = () => {
     if (!isUserAuthenticated || !resolveUserBearerToken()) {
@@ -375,7 +380,9 @@ export default function EventDetailPage() {
                 <div className="space-y-2 mb-4">
                   <div className="flex items-center gap-2 p-3.5 bg-green-50 border border-green-200 rounded-xl text-sm text-green-700">
                     <CheckCircle size={16} className="shrink-0" />
-                    You&rsquo;re already registered for this event.
+                    {isInPerson
+                      ? 'You have tickets for this event. You can buy more for guests anytime.'
+                      : 'You\u2019re already registered for this event.'}
                   </div>
                   {event.forum_enabled && (
                     <Link
@@ -405,14 +412,14 @@ export default function EventDetailPage() {
                 </div>
               )}
 
-              {listingAvailability.canBook && canRegisterMore && !userAlreadyRegistered && (
+              {canShowRegisterCta && (
                 <div className="space-y-2 hidden sm:block">
                   <button
                     onClick={handleBookClick}
                     className="w-full flex items-center justify-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white font-medium py-3 rounded-xl transition-colors"
                   >
                     <Ticket size={15} />
-                    Register Now
+                    {registerCtaLabel}
                   </button>
                 </div>
               )}
@@ -454,14 +461,14 @@ export default function EventDetailPage() {
         </section>
       )}
 
-      {listingAvailability.canBook && canRegisterMore && !userAlreadyRegistered && (
+      {canShowRegisterCta && (
         <div className="sm:hidden fixed bottom-3 left-3 right-3 z-20 bg-white/95 backdrop-blur rounded-2xl border border-navy-100 p-3 shadow-lg">
           <button
             onClick={handleBookClick}
             className="w-full flex items-center justify-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white font-medium py-3 rounded-xl transition-colors"
           >
             <Ticket size={15} />
-            Register Now
+            {registerCtaLabel}
           </button>
         </div>
       )}
