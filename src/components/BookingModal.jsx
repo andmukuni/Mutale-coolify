@@ -3,7 +3,7 @@
  * Renders as a modal or full page depending on `layout`.
  */
 import { useState, useEffect, useRef } from 'react';
-import { CheckCircle, AlertCircle, Calendar, MapPin, Ticket, ShoppingBag } from 'lucide-react';
+import { CheckCircle, AlertCircle, Calendar, MapPin, Ticket, ShoppingBag, X } from 'lucide-react';
 import RegistrationShell from './RegistrationShell';
 import EventMerchUpsellModal from './EventMerchUpsellModal';
 import { useBooking } from '../context/BookingContext';
@@ -1178,7 +1178,17 @@ export default function EventRegistrationFlow({
             <div className={isPage ? 'grid lg:grid-cols-2 gap-3' : 'space-y-3'}>
               {guestAttendees.map((guest, index) => (
                 <div key={guest.key} className="rounded-xl border border-navy-100 bg-navy-50/60 p-3 space-y-2">
-                  <p className="text-xs font-semibold text-navy-600">Guest {index + 1}</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold text-navy-600">Guest {index + 1}</p>
+                    <button
+                      type="button"
+                      onClick={() => setGuestAttendees((prev) => prev.filter((_, i) => i !== index))}
+                      className="p-1.5 rounded-lg text-navy-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                      aria-label={`Remove guest ${index + 1}`}
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
                   <div>
                     <label className="block text-xs font-medium text-navy-600 mb-1">Full name <span className="text-red-500">*</span></label>
                     <input
