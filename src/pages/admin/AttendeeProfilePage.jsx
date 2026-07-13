@@ -88,11 +88,19 @@ export default function AttendeeProfilePage() {
             <InfoRow icon={User} label="Full name" value={registration.user_name} />
             <InfoRow icon={Mail} label="Email" value={registration.user_email} />
             {registration.booked_for_name ? (
-              <InfoRow
-                icon={User}
-                label="Ticket for"
-                value={`${registration.booked_for_name}${registration.booked_for_relation ? ` (${registration.booked_for_relation})` : ''}`}
-              />
+              <>
+                <InfoRow
+                  icon={User}
+                  label="Ticket for"
+                  value={registration.booked_for_name}
+                />
+                {registration.booked_for_email ? (
+                  <InfoRow icon={Mail} label="Guest email" value={registration.booked_for_email} />
+                ) : null}
+                {registration.booked_for_phone ? (
+                  <InfoRow icon={User} label="Guest phone" value={registration.booked_for_phone} />
+                ) : null}
+              </>
             ) : null}
             <InfoRow icon={Ticket} label="Reference" value={registration.reference_code} mono />
             <div className="flex items-start gap-3">

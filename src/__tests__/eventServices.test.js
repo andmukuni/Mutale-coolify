@@ -1,15 +1,20 @@
 import { describe, it, expect } from 'vitest';
 import {
   checkEventAvailability,
+  computeRegistrationTicketCount,
   deriveAttendeeSlotKey,
+  deriveGuestAttendeeSlotKey,
+  getMaxGuestTickets,
   getRegistrationAttendeeSlotKey,
   getEventDisplayStatus,
   isEventPast,
   isEventUpcoming,
   isEventPubliclyVisible,
+  isInPersonEvent,
   getAvailableSpots,
   formatPrice,
   sortEventsByRecentlyCreated,
+  validateGuestAttendees,
 } from '../utils/eventServices';
 
 // ─── Shared fixtures ──────────────────────────────────────────────────────────
@@ -404,5 +409,35 @@ describe('sortEventsByRecentlyCreated', () => {
       { id: 'c', created_at: '2026-03-01T00:00:00Z' },
     ]);
     expect(sorted.map((e) => e.id)).toEqual(['b', 'c', 'a']);
+  });
+});
+
+describe('multi-guest registration helpers', () => {
+  it('detects in-person events', () => {
+    expect(isInPersonEvent({ event_mode: 'in_person' })).toBe(true);
+    expect(isInPersonEvent({ event_mode: 'virtual' })).toBe(false);
+  });
+
+  it('derives unique guest slot keys for same name', () => {
+    expect(deriveGuestAttendeeSlotKey('Jane Doe', 0)).toBe('jane doe::0');
+    expect(deriveGuestAttendeeSlotKey('Jane Doe', 1)).toBe('jane doe::1');
+    expect(deriveGuestAttendeeSlotKey('Jane Doe', 0)).not.toBe(deriveGuestAttendeeSlotKey('Jane Doe', 1));
+  });
+
+  it('computes ticket count from self and guests', () => {
+    expect(computeRegistrationTicketCount({ includeSelf: true, guestCount: 2 })).toBe(3);
+    expect(computeRegistrationTicketCount({ includeSelf: false, guestCount: 1 })).toBe(1);
+  });
+
+  it('validates guest names and rejects duplicates', () => {
+    expect(validateGuestAttendees([{ name: 'Ada' }, { name: 'Ben' }]).ok).toBe(true);
+    expect(validateGuestAttendees([{ name: '' }]).ok).toBe(false);
+    expect(validateGuestAttendees([{ name: 'Ada' }, { name: 'ada' }]).ok).toBe(false);
+  });
+
+  it('caps guest tickets by remaining capacity', () => {
+    const event = { capacity: 5 };
+    expect(getMaxGuestTickets(event, 3, { includeSelf: true, hardCap: 20 })).toBe(1);
+    expect(getMaxGuestTickets(event, 3, { includeSelf: false, hardCap: 20 })).toBe(2);
   });
 });

@@ -160,13 +160,14 @@ export default function EventAttendeesPage() {
                     >
                       <td className="py-3 px-4 first:pl-0 font-medium text-navy-900">{reg.user_name}</td>
                       <td className="py-3 px-4 text-navy-500">{reg.user_email}</td>
-                      <td className="py-3 px-4 text-navy-700 text-xs max-w-[140px]">
+                      <td className="py-3 px-4 text-navy-700 text-xs max-w-[180px]">
                         {reg.booked_for_name
                           ? (
-                            <>
-                              {reg.booked_for_name}
-                              {reg.booked_for_relation ? ` (${reg.booked_for_relation})` : ''}
-                            </>
+                            <div className="space-y-0.5">
+                              <div>{reg.booked_for_name}</div>
+                              {reg.booked_for_email && <div className="text-navy-400">{reg.booked_for_email}</div>}
+                              {reg.booked_for_phone && <div className="text-navy-400">{reg.booked_for_phone}</div>}
+                            </div>
                             )
                           : <span className="text-navy-400">Self</span>}
                       </td>

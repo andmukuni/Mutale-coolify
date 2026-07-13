@@ -207,6 +207,92 @@ export function BookingProvider({ children }) {
     }
   }, [notifyRegistration, registrations, setRegistrations]);
 
+  /** Register multiple tickets for an in-person event in one order. */
+  const registerForEventBatch = useCallback(async ({
+    user,
+    event,
+    registrationType,
+    notes = '',
+    includeSelf = false,
+    attendees = [],
+    amount,
+    paymentAmount,
+    paymentCurrency,
+    paymentAmountZmw,
+    paymentStatus,
+    registrationStatus,
+    paymentMethod,
+    paymentReference,
+    couponCode,
+  }) => {
+    if (!user) return { success: false, error: 'You must be logged in to register.' };
+    if (!event?.id) return { success: false, error: 'Event not found.' };
+
+    if (!resolveUserBearerToken()) {
+      return { success: false, error: 'Your session has expired. Please sign in again to register.' };
+    }
+
+    const guestRows = (Array.isArray(attendees) ? attendees : []).map((row) => ({
+      booked_for_name: String(row.name || row.booked_for_name || '').trim(),
+      booked_for_email: String(row.email || row.booked_for_email || '').trim(),
+      booked_for_phone: String(row.phone || row.booked_for_phone || '').trim(),
+    }));
+
+    const ccRaw = String(couponCode ?? '').trim();
+    const coupon_code = ccRaw ? ccRaw : undefined;
+
+    const payload = {
+      event_id: event.id,
+      registration_type: registrationType,
+      include_self: includeSelf,
+      attendees: guestRows,
+      notes,
+      payment_reference: paymentReference || '',
+      payment_method: paymentMethod || (event.is_free ? 'free' : ''),
+      currency: paymentCurrency || 'ZMW',
+      ...(coupon_code ? { coupon_code } : {}),
+      ...(paymentAmount != null ? { amount: paymentAmount } : {}),
+    };
+
+    try {
+      const response = await fetch(`${API_BASE}/registrations/batch`, {
+        method: 'POST',
+        headers: getSessionAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(payload),
+      });
+      const json = await response.json().catch(() => ({}));
+
+      if (!response.ok || !json?.ok || !json?.data) {
+        const message = json?.message || 'Unable to complete registration.';
+        if (response.status === 401 && message === 'Authentication required.') {
+          return { success: false, error: 'Your session has expired. Please sign in again to register.' };
+        }
+        return { success: false, error: message };
+      }
+
+      const batch = json.data;
+      const created = Array.isArray(batch.registrations) ? batch.registrations : [];
+      setRegistrations((prev) => {
+        const createdIds = new Set(created.map((item) => item.id));
+        return [...created, ...prev.filter((item) => !createdIds.has(item.id))];
+      });
+
+      for (const registration of created) {
+        void notifyRegistration({ registration, event, user });
+      }
+
+      return {
+        success: true,
+        registrations: created,
+        registration: created[0] || null,
+        ticketCount: batch.ticket_count || created.length,
+        totalZmw: batch.total_zmw,
+      };
+    } catch {
+      return { success: false, error: 'Unable to connect to the registration service.' };
+    }
+  }, [notifyRegistration, setRegistrations]);
+
   /** Update a registration by ID (used by payment polling to finalize status) */
   const updateRegistration = useCallback(async (registrationId, updates = {}) => {
     try {
@@ -273,6 +359,7 @@ export function BookingProvider({ children }) {
     syncError,
     refreshRegistrations,
       registerForEvent,
+      registerForEventBatch,
     updateRegistration,
       cancelRegistration,
       getUserRegistrations,

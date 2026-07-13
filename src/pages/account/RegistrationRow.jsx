@@ -57,7 +57,8 @@ export default function RegistrationRow({ reg, onCancel, isPast }) {
           {String(reg.booked_for_name || '').trim() ? (
             <span className="text-xs text-cyan-700 font-medium">
               For: {String(reg.booked_for_name).trim()}
-              {reg.booked_for_relation ? ` (${reg.booked_for_relation})` : ''}
+              {reg.booked_for_email ? ` · ${reg.booked_for_email}` : ''}
+              {reg.booked_for_phone ? ` · ${reg.booked_for_phone}` : ''}
             </span>
           ) : null}
         </div>

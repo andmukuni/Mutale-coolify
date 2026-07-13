@@ -38,6 +38,50 @@ export function isOnlineEvent(event) {
   return mode === 'virtual' || mode === 'hybrid';
 }
 
+export function isInPersonEvent(event) {
+  return resolveEventMode(event) === 'in_person';
+}
+
+export function deriveGuestAttendeeSlotKey(name, index) {
+  const slug = String(name || '').trim().toLowerCase().slice(0, 140);
+  return `${slug || 'guest'}::${Number(index)}`;
+}
+
+export function validateGuestAttendees(attendees = []) {
+  if (!Array.isArray(attendees) || attendees.length === 0) {
+    return { ok: true, error: null };
+  }
+
+  const seenNames = new Set();
+  for (let i = 0; i < attendees.length; i += 1) {
+    const name = String(attendees[i]?.name || attendees[i]?.booked_for_name || '').trim();
+    if (!name) {
+      return { ok: false, error: `Guest ${i + 1} needs a name.` };
+    }
+    const key = name.toLowerCase();
+    if (seenNames.has(key)) {
+      return { ok: false, error: 'Each guest must have a unique name in this order.' };
+    }
+    seenNames.add(key);
+  }
+
+  return { ok: true, error: null };
+}
+
+export function computeRegistrationTicketCount({ includeSelf = false, guestCount = 0 } = {}) {
+  const guests = Math.max(0, Math.floor(Number(guestCount) || 0));
+  const self = includeSelf ? 1 : 0;
+  return self + guests;
+}
+
+export function getMaxGuestTickets(event, registrationCount, { includeSelf = true, hardCap = 20 } = {}) {
+  const cap = Math.max(1, Math.floor(Number(hardCap) || 20));
+  if (!event?.capacity) return cap;
+  const remaining = Math.max(0, Number(event.capacity) - Number(registrationCount || 0));
+  const reservedForSelf = includeSelf ? 1 : 0;
+  return Math.max(0, Math.min(cap, remaining - reservedForSelf));
+}
+
 /** Mirrors server deriveAttendeeSlotKey — lowercase name slice, empty → __self__. */
 export function deriveAttendeeSlotKey(bookedForNameRaw = '') {
   const raw = String(bookedForNameRaw || '').trim();

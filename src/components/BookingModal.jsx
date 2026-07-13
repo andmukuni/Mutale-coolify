@@ -12,9 +12,13 @@ import { useCurrency } from '../context/CurrencyContext';
 import { useToast } from '../context/ToastContext';
 import {
   checkEventAvailability,
-  deriveAttendeeSlotKey,
+  computeRegistrationTicketCount,
+  deriveGuestAttendeeSlotKey,
+  getMaxGuestTickets,
   getRegistrationAttendeeSlotKey,
+  isInPersonEvent,
   isOnlineEvent,
+  validateGuestAttendees,
 } from '../utils/eventServices';
 import { formatDate, formatTime } from '../utils/helpers';
 import { getApiBase } from '../utils/apiBase';
@@ -97,9 +101,22 @@ function extractLencoPaymentStatus(payload = {}) {
   return String(textStatus || '').toLowerCase();
 }
 
+function createEmptyGuest() {
+  return { key: `guest-${Math.random().toString(36).slice(2, 9)}`, name: '', email: '', phone: '' };
+}
+
+function resizeGuestList(current = [], nextCount = 0) {
+  const count = Math.max(0, Math.floor(Number(nextCount) || 0));
+  if (count === current.length) return current;
+  if (count < current.length) return current.slice(0, count);
+  const next = [...current];
+  while (next.length < count) next.push(createEmptyGuest());
+  return next;
+}
+
 export default function BookingModal({ event, isOpen, onClose }) {
   const { currentUser } = useUserAuth();
-  const { registerForEvent, updateRegistration, getEventRegistrationCount, registrations } = useBooking();
+  const { registerForEvent, registerForEventBatch, updateRegistration, getEventRegistrationCount, registrations } = useBooking();
   const {
     isZambia,
     loading: geoLoading,
@@ -116,14 +133,22 @@ export default function BookingModal({ event, isOpen, onClose }) {
   const profilePhone = String(currentUser?.phone || '').trim();
 
   const regType = 'subscription';
+  const selfRegistration = event && currentUser?.id
+    ? registrations.find(
+      (r) => r.user_id === currentUser.id
+        && r.event_id === event.id
+        && r.registration_type === regType
+        && r.status !== 'cancelled'
+        && getRegistrationAttendeeSlotKey(r) === '__self__',
+    )
+    : null;
   // Default to card for non-Zambian users, mobile_money for Zambian users
   const [paymentMethod, setPaymentMethod] = useState(() => isZambia ? 'mobile_money' : 'card');
   const [phone, setPhone] = useState('');
   const [notes, setNotes] = useState('');
-  const [bookingTarget, setBookingTarget] = useState('self');
-  const [attendeeName, setAttendeeName] = useState('');
-  const [attendeeRelation, setAttendeeRelation] = useState('');
-  const [result, setResult] = useState(null); // { success, registration, error }
+  const [includeSelf, setIncludeSelf] = useState(true);
+  const [guestAttendees, setGuestAttendees] = useState([]);
+  const [result, setResult] = useState(null); // { success, registration, registrations, error }
   const [loading, setLoading] = useState(false);
   const [paymentJourney, setPaymentJourney] = useState(null);
   const toast = useToast();
@@ -155,12 +180,24 @@ export default function BookingModal({ event, isOpen, onClose }) {
   const [registrationStep, setRegistrationStep] = useState('details');
 
   const isOnline = isOnlineEvent(event);
+  const isInPerson = isInPersonEvent(event);
+  const guestCount = guestAttendees.length;
+  const ticketCount = isInPerson
+    ? computeRegistrationTicketCount({ includeSelf, guestCount })
+    : 1;
+  const maxGuestTickets = isInPerson
+    ? getMaxGuestTickets(event, regCount, { includeSelf, hardCap: 20 })
+    : 0;
   const couponLiveNorm = normalizeCouponCodeInput(couponInput);
   const couponPreviewOk = Boolean(appliedCouponMeta && appliedCouponMeta.codeNorm === couponLiveNorm);
-  const effectiveZmwDisplay = couponPreviewOk
-    ? getNumericAmount(appliedCouponMeta.preview.final_zmw)
+  const unitZmwDisplay = couponPreviewOk
+    ? getNumericAmount(appliedCouponMeta.preview.unit_final_zmw ?? appliedCouponMeta.preview.final_zmw)
     : getNumericAmount(event?.price);
-  const isFullyWaived = !event?.is_free && effectiveZmwDisplay <= 0.005 && couponPreviewOk;
+  const totalZmwDisplay = couponPreviewOk
+    ? getNumericAmount(appliedCouponMeta.preview.total_final_zmw ?? (unitZmwDisplay * ticketCount))
+    : unitZmwDisplay * ticketCount;
+  const effectiveZmwDisplay = unitZmwDisplay;
+  const isFullyWaived = !event?.is_free && totalZmwDisplay <= 0.005 && couponPreviewOk;
   const needsPaymentStage = Boolean(
     event && !isOnline && !event.is_free && !isFullyWaived,
   );
@@ -192,14 +229,14 @@ export default function BookingModal({ event, isOpen, onClose }) {
     setAppliedCouponMeta(null);
     setCouponFieldError('');
     setRegistrationStep('details');
-    setBookingTarget('self');
-  }, [isOpen, event?.id]);
+    setIncludeSelf(!selfRegistration);
+    setGuestAttendees([]);
+  }, [isOpen, event?.id, selfRegistration]);
 
   useEffect(() => {
-    if (isOnline && bookingTarget !== 'self') {
-      setBookingTarget('self');
-    }
-  }, [isOnline, bookingTarget]);
+    if (!isInPerson) return;
+    setGuestAttendees((prev) => (prev.length > maxGuestTickets ? prev.slice(0, maxGuestTickets) : prev));
+  }, [maxGuestTickets, isInPerson]);
 
   // Prefetch event-attached merch when the registration succeeds with a paid status,
   // so we can offer the post-payment upsell modal.
@@ -244,7 +281,10 @@ export default function BookingModal({ event, isOpen, onClose }) {
       const res = await fetch(`${API_BASE}/events/${encodeURIComponent(event.id)}/coupon-preview`, {
         method: 'POST',
         headers: getSessionAuthHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ coupon_code: couponInput.trim() }),
+        body: JSON.stringify({
+          coupon_code: couponInput.trim(),
+          quantity: Math.max(1, ticketCount),
+        }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json?.ok || !json?.data) {
@@ -268,15 +308,7 @@ export default function BookingModal({ event, isOpen, onClose }) {
     skipDuplicateCheck: true,
   });
   const detectedProvider = detectMobileProvider(phone);
-  const selfRegistration = registrations.find(
-    (r) => r.user_id === currentUser?.id
-      && r.event_id === event.id
-      && r.registration_type === regType
-      && r.status !== 'cancelled'
-      && getRegistrationAttendeeSlotKey(r) === '__self__',
-  );
   const spotsLeft = event.capacity ? Math.max(0, event.capacity - regCount) : null;
-  const canBookAdditional = spotsLeft === null || spotsLeft > 0;
 
   const pollMobilePaymentStatus = async (reference) => {
     pollCancelledRef.current = false;
@@ -332,16 +364,39 @@ export default function BookingModal({ event, isOpen, onClose }) {
       return baseAvailability.reason || 'This event is not available for registration.';
     }
 
-    if (bookingTarget === 'other' && !attendeeName.trim()) {
-      return 'Enter the name of the person you are registering.';
-    }
+    if (isInPerson) {
+      if (ticketCount < 1) {
+        return 'Select at least one ticket (yourself and/or guests).';
+      }
 
-    const slotKey = bookingTarget === 'other' ? deriveAttendeeSlotKey(attendeeName) : '__self__';
-    const slotAvailability = checkEventAvailability(event, registrations, currentUser?.id, regType, {
-      attendeeSlotKey: slotKey,
-    });
-    if (!slotAvailability.canBook) {
-      return slotAvailability.reason;
+      if (includeSelf && selfRegistration) {
+        return 'You are already registered for this event. Uncheck “Register myself” or register guests only.';
+      }
+
+      if (includeSelf) {
+        const selfAvailability = checkEventAvailability(event, registrations, currentUser?.id, regType, {
+          attendeeSlotKey: '__self__',
+        });
+        if (!selfAvailability.canBook) return selfAvailability.reason;
+      }
+
+      const guestValidation = validateGuestAttendees(guestAttendees);
+      if (!guestValidation.ok) return guestValidation.error;
+
+      for (let i = 0; i < guestAttendees.length; i += 1) {
+        const guest = guestAttendees[i];
+        const slotKey = deriveGuestAttendeeSlotKey(guest.name, i);
+        const slotAvailability = checkEventAvailability(event, registrations, currentUser?.id, regType, {
+          attendeeSlotKey: slotKey,
+        });
+        if (!slotAvailability.canBook) {
+          return slotAvailability.reason || `Guest ${i + 1} could not be registered.`;
+        }
+      }
+
+      if (event.capacity && spotsLeft !== null && ticketCount > spotsLeft) {
+        return `Only ${spotsLeft} spot${spotsLeft === 1 ? '' : 's'} remaining for this event.`;
+      }
     }
 
     const liveNorm = normalizeCouponCodeInput(couponInput);
@@ -352,6 +407,46 @@ export default function BookingModal({ event, isOpen, onClose }) {
     }
 
     return null;
+  };
+
+  const buildBatchPayload = () => ({
+    includeSelf: isInPerson ? includeSelf : false,
+    attendees: isInPerson
+      ? guestAttendees.map((guest) => ({
+        name: guest.name.trim(),
+        email: guest.email.trim(),
+        phone: guest.phone.trim(),
+      }))
+      : [],
+  });
+
+  const submitBatchRegistration = async ({
+    paymentReference = '',
+    paymentMethod: method = 'free',
+    paymentStatus = 'not_required',
+    registrationStatus = 'confirmed',
+    couponCode = '',
+    paymentAmount = null,
+    paymentCurrency = 'ZMW',
+    paymentAmountZmw = null,
+  } = {}) => {
+    const batchPayload = buildBatchPayload();
+    return registerForEventBatch({
+      user: currentUser,
+      event,
+      registrationType: regType,
+      notes,
+      includeSelf: batchPayload.includeSelf,
+      attendees: batchPayload.attendees,
+      paymentReference,
+      paymentMethod: method,
+      paymentStatus,
+      registrationStatus,
+      couponCode,
+      paymentAmount,
+      paymentCurrency,
+      paymentAmountZmw,
+    });
   };
 
   const handleContinueToPayment = () => {
@@ -375,55 +470,51 @@ export default function BookingModal({ event, isOpen, onClose }) {
       return;
     }
 
-    const guestPayload = bookingTarget === 'other'
-      ? { bookedForName: attendeeName.trim(), bookedForRelation: attendeeRelation.trim() }
-      : {};
-
     const liveNorm = normalizeCouponCodeInput(couponInput);
     const previewOk = Boolean(appliedCouponMeta && appliedCouponMeta.codeNorm === liveNorm);
     const couponForRegistration = previewOk ? liveNorm : '';
+    const unitZmw = previewOk ? unitZmwDisplay : getNumericAmount(event.price);
+    const orderTotalZmw = previewOk ? totalZmwDisplay : unitZmw * ticketCount;
+
+    const finalizeBatchResult = (batchResult) => {
+      if (!batchResult?.success) return batchResult;
+      const created = batchResult.registrations || [];
+      return {
+        ...batchResult,
+        registration: created[0] || batchResult.registration || null,
+        registrations: created,
+        ticketCount: batchResult.ticketCount || created.length,
+      };
+    };
 
     try {
-      await new Promise(r => setTimeout(r, 250));
+      await new Promise((r) => setTimeout(r, 250));
 
-      if (event.is_free) {
-        const freeReg = await registerForEvent({
-          user: currentUser,
-          event,
-          registrationType: regType,
-          notes,
-          paymentStatus: 'not_required',
-          registrationStatus: 'confirmed',
-          paymentMethod: 'free',
-          ...guestPayload,
-        });
-        setResult(freeReg);
-        return;
-      }
-
-      const listZmw = getNumericAmount(event.price);
-      const effectiveZmw = previewOk ? getNumericAmount(appliedCouponMeta.preview.final_zmw) : listZmw;
-
-      if (effectiveZmw <= 0 && previewOk) {
-        const waivedReg = await registerForEvent({
-          user: currentUser,
-          event,
-          registrationType: regType,
-          notes,
-          paymentStatus: 'not_required',
-          registrationStatus: 'confirmed',
-          paymentMethod: 'free',
-          couponCode: couponForRegistration,
-          ...guestPayload,
-        });
-        setResult(waivedReg);
+      if (event.is_free || (orderTotalZmw <= 0.005 && previewOk)) {
+        if (isInPerson) {
+          setResult(finalizeBatchResult(await submitBatchRegistration({
+            paymentMethod: 'free',
+            couponCode: couponForRegistration,
+          })));
+        } else {
+          setResult(await registerForEvent({
+            user: currentUser,
+            event,
+            registrationType: regType,
+            notes,
+            paymentStatus: 'not_required',
+            registrationStatus: 'confirmed',
+            paymentMethod: 'free',
+            couponCode: couponForRegistration,
+          }));
+        }
         return;
       }
 
       const checkoutCurrency = paymentMethod === 'card' && !isZambia ? 'USD' : 'ZMW';
       const checkoutAmount = checkoutCurrency === 'USD'
-        ? convertFromZMW(effectiveZmw, 'USD')
-        : effectiveZmw;
+        ? convertFromZMW(orderTotalZmw, 'USD')
+        : orderTotalZmw;
       const customerName = currentUser?.name || '';
       const customerEmail = currentUser?.email || '';
 
@@ -447,7 +538,7 @@ export default function BookingModal({ event, isOpen, onClose }) {
           method: 'POST',
           headers: getSessionAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
-            amount: effectiveZmw,
+            amount: orderTotalZmw,
             currency: 'ZMW',
             phone,
             eventId: event.id,
@@ -455,6 +546,7 @@ export default function BookingModal({ event, isOpen, onClose }) {
             customerName,
             customerEmail,
             coupon_code: couponForRegistration,
+            quantity: ticketCount,
           }),
         });
 
@@ -463,29 +555,110 @@ export default function BookingModal({ event, isOpen, onClose }) {
           throw new Error(mobileJson?.message || 'Failed to initiate mobile money checkout.');
         }
 
+        const reference = mobileJson?.data?.reference || '';
+
+        if (isInPerson) {
+          const batchPending = finalizeBatchResult(await submitBatchRegistration({
+            paymentReference: reference,
+            paymentMethod: 'mobile_money',
+            paymentStatus: 'pending',
+            registrationStatus: 'pending',
+            couponCode: couponForRegistration,
+            paymentAmount: orderTotalZmw,
+            paymentCurrency: 'ZMW',
+            paymentAmountZmw: unitZmw,
+          }));
+          if (!batchPending?.success) {
+            throw new Error(batchPending?.error || 'Failed to create pending registrations.');
+          }
+
+          setPaymentJourney({
+            step: 'prompt_sent',
+            title: 'Payment prompt sent',
+            subtitle: 'Approve the request on your phone. We’ll keep checking automatically every 5 seconds.',
+            attempt: 0,
+            reference,
+          });
+
+          const pollResult = await pollMobilePaymentStatus(reference);
+
+          if (pollResult.success) {
+            const updatedRows = await Promise.all(
+              (batchPending.registrations || []).map((row) => updateRegistration(row.id, {
+                payment_status: 'paid',
+                status: 'confirmed',
+              }) || Promise.resolve({ ...row, payment_status: 'paid', status: 'confirmed' })),
+            );
+
+            setPaymentJourney({
+              step: 'confirmed',
+              title: 'Payment confirmed',
+              subtitle: 'Great news — your payment is confirmed and your registrations are active.',
+              attempt: 0,
+              reference,
+            });
+
+            setResult({
+              success: true,
+              registrations: updatedRows.filter(Boolean),
+              registration: updatedRows[0] || batchPending.registration,
+              ticketCount: batchPending.ticketCount,
+            });
+            return;
+          }
+
+          if (pollResult.failed) {
+            setPaymentJourney({
+              step: 'failed',
+              title: 'Payment not completed',
+              subtitle: 'Your payment was not confirmed. You can try again with the same or another method.',
+              attempt: 0,
+              reference,
+            });
+            setResult({ success: false, error: 'Payment was not completed. Please try again.' });
+            return;
+          }
+
+          setPaymentJourney({
+            step: 'processing_delay',
+            title: 'Still processing your confirmation',
+            subtitle: 'No worries — this can take a bit longer. Your registrations are saved as pending.',
+            attempt: 0,
+            reference,
+          });
+
+          setResult({
+            success: true,
+            ...batchPending,
+            registrations: (batchPending.registrations || []).map((row) => ({
+              ...row,
+              payment_status: 'pending',
+              status: 'pending',
+            })),
+          });
+          return;
+        }
+
         const reg = await registerForEvent({
           user: currentUser,
           event,
           registrationType: regType,
           notes,
-          amount: effectiveZmw,
-          paymentAmount: effectiveZmw,
+          amount: orderTotalZmw,
+          paymentAmount: orderTotalZmw,
           paymentCurrency: 'ZMW',
-          paymentAmountZmw: effectiveZmw,
+          paymentAmountZmw: unitZmw,
           paymentStatus: 'pending',
           registrationStatus: 'pending',
           paymentMethod: 'mobile_money',
-          paymentReference: mobileJson?.data?.reference || '',
-          referenceCode: mobileJson?.data?.reference || undefined,
+          paymentReference: reference,
+          referenceCode: reference || undefined,
           couponCode: couponForRegistration,
-          ...guestPayload,
         });
 
         if (!reg?.success) {
           throw new Error(reg?.error || 'Failed to create pending registration.');
         }
-
-        const reference = mobileJson?.data?.reference || reg.registration.reference_code;
 
         setPaymentJourney({
           step: 'prompt_sent',
@@ -531,7 +704,6 @@ export default function BookingModal({ event, isOpen, onClose }) {
           return;
         }
 
-        // Timed out waiting — keep hope and keep registration pending.
         setPaymentJourney({
           step: 'processing_delay',
           title: 'Still processing your confirmation',
@@ -559,9 +731,10 @@ export default function BookingModal({ event, isOpen, onClose }) {
         customerName,
         customerEmail,
         coupon_code: couponForRegistration,
+        quantity: ticketCount,
       };
       if (checkoutCurrency !== 'ZMW') {
-        cardPayload.billingAmountZmw = effectiveZmw;
+        cardPayload.billingAmountZmw = orderTotalZmw;
       }
 
       const cardSessionRes = await fetch(`${API_BASE}/payments/lenco/card/checkout-session`, {
@@ -593,7 +766,21 @@ export default function BookingModal({ event, isOpen, onClose }) {
       const verifyStatus = extractLencoPaymentStatus(verifyJson);
       const paid = verifyRes.ok && verifyJson?.ok && ['successful', 'success', 'paid', 'completed'].includes(verifyStatus);
 
-      const reg = await registerForEvent({
+      if (isInPerson) {
+        setResult(finalizeBatchResult(await submitBatchRegistration({
+          paymentReference: lencoReference,
+          paymentMethod: 'card',
+          paymentStatus: paid ? 'paid' : 'pending',
+          registrationStatus: paid ? 'confirmed' : 'pending',
+          couponCode: couponForRegistration,
+          paymentAmount: checkoutAmount,
+          paymentCurrency: checkoutCurrency,
+          paymentAmountZmw: unitZmw,
+        })));
+        return;
+      }
+
+      setResult(await registerForEvent({
         user: currentUser,
         event,
         registrationType: regType,
@@ -601,17 +788,14 @@ export default function BookingModal({ event, isOpen, onClose }) {
         amount: checkoutAmount,
         paymentAmount: checkoutAmount,
         paymentCurrency: checkoutCurrency,
-        paymentAmountZmw: effectiveZmw,
+        paymentAmountZmw: unitZmw,
         paymentStatus: paid ? 'paid' : 'pending',
         registrationStatus: paid ? 'confirmed' : 'pending',
         paymentMethod: 'card',
         paymentReference: lencoReference,
         referenceCode: lencoReference,
         couponCode: couponForRegistration,
-        ...guestPayload,
-      });
-
-      setResult(reg);
+      }));
     } catch (error) {
       setResult({ success: false, error: error.message || 'Unable to process payment.' });
     } finally {
@@ -623,9 +807,8 @@ export default function BookingModal({ event, isOpen, onClose }) {
     setResult(null);
     setNotes('');
     setPhone('');
-    setBookingTarget('self');
-    setAttendeeName('');
-    setAttendeeRelation('');
+    setIncludeSelf(true);
+    setGuestAttendees([]);
     setPaymentMethod(isZambia ? 'mobile_money' : 'card');
     setPaymentJourney(null);
     setCouponInput('');
@@ -635,7 +818,7 @@ export default function BookingModal({ event, isOpen, onClose }) {
     onClose();
   };
 
-  if (!loading && !result?.success && selfRegistration && !canBookAdditional) {
+  if (!loading && !result?.success && !isInPerson && selfRegistration) {
     return (
       <Modal isOpen={isOpen} onClose={handleClose} size="sm">
         <div className="text-center py-4">
@@ -680,8 +863,10 @@ export default function BookingModal({ event, isOpen, onClose }) {
   // ── Success screen ────────────────────────────────────────────────────────
   if (result?.success) {
     const reg = result.registration;
-    const paidSuccess = isLencoSuccessStatus(reg.payment_status);
+    const batchRegs = Array.isArray(result.registrations) ? result.registrations : (reg ? [reg] : []);
+    const paidSuccess = batchRegs.some((row) => isLencoSuccessStatus(row?.payment_status));
     const hasMerch = paidSuccess && merchPrefetched && merchProducts.length > 0;
+    const ticketSummaryCount = result.ticketCount || batchRegs.length || 1;
     return (
       <>
         <Modal isOpen={isOpen && !showMerchUpsell} onClose={handleClose} size="sm">
@@ -691,40 +876,45 @@ export default function BookingModal({ event, isOpen, onClose }) {
             </div>
             <h2 className="text-xl font-bold text-navy-900 mb-1">You&rsquo;re registered!</h2>
             <p className="text-sm text-navy-500 mb-5">
-              {reg.payment_status === 'pending'
+              {batchRegs.some((row) => row?.payment_status === 'pending')
                 ? 'Your registration is created and payment is pending confirmation.'
-                : 'Your registration has been confirmed.'}
+                : ticketSummaryCount > 1
+                  ? `${ticketSummaryCount} tickets have been confirmed.`
+                  : 'Your registration has been confirmed.'}
             </p>
 
-            <div className="bg-navy-50 rounded-xl p-4 text-left space-y-2 mb-6">
-              <div className="flex justify-between text-sm">
-                <span className="text-navy-500">Reference</span>
-                <span className="font-mono font-semibold text-navy-900">{reg.reference_code}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-navy-500">Event</span>
-                <span className="font-medium text-navy-800 text-right max-w-[200px]">{reg.event_title}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-navy-500">Type</span>
-                <span className="capitalize font-medium text-cyan-700">{reg.registration_type}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-navy-500">Status</span>
-                <span className="font-medium text-green-700 capitalize">{reg.status}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-navy-500">Payment</span>
-                <span className="font-medium text-navy-700 capitalize">{reg.payment_status.replace('_', ' ')}</span>
-              </div>
-              {String(reg.booked_for_name || '').trim() && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-navy-500">Ticket for</span>
-                  <span className="font-medium text-navy-800 text-right max-w-[200px]">
-                    {reg.booked_for_name}
-                    {reg.booked_for_relation ? ` (${reg.booked_for_relation})` : ''}
-                  </span>
+            <div className="bg-navy-50 rounded-xl p-4 text-left space-y-2 mb-6 max-h-64 overflow-y-auto">
+              {batchRegs.map((row) => (
+                <div key={row.id || row.reference_code} className="border-b border-navy-100 last:border-0 pb-2 last:pb-0 mb-2 last:mb-0">
+                  <div className="flex justify-between text-sm gap-3">
+                    <span className="text-navy-500">Reference</span>
+                    <span className="font-mono font-semibold text-navy-900">{row.reference_code}</span>
+                  </div>
+                  <div className="flex justify-between text-sm gap-3">
+                    <span className="text-navy-500">Ticket for</span>
+                    <span className="font-medium text-navy-800 text-right">
+                      {String(row.booked_for_name || '').trim() || 'You'}
+                    </span>
+                  </div>
+                  {String(row.booked_for_email || '').trim() && (
+                    <div className="flex justify-between text-sm gap-3">
+                      <span className="text-navy-500">Email</span>
+                      <span className="text-navy-700 text-right">{row.booked_for_email}</span>
+                    </div>
+                  )}
                 </div>
+              ))}
+              {reg && (
+                <>
+                  <div className="flex justify-between text-sm pt-1 border-t border-navy-100">
+                    <span className="text-navy-500">Event</span>
+                    <span className="font-medium text-navy-800 text-right max-w-[200px]">{reg.event_title}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-navy-500">Payment</span>
+                    <span className="font-medium text-navy-700 capitalize">{String(reg.payment_status || '').replace('_', ' ')}</span>
+                  </div>
+                </>
               )}
             </div>
 
@@ -816,7 +1006,10 @@ export default function BookingModal({ event, isOpen, onClose }) {
   const showDiscountBreakdown = Boolean(
     couponPreviewOk && getNumericAmount(appliedCouponMeta.preview.discount_zmw) > 0.005,
   );
-  const displayPriceEffective = getPriceBoth(effectiveZmwDisplay, Boolean(!event.is_free && effectiveZmwDisplay <= 0.005));
+  const displayPriceTotal = getPriceBoth(totalZmwDisplay, Boolean(!event.is_free && totalZmwDisplay <= 0.005));
+  const displayPriceUnit = getPriceBoth(unitZmwDisplay, Boolean(!event.is_free && unitZmwDisplay <= 0.005));
+  const guestValidation = isInPerson ? validateGuestAttendees(guestAttendees) : { ok: true };
+  const canSubmitTickets = !isInPerson || (ticketCount >= 1 && guestValidation.ok);
   const confirmLabel = event.is_free || isFullyWaived
     ? 'Confirm Registration'
     : (needsPaymentStage && !onPaymentStep ? 'Continue to Payment' : 'Proceed to Payment');
@@ -854,7 +1047,7 @@ export default function BookingModal({ event, isOpen, onClose }) {
             disabled={
               loading
               || !baseAvailability.canBook
-              || (bookingTarget === 'other' && !attendeeName.trim())
+              || !canSubmitTickets
             }
             className="px-6 py-2.5 rounded-xl text-sm font-medium bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors flex items-center gap-2"
           >
@@ -902,50 +1095,96 @@ export default function BookingModal({ event, isOpen, onClose }) {
         Registration type: <span className="font-semibold text-cyan-700">Subscription</span>
       </div>
 
-      {!isOnline && !onPaymentStep && (
-        <div className="mb-4 space-y-2">
-          <label className="block text-sm font-medium text-navy-700">Registering for</label>
-          <div className="grid sm:grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => setBookingTarget('self')}
-              className={`px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors ${bookingTarget === 'self' ? 'bg-cyan-50 text-cyan-700 border-cyan-300' : 'bg-white text-navy-600 border-navy-200 hover:bg-navy-50'}`}
-            >
-              Myself
-            </button>
-            <button
-              type="button"
-              onClick={() => setBookingTarget('other')}
-              className={`px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors ${bookingTarget === 'other' ? 'bg-cyan-50 text-cyan-700 border-cyan-300' : 'bg-white text-navy-600 border-navy-200 hover:bg-navy-50'}`}
-            >
-              Someone else
-            </button>
+      {isInPerson && !onPaymentStep && (
+        <div className="mb-4 space-y-4">
+          <label className="flex items-center gap-2 text-sm font-medium text-navy-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={includeSelf}
+              disabled={Boolean(selfRegistration)}
+              onChange={(e) => setIncludeSelf(e.target.checked)}
+              className="rounded border-navy-300 text-cyan-600 focus:ring-cyan-500"
+            />
+            Register myself
+            {selfRegistration && (
+              <span className="text-xs font-normal text-navy-400">(already registered)</span>
+            )}
+          </label>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <label className="block text-sm font-medium text-navy-700">Additional guests</label>
+              <div className="inline-flex items-center rounded-xl border border-navy-200 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setGuestAttendees((prev) => resizeGuestList(prev, prev.length - 1))}
+                  disabled={guestAttendees.length <= 0}
+                  className="px-3 py-1.5 text-sm text-navy-600 hover:bg-navy-50 disabled:opacity-40"
+                >
+                  −
+                </button>
+                <span className="px-3 py-1.5 text-sm font-medium text-navy-800 min-w-[2rem] text-center">{guestAttendees.length}</span>
+                <button
+                  type="button"
+                  onClick={() => setGuestAttendees((prev) => resizeGuestList(prev, prev.length + 1))}
+                  disabled={guestAttendees.length >= maxGuestTickets}
+                  className="px-3 py-1.5 text-sm text-navy-600 hover:bg-navy-50 disabled:opacity-40"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+            <p className="text-[11px] text-navy-400">
+              {ticketCount} ticket{ticketCount === 1 ? '' : 's'} selected
+              {maxGuestTickets < 20 && guestAttendees.length >= maxGuestTickets ? ' · guest limit reached' : ''}
+            </p>
           </div>
-          {bookingTarget === 'other' && (
-            <div className="space-y-2 pt-1">
-              <div>
-                <label className="block text-xs font-medium text-navy-600 mb-1">Their full name</label>
-                <input
-                  type="text"
-                  value={attendeeName}
-                  onChange={(e) => setAttendeeName(e.target.value)}
-                  placeholder="e.g. child or guest name"
-                  className="w-full px-4 py-2.5 rounded-xl border border-navy-200 bg-navy-50 text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-navy-600 mb-1">Relationship <span className="text-navy-400 font-normal">(optional)</span></label>
-                <input
-                  type="text"
-                  value={attendeeRelation}
-                  onChange={(e) => setAttendeeRelation(e.target.value)}
-                  placeholder="e.g. child, spouse"
-                  className="w-full px-4 py-2.5 rounded-xl border border-navy-200 bg-navy-50 text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                />
-              </div>
-              <p className="text-[11px] text-navy-400">
-                You stay the account holder; the attendee name appears on their ticket.
-              </p>
+
+          {guestAttendees.length > 0 && (
+            <div className="space-y-3">
+              {guestAttendees.map((guest, index) => (
+                <div key={guest.key} className="rounded-xl border border-navy-100 bg-navy-50/60 p-3 space-y-2">
+                  <p className="text-xs font-semibold text-navy-600">Guest {index + 1}</p>
+                  <div>
+                    <label className="block text-xs font-medium text-navy-600 mb-1">Full name <span className="text-red-500">*</span></label>
+                    <input
+                      type="text"
+                      value={guest.name}
+                      onChange={(e) => setGuestAttendees((prev) => prev.map((row, i) => (
+                        i === index ? { ...row, name: e.target.value } : row
+                      )))}
+                      placeholder="Guest full name"
+                      className="w-full px-4 py-2.5 rounded-xl border border-navy-200 bg-white text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-medium text-navy-600 mb-1">Email <span className="text-navy-400 font-normal">(optional)</span></label>
+                      <input
+                        type="email"
+                        value={guest.email}
+                        onChange={(e) => setGuestAttendees((prev) => prev.map((row, i) => (
+                          i === index ? { ...row, email: e.target.value } : row
+                        )))}
+                        placeholder="guest@email.com"
+                        className="w-full px-4 py-2.5 rounded-xl border border-navy-200 bg-white text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-navy-600 mb-1">Phone <span className="text-navy-400 font-normal">(optional)</span></label>
+                      <input
+                        type="tel"
+                        value={guest.phone}
+                        onChange={(e) => setGuestAttendees((prev) => prev.map((row, i) => (
+                          i === index ? { ...row, phone: e.target.value } : row
+                        )))}
+                        placeholder="e.g. 0977..."
+                        className="w-full px-4 py-2.5 rounded-xl border border-navy-200 bg-white text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -1008,8 +1247,14 @@ export default function BookingModal({ event, isOpen, onClose }) {
           </div>
         ) : (
           <>
+            {isInPerson && ticketCount > 1 && (
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-navy-600">Tickets</span>
+                <span className="font-medium text-navy-800 tabular-nums">{ticketCount} × {displayPriceUnit.zmw}</span>
+              </div>
+            )}
             <div className="flex items-center justify-between gap-4">
-              <span className="text-navy-600">{showDiscountBreakdown ? 'List price' : 'Registration fee'}</span>
+              <span className="text-navy-600">{showDiscountBreakdown ? 'List price (each)' : 'Registration fee (each)'}</span>
               <span className={`font-semibold text-right ${showDiscountBreakdown ? 'line-through text-navy-400 tabular-nums' : 'text-navy-900 tabular-nums'}`}>
                 {displayPrice.zmw}
               </span>
@@ -1017,15 +1262,15 @@ export default function BookingModal({ event, isOpen, onClose }) {
             {showDiscountBreakdown && (
               <>
                 <div className="flex items-center justify-between gap-4 text-emerald-700">
-                  <span>Discount ({couponLiveNorm})</span>
+                  <span>Discount ({couponLiveNorm}){ticketCount > 1 ? ' (each)' : ''}</span>
                   <span className="font-semibold tabular-nums">
                     -ZMW {getNumericAmount(appliedCouponMeta.preview.discount_zmw).toFixed(2)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between gap-4 pt-1 border-t border-navy-100">
                   <span className="text-navy-800 font-medium">You pay</span>
-                  <span className={`font-semibold tabular-nums ${effectiveZmwDisplay <= 0.005 ? 'text-green-600' : 'text-navy-900'}`}>
-                    {effectiveZmwDisplay <= 0.005 ? 'Free' : displayPriceEffective.zmw}
+                  <span className={`font-semibold tabular-nums ${totalZmwDisplay <= 0.005 ? 'text-green-600' : 'text-navy-900'}`}>
+                    {totalZmwDisplay <= 0.005 ? 'Free' : displayPriceTotal.zmw}
                   </span>
                 </div>
               </>
@@ -1033,7 +1278,7 @@ export default function BookingModal({ event, isOpen, onClose }) {
             {!showDiscountBreakdown && (
               <div className="flex items-center justify-between gap-4">
                 <span className="text-navy-600">Due now</span>
-                <span className="font-semibold text-navy-900 tabular-nums">{displayPriceEffective.zmw}</span>
+                <span className="font-semibold text-navy-900 tabular-nums">{displayPriceTotal.zmw}</span>
               </div>
             )}
           </>
@@ -1043,7 +1288,7 @@ export default function BookingModal({ event, isOpen, onClose }) {
       {!event.is_free && (onPaymentStep || isOnline || !needsPaymentStage) && !isZambia && (
         <div className="-mt-2 mb-4 space-y-1">
           <p className="text-xs text-navy-500">
-            Checkout (ZMW): <span className="font-medium">{displayPriceEffective.zmw}</span>
+            Checkout (ZMW): <span className="font-medium">{displayPriceTotal.zmw}</span>
             {!showDiscountBreakdown && (
               <span className="text-navy-400">{' '}(list {displayPrice.zmw})</span>
             )}
@@ -1112,13 +1357,16 @@ export default function BookingModal({ event, isOpen, onClose }) {
         </div>
       )}
 
-      {onPaymentStep && bookingTarget === 'other' && attendeeName.trim() && (
-        <div className="mb-4 rounded-xl border border-navy-100 bg-navy-50 px-4 py-3 text-sm">
-          <p className="text-navy-500">Registering for</p>
-          <p className="font-medium text-navy-900">
-            {attendeeName.trim()}
-            {attendeeRelation.trim() ? ` (${attendeeRelation.trim()})` : ''}
-          </p>
+      {onPaymentStep && isInPerson && ticketCount > 0 && (
+        <div className="mb-4 rounded-xl border border-navy-100 bg-navy-50 px-4 py-3 text-sm space-y-1">
+          <p className="text-navy-500">Order summary</p>
+          <p className="font-medium text-navy-900">{ticketCount} ticket{ticketCount === 1 ? '' : 's'} · {displayPriceTotal.zmw}</p>
+          {includeSelf && !selfRegistration && <p className="text-navy-700">Includes your ticket</p>}
+          {guestAttendees.filter((g) => g.name.trim()).map((guest, index) => (
+            <p key={guest.key} className="text-navy-700">
+              Guest {index + 1}: {guest.name.trim()}
+            </p>
+          ))}
         </div>
       )}
 

@@ -66,6 +66,8 @@ CREATE TABLE IF NOT EXISTS event_registrations (
   payment_reference VARCHAR(120) DEFAULT '',
   booked_for_name VARCHAR(180) NULL,
   booked_for_relation VARCHAR(60) NULL,
+  booked_for_email VARCHAR(255) NULL,
+  booked_for_phone VARCHAR(40) NULL,
   attendee_slot_key VARCHAR(160) NOT NULL DEFAULT '__self__',
   notes TEXT,
   coupon_id VARCHAR(90) NULL,

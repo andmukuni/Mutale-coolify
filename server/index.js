@@ -359,6 +359,8 @@ const EVENT_REGISTRATION_FIELDS = [
   'payment_reference',
   'booked_for_name',
   'booked_for_relation',
+  'booked_for_email',
+  'booked_for_phone',
   'attendee_slot_key',
   'coupon_id',
   'coupon_code',
@@ -367,10 +369,31 @@ const EVENT_REGISTRATION_FIELDS = [
   'notes',
 ];
 
-function deriveAttendeeSlotKey(bookedForNameRaw = '') {
+function deriveAttendeeSlotKey(bookedForNameRaw = '', slotIndex = null) {
   const raw = String(bookedForNameRaw || '').trim();
   if (!raw) return '__self__';
+  if (slotIndex != null && Number.isFinite(Number(slotIndex))) {
+    const slug = raw.toLowerCase().slice(0, 140);
+    return `${slug || 'guest'}::${Number(slotIndex)}`;
+  }
   return raw.toLowerCase().slice(0, 160);
+}
+
+function deriveGuestAttendeeSlotKey(name, index) {
+  return deriveAttendeeSlotKey(name, index);
+}
+
+function normalizeGuestAttendeeInput(raw = {}) {
+  const booked_for_name = String(raw.booked_for_name || raw.name || '').trim();
+  const booked_for_email = String(raw.booked_for_email || raw.email || '').trim().toLowerCase() || null;
+  const booked_for_phone = String(raw.booked_for_phone || raw.phone || '').trim() || null;
+  return { booked_for_name, booked_for_email, booked_for_phone };
+}
+
+function parseRegistrationQuantity(raw = 1) {
+  const n = Math.floor(Number(raw));
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return Math.min(n, 50);
 }
 
 function normalizeEventCouponCode(raw = '') {
@@ -2133,7 +2156,11 @@ function normalizeRegistrationPayload(payload = {}, idOverride) {
     payment_reference: String(payload.payment_reference || '').trim(),
     booked_for_name: String(payload.booked_for_name || '').trim() || null,
     booked_for_relation: String(payload.booked_for_relation || '').trim().toLowerCase() || null,
-    attendee_slot_key: deriveAttendeeSlotKey(payload.booked_for_name),
+    booked_for_email: String(payload.booked_for_email || '').trim().toLowerCase() || null,
+    booked_for_phone: String(payload.booked_for_phone || '').trim() || null,
+    attendee_slot_key: payload.attendee_slot_key
+      ? String(payload.attendee_slot_key).trim().slice(0, 160)
+      : deriveAttendeeSlotKey(payload.booked_for_name, payload.attendee_slot_index),
     coupon_id: String(payload.coupon_id || '').trim() || null,
     coupon_code: String(payload.coupon_code || '').trim() || null,
     list_price_zmw: payload.list_price_zmw != null && payload.list_price_zmw !== ''
@@ -3868,6 +3895,8 @@ async function ensureSchema() {
       payment_reference VARCHAR(120) DEFAULT '',
       booked_for_name VARCHAR(180) NULL,
       booked_for_relation VARCHAR(60) NULL,
+      booked_for_email VARCHAR(255) NULL,
+      booked_for_phone VARCHAR(40) NULL,
       attendee_slot_key VARCHAR(160) NOT NULL DEFAULT '__self__',
       notes TEXT,
       coupon_id VARCHAR(90) NULL,
@@ -3902,6 +3931,8 @@ async function ensureSchema() {
     ['join_source', 'VARCHAR(30) NULL'],
     ['booked_for_name', 'VARCHAR(180) NULL'],
     ['booked_for_relation', 'VARCHAR(60) NULL'],
+    ['booked_for_email', 'VARCHAR(255) NULL'],
+    ['booked_for_phone', 'VARCHAR(40) NULL'],
     ['attendee_slot_key', "VARCHAR(160) NOT NULL DEFAULT '__self__'"],
     ['coupon_id', 'VARCHAR(90) NULL'],
     ['coupon_code', 'VARCHAR(64) NULL'],
@@ -5045,6 +5076,7 @@ app.post('/api/events/:eventId/coupon-preview', async (req, res) => {
     const [[event]] = await pool.query('SELECT * FROM events WHERE id = ? LIMIT 1', [eventId]);
     if (!event) return res.status(404).json({ ok: false, message: 'Event not found.' });
 
+    const quantity = parseRegistrationQuantity(req.body?.quantity ?? 1);
     const couponRes = await resolveEventCouponForBooking(
       pool,
       event,
@@ -5056,12 +5088,20 @@ app.post('/api/events/:eventId/coupon-preview', async (req, res) => {
       return res.status(400).json({ ok: false, message: couponRes.error });
     }
 
+    const unitFinalZmw = couponRes.final_zmw;
+    const totalFinalZmw = roundMoney2(unitFinalZmw * quantity);
+    const totalDiscountZmw = roundMoney2(couponRes.discount_zmw * quantity);
+
     return res.json({
       ok: true,
       data: {
         list_zmw: couponRes.list_zmw,
         discount_zmw: couponRes.discount_zmw,
-        final_zmw: couponRes.final_zmw,
+        final_zmw: unitFinalZmw,
+        unit_final_zmw: unitFinalZmw,
+        ticket_count: quantity,
+        total_final_zmw: totalFinalZmw,
+        total_discount_zmw: totalDiscountZmw,
         coupon: mapPublicCouponPreviewCoupon(couponRes.coupon),
       },
     });
@@ -7595,6 +7635,252 @@ app.post('/api/registrations', async (req, res) => {
   }
 });
 
+app.post('/api/registrations/batch', async (req, res) => {
+  try {
+    const auth = getJwtAuth(req);
+    if (!auth.ok) return sendAuthFailure(res, auth);
+
+    const authUser = await getUserByClaims(auth.claims);
+    if (!authUser) return res.status(401).json({ ok: false, message: 'User account not found. Please log in again.' });
+    if (!authUser.email_verified) return res.status(403).json({ ok: false, message: 'Please verify your email before registering.' });
+
+    const incoming = req.body && typeof req.body === 'object' ? req.body : {};
+    const eventId = String(incoming.event_id || incoming.eventId || '').trim();
+    const registrationType = String(incoming.registration_type || incoming.registrationType || 'subscription').trim().toLowerCase();
+    const includeSelf = parseBoolean(incoming.include_self ?? incoming.includeSelf, false);
+    const notes = String(incoming.notes || '').trim();
+    const couponCodeRaw = incoming.coupon_code ?? incoming.code ?? '';
+    const paymentReference = String(incoming.payment_reference || incoming.paymentReference || '').trim();
+    const paymentMethod = String(incoming.payment_method || incoming.paymentMethod || '').trim().toLowerCase();
+    const payCurrency = String(incoming.currency || 'ZMW').trim().toUpperCase();
+    const payAmountIncoming = incoming.amount == null || incoming.amount === ''
+      ? null
+      : toNumber(incoming.amount, 0);
+
+    const rawAttendees = Array.isArray(incoming.attendees) ? incoming.attendees : [];
+    const guests = rawAttendees.map((row, index) => {
+      const guest = normalizeGuestAttendeeInput(row);
+      return {
+        ...guest,
+        attendee_slot_key: deriveGuestAttendeeSlotKey(guest.booked_for_name, index),
+        attendee_slot_index: index,
+      };
+    });
+
+    if (!eventId) {
+      return res.status(400).json({ ok: false, message: 'event_id is required.' });
+    }
+
+    const ticketCount = (includeSelf ? 1 : 0) + guests.length;
+    if (ticketCount < 1) {
+      return res.status(400).json({ ok: false, message: 'Select at least one ticket (yourself and/or guests).' });
+    }
+
+    for (const guest of guests) {
+      if (!guest.booked_for_name) {
+        return res.status(400).json({ ok: false, message: 'Each guest must have a name.' });
+      }
+    }
+
+    const slotKeys = new Set();
+    if (includeSelf) slotKeys.add('__self__');
+    for (const guest of guests) {
+      if (slotKeys.has(guest.attendee_slot_key)) {
+        return res.status(400).json({ ok: false, message: 'Duplicate guest names in this order. Use unique names for each ticket.' });
+      }
+      slotKeys.add(guest.attendee_slot_key);
+    }
+
+    const [[event]] = await pool.query('SELECT * FROM events WHERE id = ? LIMIT 1', [eventId]);
+    if (!event) return res.status(404).json({ ok: false, message: 'Event not found.' });
+
+    const eventMode = String(event.event_mode || '').trim().toLowerCase()
+      || (String(event.location || '').toLowerCase().includes('virtual') ? 'virtual' : 'in_person');
+    if (eventMode !== 'in_person') {
+      return res.status(400).json({ ok: false, message: 'Multi-ticket registration is only available for in-person events.' });
+    }
+
+    const gateReason = getEventRegistrationGateReason(event);
+    if (gateReason) return res.status(400).json({ ok: false, message: gateReason });
+
+    const bookingType = String(event.booking_type || 'subscription').toLowerCase();
+    const allowedTypes = bookingType === 'both' ? ['booking', 'subscription'] : [bookingType];
+    if (!allowedTypes.includes(registrationType)) {
+      return res.status(400).json({ ok: false, message: `This event does not support "${registrationType}" registration.` });
+    }
+
+    for (const slotKey of slotKeys) {
+      const [[existingActive]] = await pool.query(
+        'SELECT id FROM event_registrations WHERE event_id = ? AND user_id = ? AND registration_type = ? AND attendee_slot_key = ? AND status <> ? LIMIT 1',
+        [eventId, authUser.id, registrationType, slotKey, 'cancelled'],
+      );
+      if (existingActive) {
+        const forOther = slotKey !== '__self__';
+        return res.status(409).json({
+          ok: false,
+          message: forOther
+            ? 'You already have an active registration for one of these attendees for this event.'
+            : 'You are already registered for this event.',
+        });
+      }
+    }
+
+    const capacity = Number(event.capacity || 0);
+    if (capacity > 0) {
+      const [[countRow]] = await pool.query(
+        'SELECT COUNT(*) AS total FROM event_registrations WHERE event_id = ? AND status <> ?',
+        [eventId, 'cancelled'],
+      );
+      const activeCount = Number(countRow?.total || 0);
+      if (activeCount + ticketCount > capacity) {
+        return res.status(409).json({ ok: false, message: 'Not enough spots remaining for this order.' });
+      }
+    }
+
+    const isFreeCatalog = parseBoolean(event.is_free, false);
+    const needsCouponLock = Boolean(normalizeEventCouponCode(couponCodeRaw));
+
+    const conn = await pool.getConnection();
+    let insertedRows = [];
+    let totalZmw = 0;
+    let unitFinalZmw = 0;
+
+    try {
+      await conn.beginTransaction();
+
+      const couponResolved = await resolveEventCouponForBooking(
+        conn,
+        event,
+        couponCodeRaw,
+        authUser.id,
+        { lockRow: needsCouponLock },
+      );
+      if (!couponResolved.ok) {
+        await conn.rollback();
+        conn.release();
+        return res.status(400).json({ ok: false, message: couponResolved.error });
+      }
+
+      unitFinalZmw = couponResolved.final_zmw;
+      totalZmw = roundMoney2(unitFinalZmw * ticketCount);
+
+      if (!isFreeCatalog && totalZmw > 0 && !paymentReference) {
+        await conn.rollback();
+        conn.release();
+        return res.status(400).json({ ok: false, message: 'payment_reference is required for paid registrations.' });
+      }
+
+      const tickets = [];
+      if (includeSelf) {
+        tickets.push({
+          booked_for_name: null,
+          booked_for_email: null,
+          booked_for_phone: null,
+          attendee_slot_key: '__self__',
+        });
+      }
+      for (const guest of guests) {
+        tickets.push({
+          booked_for_name: guest.booked_for_name,
+          booked_for_email: guest.booked_for_email,
+          booked_for_phone: guest.booked_for_phone,
+          attendee_slot_key: guest.attendee_slot_key,
+        });
+      }
+
+      const couponCodeNorm = couponResolved.coupon
+        ? normalizeEventCouponCode(couponCodeRaw)
+        : null;
+
+      for (const ticket of tickets) {
+        const amountForRow = payCurrency === 'ZMW'
+          ? unitFinalZmw
+          : (payAmountIncoming != null ? payAmountIncoming / ticketCount : unitFinalZmw);
+
+        const mergedForNorm = normalizeRegistrationPayload({
+          user_id: authUser.id,
+          user_name: authUser.name,
+          user_email: authUser.email,
+          event_id: eventId,
+          registration_type: registrationType,
+          event_title: event.title,
+          event_slug: event.slug,
+          event_price: event.price,
+          is_free_event: isFreeCatalog,
+          currency: payCurrency,
+          amount: amountForRow,
+          amount_zmw: unitFinalZmw,
+          payment_method: paymentMethod || (isFreeCatalog || totalZmw <= 0 ? 'free' : ''),
+          payment_reference: paymentReference,
+          payment_status: isFreeCatalog || totalZmw <= 0 ? 'not_required' : 'pending',
+          status: isFreeCatalog || totalZmw <= 0 ? 'confirmed' : 'pending',
+          booked_for_name: ticket.booked_for_name,
+          booked_for_email: ticket.booked_for_email,
+          booked_for_phone: ticket.booked_for_phone,
+          attendee_slot_key: ticket.attendee_slot_key,
+          coupon_id: couponResolved.coupon?.id || null,
+          coupon_code: couponCodeNorm,
+          list_price_zmw: couponResolved.list_zmw,
+          discount_zmw: couponResolved.discount_zmw,
+          notes,
+        });
+
+        const enriched = await applyTrustedRegistrationPaymentState(mergedForNorm, event);
+        const placeholders = EVENT_REGISTRATION_FIELDS.map(() => '?').join(', ');
+        const regValues = EVENT_REGISTRATION_FIELDS.map((field) => enriched[field]);
+
+        await conn.query(
+          `INSERT INTO event_registrations (${EVENT_REGISTRATION_FIELDS.join(', ')}) VALUES (${placeholders})`,
+          regValues,
+        );
+        insertedRows.push(enriched);
+      }
+
+      if (couponResolved.coupon) {
+        await conn.query(
+          'UPDATE event_coupons SET redemptions_count = redemptions_count + 1 WHERE id = ?',
+          [couponResolved.coupon.id],
+        );
+      }
+
+      await conn.commit();
+    } catch (err) {
+      try {
+        await conn.rollback();
+      } catch {
+        //
+      }
+      conn.release();
+
+      if (err?.code === 'ER_DUP_ENTRY') {
+        return res.status(409).json({ ok: false, message: 'One or more tickets could not be created due to a duplicate registration.' });
+      }
+      return res.status(500).json({ ok: false, message: 'Failed to create batch registration', error: err.message });
+    }
+
+    conn.release();
+
+    const ids = insertedRows.map((row) => row.id);
+    const [rows] = ids.length
+      ? await pool.query(`SELECT * FROM event_registrations WHERE id IN (${ids.map(() => '?').join(', ')})`, ids)
+      : [[]];
+
+    const registrations = rows.map(mapDbRegistration);
+
+    return res.status(201).json({
+      ok: true,
+      data: {
+        registrations,
+        ticket_count: ticketCount,
+        total_zmw: totalZmw,
+        unit_final_zmw: unitFinalZmw,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: 'Failed to create batch registration', error: error.message });
+  }
+});
+
 app.patch('/api/registrations/:id', async (req, res) => {
   try {
     const id = String(req.params.id || '').trim();
@@ -8958,6 +9244,7 @@ app.post('/api/payments/lenco/mobile-money/checkout', async (req, res) => {
     const phone = String(req.body?.phone || '');
     const eventId = String(req.body?.eventId || '').trim();
     const couponCode = String(req.body?.coupon_code || req.body?.code || '').trim();
+    const quantity = parseRegistrationQuantity(req.body?.quantity ?? 1);
 
     if (!eventId) {
       return res.status(400).json({ ok: false, message: 'eventId is required' });
@@ -8977,7 +9264,7 @@ app.post('/api/payments/lenco/mobile-money/checkout', async (req, res) => {
       return res.status(400).json({ ok: false, message: couponRes.error });
     }
 
-    const expectedZmw = couponRes.final_zmw;
+    const expectedZmw = roundMoney2(couponRes.final_zmw * quantity);
     if (expectedZmw <= 0) {
       return res.status(400).json({
         ok: false,
@@ -9020,6 +9307,7 @@ app.post('/api/payments/lenco/mobile-money/checkout', async (req, res) => {
         eventTitle,
         customerEmail,
         customerName,
+        quantity,
         couponCode: normalizeEventCouponCode(couponCode) || undefined,
       },
     };
@@ -9078,6 +9366,7 @@ app.post('/api/payments/lenco/card/checkout-session', async (req, res) => {
     const eventId = String(req.body?.eventId || '').trim();
     const couponCode = String(req.body?.coupon_code || req.body?.code || '').trim();
     const billingAmountZmwRaw = req.body?.billingAmountZmw;
+    const quantity = parseRegistrationQuantity(req.body?.quantity ?? 1);
 
     if (!eventId) {
       return res.status(400).json({ ok: false, message: 'eventId is required' });
@@ -9100,7 +9389,7 @@ app.post('/api/payments/lenco/card/checkout-session', async (req, res) => {
       return res.status(400).json({ ok: false, message: couponRes.error });
     }
 
-    const expectedZmw = couponRes.final_zmw;
+    const expectedZmw = roundMoney2(couponRes.final_zmw * quantity);
     if (expectedZmw <= 0) {
       return res.status(400).json({
         ok: false,
