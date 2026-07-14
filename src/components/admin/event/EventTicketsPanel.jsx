@@ -194,50 +194,50 @@ export default function EventTicketsPanel({ event, registrations = [] }) {
                       {reg.registered_at ? formatDate(String(reg.registered_at).split('T')[0]) : '—'}
                     </td>
                     <td className="py-3 px-3 last:pr-0">
-                      <div className="flex flex-wrap items-center gap-1.5">
+                      <div className="flex flex-wrap items-center gap-1">
                         <LoadingButton
                           type="button"
                           loading={false}
                           loadingLabel=""
                           onClick={() => setPreviewReg(reg)}
-                          className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg bg-white border border-navy-200 text-navy-700 hover:border-cyan-400 hover:text-cyan-700"
+                          className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-white border border-navy-200 text-navy-700 hover:border-cyan-400 hover:text-cyan-700"
                           title="Preview ticket"
+                          aria-label="Preview ticket"
                         >
-                          <Eye size={12} />
-                          Preview
+                          <Eye size={15} />
                         </LoadingButton>
                         <LoadingButton
                           type="button"
                           loading={pdfBusy}
                           loadingLabel=""
                           onClick={() => { void handleDownloadTicket(reg); }}
-                          className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg bg-white border border-navy-200 text-navy-700 hover:border-cyan-400 hover:text-cyan-700"
+                          className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-white border border-navy-200 text-navy-700 hover:border-cyan-400 hover:text-cyan-700"
                           title="Download ticket PDF"
+                          aria-label="Download ticket PDF"
                         >
-                          <Download size={12} />
-                          Ticket
+                          <Download size={15} />
                         </LoadingButton>
                         <LoadingButton
                           type="button"
                           loading={qrBusy}
                           loadingLabel=""
                           onClick={() => { void handleDownloadQr(reg); }}
-                          className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg bg-white border border-navy-200 text-navy-700 hover:border-cyan-400 hover:text-cyan-700"
+                          className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-white border border-navy-200 text-navy-700 hover:border-cyan-400 hover:text-cyan-700"
                           title="Download QR PNG"
+                          aria-label="Download QR PNG"
                         >
-                          <QrCode size={12} />
-                          QR
+                          <QrCode size={15} />
                         </LoadingButton>
                         {ref && (
                           <a
                             href={`/tickets/${encodeURIComponent(ref)}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg text-cyan-700 hover:bg-cyan-50"
+                            className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-cyan-700 hover:bg-cyan-50 border border-transparent hover:border-cyan-200"
                             title="Open ticket page"
+                            aria-label="Open ticket page"
                           >
-                            <ExternalLink size={12} />
-                            View
+                            <ExternalLink size={15} />
                           </a>
                         )}
                       </div>

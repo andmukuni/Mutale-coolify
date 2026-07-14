@@ -17,15 +17,44 @@ const colorMap = {
   // payment statuses
   paid: { bg: 'bg-green-50', text: 'text-green-700', ring: 'ring-green-600/20' },
   unpaid: { bg: 'bg-red-50', text: 'text-red-700', ring: 'ring-red-600/20' },
-  not_required: { bg: 'bg-slate-100', text: 'text-slate-600', ring: 'ring-slate-500/20' },
+  not_required: { bg: 'bg-teal-50', text: 'text-teal-700', ring: 'ring-teal-600/20' },
   free: { bg: 'bg-cyan-50', text: 'text-cyan-700', ring: 'ring-cyan-600/20' },
   waived: { bg: 'bg-purple-50', text: 'text-purple-700', ring: 'ring-purple-600/20' },
   default: { bg: 'bg-cyan-50', text: 'text-cyan-700', ring: 'ring-cyan-600/20' },
 };
 
+const labelMap = {
+  not_required: 'Complimentary',
+  waived: 'Waived',
+  paid: 'Paid',
+  unpaid: 'Unpaid',
+  pending: 'Pending',
+  failed: 'Failed',
+  confirmed: 'Confirmed',
+  attended: 'Attended',
+  cancelled: 'Cancelled',
+  waitlisted: 'Waitlisted',
+  draft: 'Draft',
+  published: 'Published',
+  upcoming: 'Upcoming',
+  ongoing: 'Ongoing',
+  past: 'Past',
+  closed: 'Closed',
+  free: 'Free',
+};
+
+function formatStatusLabel(status, normalized) {
+  if (labelMap[normalized]) return labelMap[normalized];
+  if (!status) return '—';
+  return String(status)
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 export default function StatusBadge({ status, size = 'sm' }) {
   const normalized = status?.toLowerCase() || 'default';
   const colors = colorMap[normalized] || colorMap.default;
+  const displayLabel = formatStatusLabel(status, normalized);
 
   const sizeClasses = {
     sm: 'text-xs px-2 py-0.5',
@@ -37,7 +66,7 @@ export default function StatusBadge({ status, size = 'sm' }) {
       className={`inline-flex items-center gap-1 rounded-full font-medium ring-1 ring-inset ${colors.bg} ${colors.text} ${colors.ring} ${sizeClasses[size]}`}
     >
       <span className={`h-1.5 w-1.5 rounded-full ${colors.text.replace('text-', 'bg-')}`} />
-      {status}
+      {displayLabel}
     </span>
   );
 }
