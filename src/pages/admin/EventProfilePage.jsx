@@ -30,7 +30,6 @@ import { getAdminAuthHeaders } from '../../utils/authHeaders';
 import { useToast } from '../../context/ToastContext';
 import EventProfileSummaryHero from '../../components/admin/event/EventProfileSummaryHero';
 import EventProfileQuickActions from '../../components/admin/event/EventProfileQuickActions';
-import EventProfileSidebar from '../../components/admin/event/EventProfileSidebar';
 import EventTicketsPanel from '../../components/admin/event/EventTicketsPanel';
 import EventForumPanel from '../../components/EventForumPanel';
 import CertificatePreviewModal from '../../components/admin/certificate/CertificatePreviewModal';
@@ -522,8 +521,7 @@ export default function EventProfilePage() {
       </nav>
 
       <div className="max-w-[1100px] mx-auto px-4 sm:px-6 py-4">
-        <div className="grid lg:grid-cols-[minmax(0,1fr)_360px] gap-4 items-start">
-          <div className="min-w-0 space-y-4">
+        <div className="space-y-4">
           {activeTab === 'overview' && (
             <>
               {(event.short_description || event.description) && (
@@ -1003,9 +1001,6 @@ export default function EventProfilePage() {
       </FeedCard>
           )}
         </div>
-
-        <EventProfileSidebar event={event} />
-      </div>
       </div>
 
       {certPreviewUrl && (

@@ -6,9 +6,9 @@ import { useToast } from '../../context/ToastContext';
 
 /**
  * Admin card: QR + link to the public event page (generated on the fly).
- * @param {{ event: { id?: string, slug?: string, title?: string }, compact?: boolean, className?: string }} props
+ * @param {{ event: { id?: string, slug?: string, title?: string }, compact?: boolean, variant?: 'default' | 'overlay', className?: string }} props
  */
-export default function EventPublicQrCard({ event = {}, compact = false, className = '' }) {
+export default function EventPublicQrCard({ event = {}, compact = false, variant = 'default', className = '' }) {
   const toast = useToast();
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [publicUrl, setPublicUrl] = useState('');
@@ -27,7 +27,7 @@ export default function EventPublicQrCard({ event = {}, compact = false, classNa
       return undefined;
     }
     let cancelled = false;
-    buildPublicEventQrDataUrl(target, origin, { size: compact ? 140 : 180 })
+    buildPublicEventQrDataUrl(target, origin, { size: (compact || variant === 'overlay') ? 140 : 180 })
       .then((dataUrl) => {
         if (!cancelled) setQrDataUrl(dataUrl);
       })
@@ -35,7 +35,7 @@ export default function EventPublicQrCard({ event = {}, compact = false, classNa
         if (!cancelled) setQrDataUrl('');
       });
     return () => { cancelled = true; };
-  }, [eventId, eventSlug, compact]);
+  }, [eventId, eventSlug, compact, variant]);
 
   const handleCopyLink = useCallback(async () => {
     if (!publicUrl) return;
@@ -49,28 +49,39 @@ export default function EventPublicQrCard({ event = {}, compact = false, classNa
 
   if (!publicUrl) {
     return (
-      <div className={`rounded-xl border border-navy-100 bg-navy-50/50 p-4 text-sm text-navy-500 ${className}`}>
+      <div className={`rounded-xl border p-4 text-sm ${
+        variant === 'overlay'
+          ? 'border-white/30 bg-white/90 backdrop-blur-md text-navy-600 shadow-lg'
+          : 'border-navy-100 bg-navy-50/50 text-navy-500'
+      } ${className}`}>
         <p className="font-medium text-navy-700">Event QR code</p>
         <p className="mt-1 text-xs">Add a slug (or save the event) to generate a shareable QR code.</p>
       </div>
     );
   }
 
+  const isOverlay = variant === 'overlay';
+  const isCompact = compact || isOverlay;
+
   return (
-    <div className={`rounded-xl border border-cyan-100 bg-cyan-50/40 p-4 ${className}`}>
-      <div className={`flex ${compact ? 'flex-col items-center text-center gap-3' : 'gap-4 items-start'}`}>
-        <div className={compact ? '' : 'shrink-0'}>
+    <div className={`${
+      isOverlay
+        ? 'rounded-xl border border-white/40 bg-white/95 backdrop-blur-md shadow-xl p-3'
+        : 'rounded-xl border border-cyan-100 bg-cyan-50/40 p-4'
+    } ${className}`}>
+      <div className={`flex ${isCompact ? 'flex-col items-center text-center gap-3' : 'gap-4 items-start'}`}>
+        <div className={isCompact ? '' : 'shrink-0'}>
           {qrDataUrl ? (
             <img
               src={qrDataUrl}
               alt="QR code for public event page"
-              className={`rounded-lg bg-white border border-white shadow-sm ${compact ? 'w-28 h-28' : 'w-32 h-32'}`}
-              width={compact ? 112 : 128}
-              height={compact ? 112 : 128}
+              className={`rounded-lg bg-white border border-white shadow-sm ${isCompact ? 'w-24 h-24 sm:w-28 sm:h-28' : 'w-32 h-32'}`}
+              width={isCompact ? 112 : 128}
+              height={isCompact ? 112 : 128}
             />
           ) : (
             <div
-              className={`flex items-center justify-center rounded-lg bg-white border border-navy-100 text-navy-300 ${compact ? 'w-28 h-28' : 'w-32 h-32'}`}
+              className={`flex items-center justify-center rounded-lg bg-white border border-navy-100 text-navy-300 ${isCompact ? 'w-24 h-24 sm:w-28 sm:h-28' : 'w-32 h-32'}`}
               aria-hidden
             >
               <QrCode size={32} />
@@ -79,17 +90,17 @@ export default function EventPublicQrCard({ event = {}, compact = false, classNa
           <p className="text-[10px] text-cyan-700 mt-1.5 text-center font-medium">Scan for event details</p>
         </div>
 
-        <div className={`min-w-0 flex-1 space-y-2 ${compact ? 'w-full' : ''}`}>
+        <div className={`min-w-0 flex-1 space-y-2 ${isCompact ? 'w-full' : ''}`}>
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-cyan-800">Public event link</p>
             {eventTitle && (
-              <p className="text-sm font-medium text-navy-800 mt-0.5 truncate" title={eventTitle}>
+              <p className="text-sm font-medium text-navy-800 mt-0.5 line-clamp-2" title={eventTitle}>
                 {eventTitle}
               </p>
             )}
           </div>
-          <p className="text-xs text-navy-600 break-all leading-relaxed">{publicUrl}</p>
-          <div className={`flex flex-wrap gap-2 ${compact ? 'justify-center' : ''}`}>
+          <p className="text-xs text-navy-600 break-all leading-relaxed line-clamp-2 sm:line-clamp-none">{publicUrl}</p>
+          <div className={`flex flex-wrap gap-2 ${isCompact ? 'justify-center' : ''}`}>
             <button
               type="button"
               onClick={handleCopyLink}

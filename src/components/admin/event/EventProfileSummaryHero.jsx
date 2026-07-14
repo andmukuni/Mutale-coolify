@@ -11,6 +11,7 @@ import { StatusBadge } from '../../ui';
 import { formatDate } from '../../../utils/helpers';
 import { buildPublicEventPageUrl } from '../../../../shared/receiptQr.js';
 import { getAppOrigin } from '../../../utils/apiBase.js';
+import EventPublicQrCard from '../EventPublicQrCard';
 
 export default function EventProfileSummaryHero({
   event,
@@ -75,6 +76,13 @@ export default function EventProfileSummaryHero({
           <ChevronLeft size={16} />
           Events
         </Link>
+
+        <div className="absolute bottom-3 right-3 sm:bottom-4 sm:right-4 md:right-6 z-10 w-[min(100%,17.5rem)] sm:w-72 pointer-events-auto">
+          <EventPublicQrCard
+            event={{ id: event.id, slug: event.slug, title: event.title }}
+            variant="overlay"
+          />
+        </div>
       </div>
 
       {/* Profile block — sits below cover; only avatar overlaps upward */}
