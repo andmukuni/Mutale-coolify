@@ -47,7 +47,7 @@ export default function Modal({
 
       {/* Modal content */}
       <div
-        className={`relative bg-white rounded-2xl shadow-xl w-full ${sizeClasses[size]} max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-200`}
+        className={`relative app-card bg-white rounded-2xl border border-navy-100 shadow-xl w-full ${sizeClasses[size]} max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-200`}
       >
         {/* Header */}
         {(title || onClose) && (

@@ -28,7 +28,7 @@ export default function RegistrationRow({ reg, onCancel, isPast }) {
   const hasTicketQr = Boolean(reg.reference_code) && reg.status !== 'cancelled';
 
   return (
-    <div className="bg-white rounded-2xl border border-navy-100 p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+    <div className="app-card bg-white rounded-2xl border border-navy-100 p-5 flex flex-col sm:flex-row sm:items-center gap-4">
       {event.cover_image && (
         <img
           src={event.cover_image}

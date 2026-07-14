@@ -18,7 +18,7 @@ export default function BookCard({ book }) {
   const hasVariants = Array.isArray(book.variants) && book.variants.length > 0;
 
   return (
-    <div className="bg-white rounded-2xl border border-navy-100 overflow-hidden hover:shadow-xl hover:border-cyan-200 transition-all duration-300 group flex flex-col">
+    <div className="app-card bg-white rounded-2xl border border-navy-100 overflow-hidden hover:shadow-xl hover:border-cyan-200 transition-all duration-300 group flex flex-col">
       {/* Cover image */}
       <Link to={`/books/${book.slug}`} className="block overflow-hidden bg-navy-50">
         {book.cover_image ? (

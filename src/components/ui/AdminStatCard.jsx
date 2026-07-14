@@ -61,7 +61,7 @@ export default function AdminStatCard({
 
   const content = (
     <div
-      className={`h-full min-h-[220px] bg-white rounded-2xl border border-navy-100 p-5 hover:shadow-md transition-all duration-500 ${entered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}
+      className={`app-card h-full min-h-[220px] bg-white rounded-2xl border border-navy-100 p-5 hover:shadow-md transition-all duration-500 ${entered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}
       style={{ transitionDelay: `${animationDelay}ms` }}
     >
       {loading ? (

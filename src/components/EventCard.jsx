@@ -46,7 +46,7 @@ export default function EventCard({ event }) {
   };
 
   return (
-    <div className={`bg-white rounded-2xl border overflow-hidden transition-all duration-300 group flex flex-col ${
+    <div className={`app-card bg-white rounded-2xl border overflow-hidden transition-all duration-300 group flex flex-col ${
       isLive
         ? 'border-4 border-emerald-400 shadow-[0_0_0_3px_rgba(16,185,129,0.2)] hover:shadow-[0_0_0_4px_rgba(16,185,129,0.28)]'
         : 'border-navy-100 hover:shadow-xl hover:border-cyan-200'

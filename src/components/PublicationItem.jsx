@@ -5,7 +5,7 @@ export default function PublicationItem({ pub }) {
   return (
     <Link
       to={`/publications/${pub.id}`}
-      className="block bg-white rounded-2xl border border-navy-100 p-6 hover:shadow-lg hover:border-cyan-200 transition-all duration-300 group"
+      className="app-card block bg-white rounded-2xl border border-navy-100 p-6 hover:shadow-lg hover:border-cyan-200 transition-all duration-300 group"
       aria-label={`Open publication details: ${pub.title}`}
     >
       <div className="flex items-start gap-4">

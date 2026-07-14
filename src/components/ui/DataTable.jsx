@@ -17,7 +17,7 @@ export default function DataTable({
 
   if (loading) {
     return (
-      <div className="bg-white rounded-2xl border border-navy-100 overflow-hidden">
+      <div className="app-card bg-white rounded-2xl border border-navy-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -48,7 +48,7 @@ export default function DataTable({
 
   if (data.length === 0) {
     return (
-      <div className="bg-white rounded-2xl border border-navy-100 p-8">
+      <div className="app-card bg-white rounded-2xl border border-navy-100 p-8">
         <EmptyState
           title={emptyTitle}
           description={emptyDescription}
@@ -59,7 +59,7 @@ export default function DataTable({
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-navy-100 overflow-hidden">
+    <div className="app-card bg-white rounded-2xl border border-navy-100 overflow-hidden">
       <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-sm min-w-[720px]">
           <thead>

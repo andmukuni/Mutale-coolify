@@ -1064,7 +1064,7 @@ function CertIconButton({
 
 function FeedCard({ title, subtitle, actions, children }) {
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-navy-100 overflow-hidden">
+    <div className="app-card bg-white rounded-lg shadow-sm border border-navy-100 overflow-hidden">
       {(title || subtitle || actions) && (
         <div className="px-4 py-3 border-b border-navy-100 flex items-start justify-between gap-3">
           <div>

@@ -4,7 +4,7 @@ import { formatDate } from '../utils/helpers';
 
 export default function BlogCard({ post }) {
   return (
-    <div className="bg-white rounded-2xl border border-navy-100 overflow-hidden hover:shadow-xl hover:border-cyan-200 transition-all duration-300 group flex flex-col">
+    <div className="app-card bg-white rounded-2xl border border-navy-100 overflow-hidden hover:shadow-xl hover:border-cyan-200 transition-all duration-300 group flex flex-col">
       {post.image ? (
         <img
           src={post.image}

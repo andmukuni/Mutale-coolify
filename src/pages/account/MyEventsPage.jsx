@@ -60,7 +60,7 @@ export default function MyEventsPage() {
             { label: 'Past', value: past.length, color: 'text-navy-500' },
             { label: 'Cancelled', value: cancelled.length, color: 'text-red-600' },
           ].map(stat => (
-            <div key={stat.label} className="bg-white rounded-xl border border-navy-100 p-4 text-center">
+            <div key={stat.label} className="app-card bg-white rounded-xl border border-navy-100 p-4 text-center">
               <div className={`text-2xl font-bold mb-1 ${stat.color}`}>{stat.value}</div>
               <div className="text-xs text-navy-500">{stat.label}</div>
             </div>

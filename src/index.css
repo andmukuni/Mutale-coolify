@@ -56,6 +56,8 @@
   --app-text-muted: #829ab1;
   --app-border: #334e68;
   --app-border-strong: #486581;
+  --app-border-card: color-mix(in srgb, var(--app-text) 7%, transparent);
+  --app-border-card-divider: color-mix(in srgb, var(--app-text) 4%, transparent);
   --app-input-bg: #243b53;
   --app-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
@@ -103,6 +105,33 @@ body {
 .dark .divide-navy-100 > :not([hidden]) ~ :not([hidden]),
 .dark .divide-navy-200 > :not([hidden]) ~ :not([hidden]) {
   border-color: var(--app-border);
+}
+
+/* Cards: softer borders in dark mode (admin + client) */
+.dark .app-card {
+  border-color: var(--app-border-card) !important;
+}
+
+.dark .app-card :is(.border-b, .border-t, .border-l, .border-r).border-navy-50,
+.dark .app-card :is(.border-b, .border-t, .border-l, .border-r).border-navy-100,
+.dark .app-card :is(.border-b, .border-t, .border-l, .border-r).border-navy-200 {
+  border-color: var(--app-border-card-divider) !important;
+}
+
+.dark .app-card.divide-navy-50 > :not([hidden]) ~ :not([hidden]),
+.dark .app-card.divide-navy-100 > :not([hidden]) ~ :not([hidden]),
+.dark .app-card.divide-navy-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--app-border-card-divider);
+}
+
+.dark :is(.rounded-2xl, .rounded-xl, .rounded-lg, .rounded-3xl).border-navy-100:not([class*="border-emerald"]):not([class*="border-green"]):not([class*="border-red"]):not([class*="border-amber"]):not([class*="border-cyan-2"]),
+.dark :is(.rounded-2xl, .rounded-xl, .rounded-lg, .rounded-3xl).border.border-navy-100:not([class*="border-emerald"]):not([class*="border-green"]):not([class*="border-red"]):not([class*="border-amber"]):not([class*="border-cyan-2"]) {
+  border-color: var(--app-border-card);
+}
+
+.dark :is(.rounded-2xl, .rounded-xl, .rounded-lg, .rounded-3xl).border-navy-100 :is(.border-b, .border-t).border-navy-100,
+.dark :is(.rounded-2xl, .rounded-xl, .rounded-lg, .rounded-3xl).border.border-navy-100 :is(.border-b, .border-t).border-navy-100 {
+  border-color: var(--app-border-card-divider);
 }
 
 .dark .shadow-sm,

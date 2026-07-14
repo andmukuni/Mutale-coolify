@@ -8,7 +8,7 @@ export default function TimelineItem({ role, organization, project, location, st
       {/* Dot */}
       <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-cyan-500 border-2 border-white group-hover:bg-cyan-400 transition-colors" />
 
-      <div className="bg-white rounded-2xl border border-navy-100 p-6 hover:shadow-lg transition-all duration-300">
+      <div className="app-card bg-white rounded-2xl border border-navy-100 p-6 hover:shadow-lg transition-all duration-300">
         <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
           <div>
             <h3 className="text-lg font-bold text-navy-900">{role}</h3>
