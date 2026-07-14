@@ -23,7 +23,7 @@ export default function TrustedBySection({ label, partners = [], legacyNames = [
           return (
             <div className="flex flex-col items-center mb-10">
               <p className="text-center text-3xl sm:text-4xl font-bold">
-                <span className="text-[#141D45]">{firstWord}</span>
+                <span className="text-navy-900">{firstWord}</span>
                 {restWords && <span className="text-[#00A79D]"> {restWords}</span>}
               </p>
               <span className="mt-3 h-1 w-12 rounded-full bg-[#E76869]" />

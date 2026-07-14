@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { getApiBase } from '../utils/apiBase';
-import { getAdminAuthHeaders, buildPublicUserSession, dispatchUserSessionSync } from '../utils/authHeaders';
+import { getAdminAuthHeaders, buildPublicUserSession, dispatchUserSessionSync, purgeInvalidAuthState, clearAllAuthStorage, clearAdminAuthStorage } from '../utils/authHeaders';
 import { permissionMatches } from '../../shared/rbacPermissions.js';
 
 const AuthContext = createContext();
@@ -10,12 +10,17 @@ const ADMIN_IDLE_TIMEOUT_MS = ADMIN_IDLE_TIMEOUT_MINUTES * 60 * 1000;
 
 function getStoredSession() {
   try {
+    purgeInvalidAuthState();
     const stored = localStorage.getItem('mm_auth_session');
     if (!stored) return null;
     const session = JSON.parse(stored);
     if (session.expiresAt && Date.now() > session.expiresAt) {
-      localStorage.removeItem('mm_auth_session');
-      localStorage.removeItem('mm_admin_token');
+      clearAdminAuthStorage();
+      return null;
+    }
+    const adminToken = localStorage.getItem('mm_admin_token') || '';
+    if (!adminToken) {
+      clearAdminAuthStorage();
       return null;
     }
     if (!Array.isArray(session.permissions)) {
@@ -23,8 +28,7 @@ function getStoredSession() {
     }
     return session;
   } catch {
-    localStorage.removeItem('mm_auth_session');
-    localStorage.removeItem('mm_admin_token');
+    clearAdminAuthStorage();
     return null;
   }
 }
@@ -44,6 +48,7 @@ export function AuthProvider({ children }) {
   const isAuthenticated = Boolean(user);
 
   const login = useCallback(async (email, password) => {
+    purgeInvalidAuthState();
     setLoginError('');
     setIsLoading(true);
     try {
@@ -99,8 +104,8 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logout = useCallback(() => {
-    localStorage.removeItem('mm_auth_session');
-    localStorage.removeItem('mm_admin_token');
+    clearAllAuthStorage();
+    dispatchUserSessionSync(null);
     if (idleTimerRef.current) {
       window.clearTimeout(idleTimerRef.current);
       idleTimerRef.current = null;
@@ -119,8 +124,8 @@ export function AuthProvider({ children }) {
       window.clearTimeout(idleTimerRef.current);
     }
     idleTimerRef.current = window.setTimeout(() => {
-      localStorage.removeItem('mm_auth_session');
-      localStorage.removeItem('mm_admin_token');
+      clearAllAuthStorage();
+      dispatchUserSessionSync(null);
       setUser(null);
       setIdleLogoutPromptOpen(true);
       setLoginError('Admin session ended due to inactivity. Please log in again.');
@@ -131,6 +136,11 @@ export function AuthProvider({ children }) {
     if (!user) return;
     resetIdleTimer();
   }, [user, resetIdleTimer]);
+
+  useEffect(() => {
+    purgeInvalidAuthState();
+    setUser(getStoredSession());
+  }, []);
 
   useEffect(() => {
     if (!user) {

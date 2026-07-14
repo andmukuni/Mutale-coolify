@@ -4,10 +4,11 @@ import { Lock, Mail, Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { LoadingButton } from '../../components/ui';
+import { purgeInvalidAuthState } from '../../utils/authHeaders';
 import adminLogo from '../../../Logo-Website-Mutale_White No Bg.png';
 
 export default function LoginPage() {
-  const { login, isAuthenticated, loginError, clearLoginError } = useAuth();
+  const { login, isAuthenticated, loginError, clearLoginError, isLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const toast = useToast();
@@ -17,7 +18,10 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    purgeInvalidAuthState();
+  }, []);
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -33,15 +37,12 @@ export default function LoginPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsLoading(true);
 
     const success = await login(email, password);
     if (success) {
       toast.success('Signed in to admin.');
       navigate(from, { replace: true });
     }
-
-    setIsLoading(false);
   };
 
   // Surface admin login errors as toasts (in addition to the inline banner).

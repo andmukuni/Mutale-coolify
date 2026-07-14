@@ -1,29 +1,45 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { QrCode, ScanLine, CheckCircle2, AlertCircle, ArrowLeft } from 'lucide-react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { QrCode, ScanLine, CheckCircle2, AlertCircle, ArrowLeft, UserPlus, Printer, Palette } from 'lucide-react';
 import { useData } from '../../context/DataContext';
+import { useBooking } from '../../context/BookingContext';
 import { useToast } from '../../context/ToastContext';
 import { PageHeader, Card } from '../../components/ui';
 import { parseTicketReferenceFromScan } from '../../../shared/ticketQr.js';
 import { getApiBase } from '../../utils/apiBase';
 import { getSessionAuthHeaders } from '../../utils/authHeaders';
+import { resolveEventMode } from '../../utils/eventServices';
+import {
+  createWalkInRegistration,
+  downloadEventBadgePrintPdf,
+  fetchEventBadgeTemplate,
+} from '../../utils/badgeApi';
 
 const API_BASE = getApiBase();
 
 export default function EventCheckInPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { events } = useData();
+  const { refreshRegistrations } = useBooking();
   const toast = useToast();
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const scanTimerRef = useRef(null);
 
   const event = events.find((e) => e.id === id);
+  const eventMode = event ? resolveEventMode(event) : 'virtual';
+  const supportsOnsiteCheckIn = eventMode !== 'virtual';
   const [scanInput, setScanInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [cameraOn, setCameraOn] = useState(false);
   const [lastResult, setLastResult] = useState(null);
   const [recent, setRecent] = useState([]);
+  const [walkInForm, setWalkInForm] = useState({ name: '', email: '', phone: '' });
+  const [walkInLoading, setWalkInLoading] = useState(false);
+  const [badgeExportLoading, setBadgeExportLoading] = useState(false);
+  const autoScanRef = useRef('');
 
   const stopCamera = useCallback(() => {
     if (scanTimerRef.current) {
@@ -82,12 +98,93 @@ export default function EventCheckInPage() {
         toast.success(`${data.attendee_name || referenceCode} checked in.`);
       }
       setScanInput('');
+
+      if (String(searchParams.get('ref') || '').trim()) {
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.delete('ref');
+        setSearchParams(nextParams, { replace: true });
+      }
     } catch {
       toast.error('Unable to connect to check-in service.');
     } finally {
       setLoading(false);
     }
-  }, [id, toast]);
+  }, [id, toast, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    const ref = String(searchParams.get('ref') || '').trim();
+    if (!ref || ref === autoScanRef.current) return;
+    autoScanRef.current = ref;
+    void performCheckIn(ref);
+  }, [searchParams, performCheckIn]);
+
+  const handleWalkInSubmit = async (e) => {
+    e.preventDefault();
+    const name = String(walkInForm.name || '').trim();
+    if (!name) {
+      toast.error('Enter the walk-in attendee name.');
+      return;
+    }
+    setWalkInLoading(true);
+    try {
+      const data = await createWalkInRegistration(id, {
+        name,
+        email: walkInForm.email,
+        phone: walkInForm.phone,
+      });
+      const reg = data?.registration || {};
+      setLastResult({
+        ok: true,
+        attendee_name: reg.booked_for_name || reg.user_name || name,
+        reference_code: reg.reference_code,
+        already_checked_in: false,
+      });
+      setRecent((prev) => [{
+        reference_code: reg.reference_code,
+        attendee_name: reg.booked_for_name || reg.user_name || name,
+        already_checked_in: false,
+        at: new Date().toISOString(),
+      }, ...prev].slice(0, 8));
+      setWalkInForm({ name: '', email: '', phone: '' });
+      toast.success(`${name} added and checked in.`);
+      void refreshRegistrations();
+    } catch (error) {
+      toast.error(error.message || 'Could not add walk-in attendee.');
+    } finally {
+      setWalkInLoading(false);
+    }
+  };
+
+  const handleBadgeExport = async () => {
+    setBadgeExportLoading(true);
+    try {
+      const templateData = await fetchEventBadgeTemplate(id);
+      const template = templateData?.template;
+      if (!template) {
+        toast.error('Design a badge template first.');
+        navigate(`/admin/events/${id}/badge-designer`);
+        return;
+      }
+      if (!template.is_active) {
+        toast.error('Publish the badge template before printing.');
+        navigate(`/admin/events/${id}/badge-designer`);
+        return;
+      }
+
+      const blob = await downloadEventBadgePrintPdf(id);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `badges-${event?.slug || id}.pdf`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      toast.success('Badge print sheet downloaded (2 per tabloid page).');
+    } catch (error) {
+      toast.error(error.message || 'Badge export failed.');
+    } finally {
+      setBadgeExportLoading(false);
+    }
+  };
 
   const startCamera = useCallback(async () => {
     if (!('BarcodeDetector' in window)) {
@@ -137,19 +234,64 @@ export default function EventCheckInPage() {
     );
   }
 
+  if (!supportsOnsiteCheckIn) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Gate check-in"
+          subtitle={event.title}
+          actions={(
+            <Link
+              to={`/admin/events/${id}/attendees`}
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-cyan-700 hover:text-cyan-800"
+            >
+              <ArrowLeft size={15} />
+              Attendees
+            </Link>
+          )}
+        />
+        <Card className="p-6">
+          <p className="text-sm text-navy-600">
+            Gate check-in and name badges are only available for in-person and hybrid events.
+            This event is configured as virtual.
+          </p>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Gate check-in"
         subtitle={event.title}
         actions={(
-          <Link
-            to={`/admin/events/${id}/attendees`}
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-cyan-700 hover:text-cyan-800"
-          >
-            <ArrowLeft size={15} />
-            Attendees
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              to={`/admin/events/${id}/badge-designer`}
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-navy-700 hover:text-cyan-800 bg-white border border-navy-200 px-3 py-2 rounded-xl"
+            >
+              <Palette size={15} />
+              Badge designer
+            </Link>
+            <button
+              type="button"
+              onClick={() => { void handleBadgeExport(); }}
+              disabled={badgeExportLoading}
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-navy-700 hover:text-cyan-800 bg-white border border-navy-200 px-3 py-2 rounded-xl disabled:opacity-60"
+              title="Tabloid / 11×17 landscape — 2 badges per sheet"
+            >
+              <Printer size={15} />
+              {badgeExportLoading ? 'Exporting…' : 'Print badges'}
+            </button>
+            <Link
+              to={`/admin/events/${id}/attendees`}
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-cyan-700 hover:text-cyan-800"
+            >
+              <ArrowLeft size={15} />
+              Attendees
+            </Link>
+          </div>
         )}
       />
 
@@ -261,6 +403,50 @@ export default function EventCheckInPage() {
           )}
         </Card>
       </div>
+
+      <Card className="p-6 space-y-4">
+        <div className="flex items-center gap-2 text-navy-900 font-semibold">
+          <UserPlus size={18} className="text-cyan-600" />
+          Walk-in attendee
+        </div>
+        <p className="text-sm text-navy-500">
+          Register someone who arrived without a prior booking. They will be checked in immediately and receive a ticket reference for badges.
+        </p>
+        <form onSubmit={handleWalkInSubmit} className="grid sm:grid-cols-3 gap-3">
+          <input
+            type="text"
+            value={walkInForm.name}
+            onChange={(e) => setWalkInForm((p) => ({ ...p, name: e.target.value }))}
+            placeholder="Full name *"
+            className="rounded-xl border border-navy-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500"
+            required
+          />
+          <input
+            type="email"
+            value={walkInForm.email}
+            onChange={(e) => setWalkInForm((p) => ({ ...p, email: e.target.value }))}
+            placeholder="Email (optional)"
+            className="rounded-xl border border-navy-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500"
+          />
+          <input
+            type="tel"
+            value={walkInForm.phone}
+            onChange={(e) => setWalkInForm((p) => ({ ...p, phone: e.target.value }))}
+            placeholder="Phone (optional)"
+            className="rounded-xl border border-navy-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500"
+          />
+          <div className="sm:col-span-3">
+            <button
+              type="submit"
+              disabled={walkInLoading}
+              className="inline-flex items-center gap-2 bg-navy-900 hover:bg-navy-800 disabled:opacity-60 text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-colors"
+            >
+              <UserPlus size={16} />
+              {walkInLoading ? 'Adding…' : 'Add & check in'}
+            </button>
+          </div>
+        </form>
+      </Card>
     </div>
   );
 }

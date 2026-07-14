@@ -433,6 +433,8 @@ describe('multi-guest registration helpers', () => {
     expect(validateGuestAttendees([{ name: 'Ada' }, { name: 'Ben' }]).ok).toBe(true);
     expect(validateGuestAttendees([{ name: '' }]).ok).toBe(false);
     expect(validateGuestAttendees([{ name: 'Ada' }, { name: 'ada' }]).ok).toBe(false);
+    expect(validateGuestAttendees([{ name: 'Kid', attendee_type: 'child', relation: 'parent' }]).ok).toBe(true);
+    expect(validateGuestAttendees([{ name: 'Kid', attendee_type: 'child' }]).ok).toBe(false);
   });
 
   it('caps guest tickets by remaining capacity', () => {

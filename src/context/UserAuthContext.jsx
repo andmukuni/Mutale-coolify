@@ -10,6 +10,10 @@ import {
   buildPublicUserSession,
   getUserAuthHeaders,
   resolveUserBearerToken,
+  purgeInvalidAuthState,
+  clearAllAuthStorage,
+  clearUserAuthStorage,
+  dispatchUserSessionSync,
 } from '../utils/authHeaders';
 
 const UserAuthContext = createContext();
@@ -20,24 +24,23 @@ const USER_IDLE_TIMEOUT_MS = USER_IDLE_TIMEOUT_MINUTES * 60 * 1000;
 
 function getStoredUserSession() {
   try {
+    purgeInvalidAuthState();
     const stored = localStorage.getItem('mm_user_session');
     if (!stored) return null;
     const session = JSON.parse(stored);
     if (session.expiresAt && Date.now() > session.expiresAt) {
-      localStorage.removeItem('mm_user_session');
-      localStorage.removeItem('mm_user_token');
+      clearUserAuthStorage();
       return null;
     }
 
     if (!resolveUserBearerToken()) {
-      localStorage.removeItem('mm_user_session');
+      clearUserAuthStorage();
       return null;
     }
 
     return session;
   } catch {
-    localStorage.removeItem('mm_user_session');
-    localStorage.removeItem('mm_user_token');
+    clearUserAuthStorage();
     return null;
   }
 }
@@ -96,6 +99,7 @@ export function UserAuthProvider({ children }) {
 
   /** Login an existing public user */
   const userLogin = useCallback(async ({ email, password }) => {
+    purgeInvalidAuthState();
     setAuthError('');
     setAuthLoading(true);
     try {
@@ -114,6 +118,7 @@ export function UserAuthProvider({ children }) {
       const session = saveSessionWithToken(json.data, json.token);
       setIdleLogoutPromptOpen(false);
       setCurrentUser(session);
+      dispatchUserSessionSync(session);
       return { ok: true };
     } catch {
       setAuthError('Unable to connect. Please try again.');
@@ -125,8 +130,7 @@ export function UserAuthProvider({ children }) {
 
   /** Logout public user */
   const userLogout = useCallback(() => {
-    localStorage.removeItem('mm_user_session');
-    localStorage.removeItem('mm_user_token');
+    clearUserAuthStorage();
     if (idleTimerRef.current) {
       window.clearTimeout(idleTimerRef.current);
       idleTimerRef.current = null;
@@ -145,8 +149,8 @@ export function UserAuthProvider({ children }) {
       window.clearTimeout(idleTimerRef.current);
     }
     idleTimerRef.current = window.setTimeout(() => {
-      localStorage.removeItem('mm_user_session');
-      localStorage.removeItem('mm_user_token');
+      clearAllAuthStorage();
+      dispatchUserSessionSync(null);
       setCurrentUser(null);
       setIdleLogoutPromptOpen(true);
       setAuthError('Your session ended due to inactivity. Please log in again.');
@@ -159,9 +163,12 @@ export function UserAuthProvider({ children }) {
   }, [currentUser, resetIdleTimer]);
 
   useEffect(() => {
+    purgeInvalidAuthState();
+    setCurrentUser(getStoredUserSession());
+
     const syncFromStorage = () => {
-      const session = getStoredUserSession();
-      setCurrentUser(session);
+      purgeInvalidAuthState();
+      setCurrentUser(getStoredUserSession());
     };
 
     const onStorage = (event) => {
@@ -171,8 +178,12 @@ export function UserAuthProvider({ children }) {
     };
 
     const onSessionSync = (event) => {
+      if (event?.detail === null) {
+        setCurrentUser(null);
+        return;
+      }
       const session = event?.detail || getStoredUserSession();
-      if (session) setCurrentUser(session);
+      setCurrentUser(session);
     };
 
     window.addEventListener('storage', onStorage);

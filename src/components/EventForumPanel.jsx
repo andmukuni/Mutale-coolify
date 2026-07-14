@@ -22,6 +22,9 @@ import {
   moderateForumTopic,
   deleteForumReply,
   deleteForumTopic,
+  fetchForumModerationQueue,
+  moderateForumTopicApproval,
+  moderateForumReplyApproval,
 } from '../utils/eventForumApi';
 
 function formatForumDate(value) {
@@ -44,7 +47,7 @@ export default function EventForumPanel({
   loginPath = '/account/login',
 }) {
   const { currentUser, isUserAuthenticated } = useUserAuth();
-  const { isUserRegistered } = useBooking();
+  const { registrations } = useBooking();
 
   const [topics, setTopics] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -57,10 +60,19 @@ export default function EventForumPanel({
   const [newBody, setNewBody] = useState('');
   const [replyBody, setReplyBody] = useState('');
   const [showNewTopic, setShowNewTopic] = useState(false);
+  const [modQueue, setModQueue] = useState({ topics: [], replies: [], pending_count: 0 });
+  const [infoMessage, setInfoMessage] = useState('');
 
-  const registered = event?.id && currentUser?.id
-    ? isUserRegistered(currentUser.id, event.id, 'subscription')
-    : false;
+  const registered = Boolean(
+    event?.id
+    && currentUser?.id
+    && registrations.some((r) => (
+      r.user_id === currentUser.id
+      && r.event_id === event.id
+      && String(r.status || '').toLowerCase() !== 'cancelled'
+      && ['paid', 'not_required', 'waived'].includes(String(r.payment_status || '').toLowerCase())
+    )),
+  );
   const canPost = adminMode || (isUserAuthenticated && registered);
 
   const loadTopics = useCallback(async () => {
@@ -93,9 +105,23 @@ export default function EventForumPanel({
     }
   }, [adminMode, event?.id]);
 
+  const loadModQueue = useCallback(async () => {
+    if (!adminMode || !event?.id) return;
+    try {
+      const data = await fetchForumModerationQueue(event.id);
+      setModQueue(data || { topics: [], replies: [], pending_count: 0 });
+    } catch {
+      setModQueue({ topics: [], replies: [], pending_count: 0 });
+    }
+  }, [adminMode, event?.id]);
+
   useEffect(() => {
     void loadTopics();
   }, [loadTopics]);
+
+  useEffect(() => {
+    void loadModQueue();
+  }, [loadModQueue]);
 
   useEffect(() => {
     if (activeTopicId) {
@@ -111,11 +137,13 @@ export default function EventForumPanel({
     setSubmitting(true);
     setError('');
     try {
-      await createForumTopic(event.id, { title: newTitle.trim(), body: newBody.trim() });
+      const created = await createForumTopic(event.id, { title: newTitle.trim(), body: newBody.trim() });
       setNewTitle('');
       setNewBody('');
       setShowNewTopic(false);
+      setInfoMessage(created?.moderation_status === 'pending' ? 'Topic submitted and awaiting admin review.' : 'Topic posted.');
       await loadTopics();
+      if (adminMode) await loadModQueue();
     } catch (err) {
       setError(err?.message || 'Failed to create topic.');
     } finally {
@@ -129,10 +157,12 @@ export default function EventForumPanel({
     setSubmitting(true);
     setError('');
     try {
-      await createForumReply(event.id, activeTopicId, replyBody.trim());
+      const created = await createForumReply(event.id, activeTopicId, replyBody.trim());
       setReplyBody('');
+      setInfoMessage(created?.moderation_status === 'pending' ? 'Reply submitted and awaiting admin review.' : 'Reply posted.');
       await loadTopicDetail(activeTopicId);
       await loadTopics();
+      if (adminMode) await loadModQueue();
     } catch (err) {
       setError(err?.message || 'Failed to post reply.');
     } finally {
@@ -178,10 +208,28 @@ export default function EventForumPanel({
         await loadTopicDetail(activeTopicId);
         await loadTopics();
       }
+      if (adminMode) await loadModQueue();
     } catch (err) {
       setError(err?.message || 'Failed to delete reply.');
     }
   };
+
+  const handleModerationDecision = async (type, id, action) => {
+    try {
+      if (type === 'topic') {
+        await moderateForumTopicApproval(event.id, id, { action });
+      } else {
+        await moderateForumReplyApproval(event.id, id, { action });
+      }
+      await loadTopics();
+      await loadModQueue();
+      if (activeTopicId) await loadTopicDetail(activeTopicId);
+    } catch (err) {
+      setError(err?.message || 'Moderation failed.');
+    }
+  };
+
+  const pendingCount = Number(modQueue.pending_count || 0);
 
   if (!event?.forum_enabled && !adminMode) {
     return null;
@@ -220,6 +268,38 @@ export default function EventForumPanel({
         <div className="mb-4 flex items-start gap-2 p-3.5 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
           <AlertCircle size={16} className="shrink-0 mt-0.5" />
           {error}
+        </div>
+      )}
+
+      {infoMessage && (
+        <div className="mb-4 p-3.5 bg-cyan-50 border border-cyan-100 rounded-xl text-sm text-cyan-800">
+          {infoMessage}
+        </div>
+      )}
+
+      {adminMode && pendingCount > 0 && (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
+          <p className="text-sm font-semibold text-amber-900">Pending review ({pendingCount})</p>
+          {modQueue.topics?.map((topic) => (
+            <div key={topic.id} className="rounded-lg bg-white border border-amber-100 p-3 text-sm">
+              <p className="font-medium text-navy-900">{topic.title}</p>
+              <p className="text-xs text-navy-500 mt-1 line-clamp-2">{topic.body}</p>
+              <div className="mt-2 flex gap-2">
+                <ModButton label="Approve" onClick={() => handleModerationDecision('topic', topic.id, 'approve')} />
+                <ModButton label="Reject" danger onClick={() => handleModerationDecision('topic', topic.id, 'reject')} />
+              </div>
+            </div>
+          ))}
+          {modQueue.replies?.map((reply) => (
+            <div key={reply.id} className="rounded-lg bg-white border border-amber-100 p-3 text-sm">
+              <p className="text-xs text-navy-500">Reply by {reply.user_name}</p>
+              <p className="text-navy-800 mt-1 line-clamp-3">{reply.body}</p>
+              <div className="mt-2 flex gap-2">
+                <ModButton label="Approve" onClick={() => handleModerationDecision('reply', reply.id, 'approve')} />
+                <ModButton label="Reject" danger onClick={() => handleModerationDecision('reply', reply.id, 'reject')} />
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -401,6 +481,9 @@ export default function EventForumPanel({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
                       {topic.pinned && <Pin size={12} className="text-amber-600 shrink-0" />}
+                      {topic.moderation_status === 'pending' && (
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">Pending</span>
+                      )}
                       {topic.hidden && adminMode && <EyeOff size={12} className="text-red-500 shrink-0" />}
                       <span className="font-semibold text-navy-900 group-hover:text-cyan-700 transition-colors truncate">
                         {topic.title}

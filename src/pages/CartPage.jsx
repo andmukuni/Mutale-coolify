@@ -140,7 +140,7 @@ export default function CartPage() {
 
   const handlePlaceOrder = async () => {
     if (!currentUser) {
-      navigate('/account/login', { state: { from: '/books/cart' } });
+      navigate('/account/login', { state: { from: { pathname: '/books/cart' } } });
       return;
     }
     if (cart.length === 0) return;

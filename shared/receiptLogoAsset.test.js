@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import {
   getBundledReceiptLogoPath,
   loadReceiptLogoDataUrl,
+  loadWhiteLogoDataUrl,
   getReceiptLogoFileUrl,
 } from './receiptLogoAsset.js';
 
@@ -22,5 +23,11 @@ describe('receiptLogoAsset', () => {
     expect(getBundledReceiptLogoPath()).toBe(
       path.join(__dirname, 'assets', 'Logo-Website-Mutale-08.png'),
     );
+  });
+
+  it('loads bundled white logo from shared/assets', async () => {
+    const dataUrl = await loadWhiteLogoDataUrl();
+    expect(dataUrl.startsWith('data:image/png;base64,')).toBe(true);
+    expect(dataUrl.length).toBeGreaterThan(1000);
   });
 });

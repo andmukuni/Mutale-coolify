@@ -4,6 +4,7 @@ import { Mail, Lock, Eye, EyeOff, User, ArrowLeft, UserPlus, RefreshCw } from 'l
 import { useUserAuth } from '../../context/UserAuthContext';
 import { useToast } from '../../context/ToastContext';
 import { getApiBase } from '../../utils/apiBase';
+import { purgeInvalidAuthState } from '../../utils/authHeaders';
 import siteLogo from '../../../Logo-Website-Mutale_Main - Navy and Teal.png';
 
 const API_BASE = getApiBase();
@@ -14,14 +15,18 @@ export default function UserLoginPage() {
   const location = useLocation();
   const toast = useToast();
 
-  // After login, return to intended page (or account)
-  const from = location.state?.from?.pathname || '/account/my-events';
+  // After login, return to intended page (or home)
+  const from = location.state?.from?.pathname || '/';
 
   const [form, setForm] = useState({ email: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [unverified, setUnverified] = useState(false);
   const [resendStatus, setResendStatus] = useState('');
   const [resendLoading, setResendLoading] = useState(false);
+
+  useEffect(() => {
+    purgeInvalidAuthState();
+  }, []);
 
   useEffect(() => {
     if (isUserAuthenticated) {

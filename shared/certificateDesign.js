@@ -17,6 +17,7 @@ export const PLACEHOLDER_KEYS = [
   'event_date',
   'certificate_number',
   'issue_date',
+  'reference_code',
   'qr_code',
 ];
 
@@ -26,6 +27,7 @@ export const PLACEHOLDER_LABELS = {
   event_date: 'Event Date',
   certificate_number: 'Certificate Number',
   issue_date: 'Issue Date',
+  reference_code: 'Ticket Reference',
   qr_code: 'QR Code',
 };
 
@@ -78,7 +80,19 @@ const A4_DIMENSIONS = {
   landscape: { widthMm: 297, heightMm: 210 },
 };
 
+/** 6" × 8" name badge (portrait). */
+const BADGE_6X8_DIMENSIONS = {
+  portrait: { widthMm: 152.4, heightMm: 203.2 },
+  landscape: { widthMm: 203.2, heightMm: 152.4 },
+};
+
+export const BADGE_PAPER_SIZE = '6x8';
+
 export function getCanvasDimensions(orientation = 'landscape', paperSize = 'A4') {
+  const size = String(paperSize || 'A4').toLowerCase();
+  if (size === '6x8') {
+    return BADGE_6X8_DIMENSIONS[orientation === 'portrait' ? 'portrait' : 'landscape'];
+  }
   if (String(paperSize).toUpperCase() !== 'A4') {
     return A4_DIMENSIONS.landscape;
   }
@@ -701,6 +715,84 @@ export function buildDefaultCertificateDesign(event = {}, opts = {}) {
   return buildDesignFromPreset(CERTIFICATE_PRESET_ATTENDANCE, event, opts);
 }
 
+/**
+ * Default 6×8 inch onsite name badge layout.
+ * @param {object} event
+ * @param {{ orientation?: string, paperSize?: string }} [opts]
+ */
+export function buildDefaultBadgeDesign(event = {}, opts = {}) {
+  const orientation = 'portrait';
+  const paperSize = BADGE_PAPER_SIZE;
+  const canvas = getCanvasDimensions(orientation, paperSize);
+  const sampleData = buildSamplePreviewData(event, {
+    event_name: String(event?.title || 'Event Name'),
+    attendee_name: 'Jane M. Sample',
+    reference_code: 'REG-SAMPLE01',
+  });
+
+  return {
+    version: CERTIFICATE_DESIGN_VERSION,
+    presetId: 'badge',
+    canvas,
+    background: { theme: 'modern-teal' },
+    elements: [
+      createDesignElement('image', {
+        id: 'el_badge_logo',
+        src: CERTIFICATE_BUNDLED_LOGO_SRC,
+        x: 0.5,
+        y: 0.1,
+        width: 0.35,
+        height: 0.12,
+        canvas,
+      }),
+      createDesignElement('placeholder', {
+        id: 'el_badge_name',
+        key: 'attendee_name',
+        x: 0.5,
+        y: 0.34,
+        canvas,
+        sampleData,
+        style: { fontSize: 22, fontFamily: 'helvetica', color: '#102A43', align: 'center', bold: true },
+      }),
+      createDesignElement('placeholder', {
+        id: 'el_badge_event',
+        key: 'event_name',
+        x: 0.5,
+        y: 0.48,
+        canvas,
+        sampleData,
+        style: { fontSize: 12, fontFamily: 'helvetica', color: '#486581', align: 'center', bold: false },
+      }),
+      createDesignElement('placeholder', {
+        id: 'el_badge_date',
+        key: 'event_date',
+        x: 0.5,
+        y: 0.56,
+        canvas,
+        sampleData,
+        style: { fontSize: 10, fontFamily: 'helvetica', color: '#627D98', align: 'center', bold: false },
+      }),
+      createDesignElement('placeholder', {
+        id: 'el_badge_ref',
+        key: 'reference_code',
+        x: 0.5,
+        y: 0.64,
+        canvas,
+        sampleData: { ...sampleData, reference_code: sampleData.reference_code || 'REG-SAMPLE01' },
+        style: { fontSize: 8, fontFamily: 'courier', color: '#94A3B8', align: 'center', bold: false },
+      }),
+      createDesignElement('qr', {
+        id: 'el_badge_qr',
+        x: 0.5,
+        y: 0.82,
+        width: 0.22,
+        height: 0.16,
+        canvas,
+      }),
+    ],
+  };
+}
+
 export function resolveBackgroundTheme(design, templateMeta = {}) {
   const fromDesign = design?.background?.theme;
   if (fromDesign) return fromDesign;
@@ -764,6 +856,7 @@ export function buildSamplePreviewData(event = {}, overrides = {}) {
     event_date: overrides.event_date || formatEventDateRange(event),
     certificate_number: overrides.certificate_number || 'MM-CERT-SAMPLE01',
     issue_date: overrides.issue_date || formatDisplayDate(new Date()),
+    reference_code: overrides.reference_code || 'REG-SAMPLE01',
     qr_code: overrides.qr_code || '',
   };
 }

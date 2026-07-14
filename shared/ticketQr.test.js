@@ -12,9 +12,9 @@ vi.mock('qrcode', () => ({
 }));
 
 describe('buildTicketScanUrl', () => {
-  it('builds ticket page URL from reference code', () => {
+  it('builds gate check-in URL from reference code', () => {
     expect(buildTicketScanUrl('REG-ABC123', 'https://mutalemubanga.org'))
-      .toBe('https://mutalemubanga.org/tickets/REG-ABC123');
+      .toBe('https://mutalemubanga.org/check-in/REG-ABC123');
   });
 
   it('returns null when reference or origin missing', () => {
@@ -31,6 +31,13 @@ describe('parseTicketReferenceFromScan', () => {
 
   it('parses relative ticket paths', () => {
     expect(parseTicketReferenceFromScan('/tickets/REG-ABC'))
+      .toBe('REG-ABC');
+  });
+
+  it('parses gate check-in URLs', () => {
+    expect(parseTicketReferenceFromScan('https://mutalemubanga.org/check-in/REG-XYZ'))
+      .toBe('REG-XYZ');
+    expect(parseTicketReferenceFromScan('/check-in/REG-ABC'))
       .toBe('REG-ABC');
   });
 

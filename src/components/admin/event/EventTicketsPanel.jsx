@@ -8,6 +8,7 @@ import {
   Search,
   CheckCircle2,
   Users,
+  Eye,
 } from 'lucide-react';
 import StatusBadge from '../../ui/StatusBadge';
 import { LoadingButton } from '../../ui';
@@ -15,6 +16,7 @@ import { formatDate, formatTime } from '../../../utils/helpers';
 import { getAppOrigin } from '../../../utils/apiBase';
 import { useToast } from '../../../context/ToastContext';
 import { downloadTicketPdf, downloadTicketQrPng } from '../../../../shared/ticketDocument.js';
+import TicketPreviewModal from '../TicketPreviewModal.jsx';
 
 function hasCheckedIn(reg) {
   return Boolean(reg?.attended_at) || String(reg?.status || '').toLowerCase() === 'attended';
@@ -36,6 +38,7 @@ export default function EventTicketsPanel({ event, registrations = [] }) {
   const toast = useToast();
   const [query, setQuery] = useState('');
   const [busyRef, setBusyRef] = useState('');
+  const [previewReg, setPreviewReg] = useState(null);
 
   const soldTickets = useMemo(() => (
     registrations
@@ -194,6 +197,17 @@ export default function EventTicketsPanel({ event, registrations = [] }) {
                       <div className="flex flex-wrap items-center gap-1.5">
                         <LoadingButton
                           type="button"
+                          loading={false}
+                          loadingLabel=""
+                          onClick={() => setPreviewReg(reg)}
+                          className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg bg-white border border-navy-200 text-navy-700 hover:border-cyan-400 hover:text-cyan-700"
+                          title="Preview ticket"
+                        >
+                          <Eye size={12} />
+                          Preview
+                        </LoadingButton>
+                        <LoadingButton
+                          type="button"
                           loading={pdfBusy}
                           loadingLabel=""
                           onClick={() => { void handleDownloadTicket(reg); }}
@@ -244,6 +258,14 @@ export default function EventTicketsPanel({ event, registrations = [] }) {
           )}
           {event.start_time && <> · {formatTime(event.start_time)}</>}
         </p>
+      )}
+
+      {previewReg && (
+        <TicketPreviewModal
+          registration={previewReg}
+          event={event}
+          onClose={() => setPreviewReg(null)}
+        />
       )}
     </div>
   );

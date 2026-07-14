@@ -18,6 +18,7 @@ const SAMPLE_VALUES = {
   event_date: '1 June 2026',
   certificate_number: 'MM-CERT-SAMPLE01',
   issue_date: '3 June 2026',
+  reference_code: 'REG-SAMPLE01',
 };
 
 function resolveElementText(element, sampleData = null) {

@@ -4,9 +4,11 @@ import { fileURLToPath, pathToFileURL } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BUNDLED_LOGO_PATH = path.join(__dirname, 'assets', 'Logo-Website-Mutale-08.png');
+const BUNDLED_WHITE_LOGO_PATH = path.join(__dirname, 'assets', 'Logo-Website-Mutale-White-No-Bg.png');
 
 let cachedDataUrl = null;
 let cachedFileUrl = null;
+let cachedWhiteDataUrl = null;
 
 /**
  * Absolute path to the bundled receipt logo (ships inside shared/ on every deploy).
@@ -66,5 +68,44 @@ export async function loadReceiptLogoDataUrl(appRoot = '') {
   }
 
   console.warn('[receipt] Logo file not found; receipts will render without logo.');
+  return '';
+}
+
+/**
+ * Load the all-white site logo as a data URL for email headers.
+ * @param {string} [appRoot] - optional app root for legacy fallbacks
+ */
+export async function loadWhiteLogoDataUrl(appRoot = '') {
+  if (cachedWhiteDataUrl) return cachedWhiteDataUrl;
+
+  const candidates = [BUNDLED_WHITE_LOGO_PATH];
+
+  if (appRoot) {
+    candidates.push(path.join(appRoot, 'Logo-Website-Mutale_White No Bg.png'));
+    try {
+      const assetsDir = path.join(appRoot, 'dist', 'assets');
+      const files = await fs.readdir(assetsDir);
+      const hashedLogo = files.find(
+        (name) => name.startsWith('Logo-Website-Mutale_White') && name.endsWith('.png'),
+      );
+      if (hashedLogo) {
+        candidates.push(path.join(assetsDir, hashedLogo));
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  for (const logoPath of candidates) {
+    try {
+      const buf = await fs.readFile(logoPath);
+      cachedWhiteDataUrl = `data:image/png;base64,${buf.toString('base64')}`;
+      return cachedWhiteDataUrl;
+    } catch {
+      // try next
+    }
+  }
+
+  console.warn('[email] White logo file not found; email headers will use text branding.');
   return '';
 }

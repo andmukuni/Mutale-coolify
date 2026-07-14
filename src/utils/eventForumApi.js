@@ -112,6 +112,50 @@ export async function moderateForumReply(eventId, replyId, hidden) {
   return json.data;
 }
 
+export async function fetchForumModerationQueue(eventId) {
+  const res = await fetch(
+    `${API_BASE}/admin/events/${encodeURIComponent(eventId)}/forum/moderation-queue`,
+    { cache: 'no-store', headers: getAdminAuthHeaders() },
+  );
+  const json = await readJson(res);
+  if (!res.ok || !json?.ok) {
+    throw new Error(json?.message || 'Failed to load moderation queue.');
+  }
+  return json.data;
+}
+
+export async function moderateForumTopicApproval(eventId, topicId, { action, note = '' }) {
+  const res = await fetch(
+    `${API_BASE}/admin/events/${encodeURIComponent(eventId)}/forum/topics/${encodeURIComponent(topicId)}/moderate`,
+    {
+      method: 'PATCH',
+      headers: getAdminAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ action, note }),
+    },
+  );
+  const json = await readJson(res);
+  if (!res.ok || !json?.ok) {
+    throw new Error(json?.message || 'Failed to moderate topic.');
+  }
+  return json.data;
+}
+
+export async function moderateForumReplyApproval(eventId, replyId, { action, note = '' }) {
+  const res = await fetch(
+    `${API_BASE}/admin/events/${encodeURIComponent(eventId)}/forum/replies/${encodeURIComponent(replyId)}/moderate`,
+    {
+      method: 'PATCH',
+      headers: getAdminAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ action, note }),
+    },
+  );
+  const json = await readJson(res);
+  if (!res.ok || !json?.ok) {
+    throw new Error(json?.message || 'Failed to moderate reply.');
+  }
+  return json.data;
+}
+
 export async function deleteForumReply(eventId, replyId) {
   const res = await fetch(
     `${API_BASE}/events/${encodeURIComponent(eventId)}/forum/replies/${encodeURIComponent(replyId)}`,

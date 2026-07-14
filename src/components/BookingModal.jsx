@@ -6,27 +6,64 @@ import { useState, useEffect, useRef } from 'react';
 import { CheckCircle, AlertCircle, Calendar, MapPin, Ticket, ShoppingBag, X } from 'lucide-react';
 import RegistrationShell from './RegistrationShell';
 import EventMerchUpsellModal from './EventMerchUpsellModal';
-import TicketQrDisplay from './TicketQrDisplay';
+import TicketDocument from '../../shared/TicketDocument.jsx';
+import { buildTicketViewModel } from '../../shared/ticketViewModel.js';
+import receiptLogo from '../../Logo-Website-Mutale-08.png';
+import { RECEIPT_LIGHT_FILL } from '../../shared/receiptTheme.js';
 import { useBooking } from '../context/BookingContext';
 import { useUserAuth } from '../context/UserAuthContext';
 import { useCurrency } from '../context/CurrencyContext';
 import { useToast } from '../context/ToastContext';
 import {
+  allowsMultiAttendeeRegistration,
   checkEventAvailability,
   computeRegistrationTicketCount,
   deriveGuestAttendeeSlotKey,
   getMaxGuestTickets,
   getRegistrationAttendeeSlotKey,
-  isInPersonEvent,
   isOnlineEvent,
+  normalizeAttendeeType,
   validateGuestAttendees,
 } from '../utils/eventServices';
 import { formatDate, formatTime } from '../utils/helpers';
-import { getApiBase } from '../utils/apiBase';
+import { getApiBase, getAppOrigin } from '../utils/apiBase';
 import { getSessionAuthHeaders } from '../utils/authHeaders';
 import { runLencoCardWidget } from '../utils/lencoCardPayment';
 
 const API_BASE = getApiBase();
+
+function SuccessTicketPreview({ registration, event }) {
+  const [viewModel, setViewModel] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    buildTicketViewModel({
+      registration,
+      event: event || {},
+      appOrigin: getAppOrigin(),
+      logoDataUrl: receiptLogo,
+    }).then((vm) => {
+      if (!cancelled) setViewModel(vm);
+    }).catch(() => {
+      if (!cancelled) setViewModel(null);
+    });
+    return () => { cancelled = true; };
+  }, [registration, event]);
+
+  if (!viewModel) {
+    return (
+      <div className="rounded-xl border border-navy-100 bg-white p-6 text-center text-sm text-navy-500">
+        Loading ticket…
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl overflow-hidden border border-navy-100">
+      <TicketDocument viewModel={viewModel} outerPadding={false} />
+    </div>
+  );
+}
 
 function getNumericAmount(value) {
   const n = Number(value || 0);
@@ -103,7 +140,15 @@ function extractLencoPaymentStatus(payload = {}) {
 }
 
 function createEmptyGuest() {
-  return { key: `guest-${Math.random().toString(36).slice(2, 9)}`, name: '', email: '', phone: '' };
+  return {
+    key: `guest-${Math.random().toString(36).slice(2, 9)}`,
+    name: '',
+    email: '',
+    phone: '',
+    attendee_type: 'adult',
+    relation: '',
+    lookupHint: '',
+  };
 }
 
 function resizeGuestList(current = [], nextCount = 0) {
@@ -113,6 +158,19 @@ function resizeGuestList(current = [], nextCount = 0) {
   const next = [...current];
   while (next.length < count) next.push(createEmptyGuest());
   return next;
+}
+
+async function lookupGuestEmail(email, apiBase, headers) {
+  const normalized = String(email || '').trim().toLowerCase();
+  if (!normalized.includes('@')) return null;
+  try {
+    const res = await fetch(`${apiBase}/users/lookup?email=${encodeURIComponent(normalized)}`, { headers });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json?.ok || !json?.data?.found) return null;
+    return String(json.data.name || '').trim() || null;
+  } catch {
+    return null;
+  }
 }
 
 export default function EventRegistrationFlow({
@@ -189,12 +247,12 @@ export default function EventRegistrationFlow({
   const [registrationStep, setRegistrationStep] = useState('details');
 
   const isOnline = isOnlineEvent(event);
-  const isInPerson = isInPersonEvent(event);
+  const allowsMultiAttendee = allowsMultiAttendeeRegistration(event);
   const guestCount = guestAttendees.length;
-  const ticketCount = isInPerson
+  const ticketCount = allowsMultiAttendee
     ? computeRegistrationTicketCount({ includeSelf, guestCount })
     : 1;
-  const maxGuestTickets = isInPerson
+  const maxGuestTickets = allowsMultiAttendee
     ? getMaxGuestTickets(event, regCount, { includeSelf, hardCap: 20 })
     : 0;
   const couponLiveNorm = normalizeCouponCodeInput(couponInput);
@@ -243,9 +301,9 @@ export default function EventRegistrationFlow({
   }, [isActive, event?.id, selfRegistration]);
 
   useEffect(() => {
-    if (!isInPerson) return;
+    if (!allowsMultiAttendee) return;
     setGuestAttendees((prev) => (prev.length > maxGuestTickets ? prev.slice(0, maxGuestTickets) : prev));
-  }, [maxGuestTickets, isInPerson]);
+  }, [maxGuestTickets, allowsMultiAttendee]);
 
   // Prefetch event-attached merch when the registration succeeds with a paid status,
   // so we can offer the post-payment upsell modal.
@@ -277,6 +335,39 @@ export default function EventRegistrationFlow({
     })();
     return () => { cancelled = true; };
   }, [isActive, result, merchPrefetched, event?.id]);
+
+  useEffect(() => {
+    if (!isActive || !event?.id || event.is_free) return;
+    const volEnabled = Boolean(event.volume_discount_enabled);
+    const minQty = Number(event.volume_discount_min_qty) || 5;
+    const hasCoupon = Boolean(normalizeCouponCodeInput(couponInput));
+    if (!hasCoupon && !(volEnabled && ticketCount >= minQty)) {
+      if (!hasCoupon) setAppliedCouponMeta(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/events/${encodeURIComponent(event.id)}/coupon-preview`, {
+          method: 'POST',
+          headers: getSessionAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({
+            coupon_code: couponInput.trim(),
+            quantity: Math.max(1, ticketCount),
+          }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        if (res.ok && json?.ok && json?.data) {
+          const codeNorm = normalizeCouponCodeInput(couponInput);
+          setAppliedCouponMeta({ codeNorm, preview: json.data });
+        }
+      } catch {
+        //
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isActive, event?.id, event?.is_free, event?.volume_discount_enabled, event?.volume_discount_min_qty, ticketCount, couponInput]);
 
   const shellProps = (overrides = {}) => ({
     layout,
@@ -382,7 +473,7 @@ export default function EventRegistrationFlow({
       return baseAvailability.reason || 'This event is not available for registration.';
     }
 
-    if (isInPerson) {
+    if (allowsMultiAttendee) {
       if (ticketCount < 1) {
         return 'Select at least one ticket (yourself and/or guests).';
       }
@@ -428,12 +519,14 @@ export default function EventRegistrationFlow({
   };
 
   const buildBatchPayload = () => ({
-    includeSelf: isInPerson ? includeSelf : false,
-    attendees: isInPerson
+    includeSelf: allowsMultiAttendee ? includeSelf : false,
+    attendees: allowsMultiAttendee
       ? guestAttendees.map((guest) => ({
         name: guest.name.trim(),
         email: guest.email.trim(),
         phone: guest.phone.trim(),
+        attendee_type: normalizeAttendeeType(guest.attendee_type),
+        relation: String(guest.relation || '').trim(),
       }))
       : [],
   });
@@ -509,7 +602,7 @@ export default function EventRegistrationFlow({
       await new Promise((r) => setTimeout(r, 250));
 
       if (event.is_free || (orderTotalZmw <= 0.005 && previewOk)) {
-        if (isInPerson) {
+        if (allowsMultiAttendee) {
           setResult(finalizeBatchResult(await submitBatchRegistration({
             paymentMethod: 'free',
             couponCode: couponForRegistration,
@@ -575,7 +668,7 @@ export default function EventRegistrationFlow({
 
         const reference = mobileJson?.data?.reference || '';
 
-        if (isInPerson) {
+        if (allowsMultiAttendee) {
           const batchPending = finalizeBatchResult(await submitBatchRegistration({
             paymentReference: reference,
             paymentMethod: 'mobile_money',
@@ -784,7 +877,7 @@ export default function EventRegistrationFlow({
       const verifyStatus = extractLencoPaymentStatus(verifyJson);
       const paid = verifyRes.ok && verifyJson?.ok && ['successful', 'success', 'paid', 'completed'].includes(verifyStatus);
 
-      if (isInPerson) {
+      if (allowsMultiAttendee) {
         setResult(finalizeBatchResult(await submitBatchRegistration({
           paymentReference: lencoReference,
           paymentMethod: 'card',
@@ -835,48 +928,6 @@ export default function EventRegistrationFlow({
     setRegistrationStep('details');
     onClose();
   };
-
-  if (!loading && !result?.success && !isInPerson && selfRegistration) {
-    return (
-      <RegistrationShell {...shellProps({ size: 'sm' })}>
-        <div className="text-center py-4">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-cyan-50 text-cyan-600 mb-4">
-            <CheckCircle size={32} />
-          </div>
-          <h2 className="text-xl font-bold text-navy-900 mb-1">You&rsquo;re already registered</h2>
-          <p className="text-sm text-navy-500 mb-5">
-            {selfRegistration.payment_status === 'paid'
-              ? 'Payment is complete and your subscription is active.'
-              : selfRegistration.payment_status === 'pending'
-                ? 'Your registration was created and payment is still pending confirmation.'
-                : 'Your registration is already on record for this event.'}
-          </p>
-
-          <div className="bg-navy-50 rounded-xl p-4 text-left space-y-2 mb-6">
-            <div className="flex justify-between text-sm">
-              <span className="text-navy-500">Reference</span>
-              <span className="font-mono font-semibold text-navy-900">{selfRegistration.reference_code}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-navy-500">Status</span>
-              <span className="font-medium text-green-700 capitalize">{selfRegistration.status}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-navy-500">Payment</span>
-              <span className="font-medium text-navy-700 capitalize">{String(selfRegistration.payment_status || '').replace('_', ' ')}</span>
-            </div>
-          </div>
-
-          <button
-            onClick={handleClose}
-            className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-medium py-3 rounded-xl transition-colors"
-          >
-            Done
-          </button>
-        </div>
-      </RegistrationShell>
-    );
-  }
 
   // ── Success screen ────────────────────────────────────────────────────────
   if (result?.success) {
@@ -942,24 +993,25 @@ export default function EventRegistrationFlow({
               )}
             </div>
 
-            {isInPerson && batchRegs.length > 0 && (
-              <div className="mb-6">
-                <p className="text-xs font-semibold uppercase tracking-wide text-navy-400 mb-3">
-                  Entry QR {batchRegs.length > 1 ? 'codes' : 'code'}
+            {allowsMultiAttendee && batchRegs.length > 0 && (
+              <div className="mb-6 text-left">
+                <p className="text-xs font-semibold uppercase tracking-wide text-navy-400 mb-3 text-center">
+                  Your entry ticket{batchRegs.length > 1 ? 's' : ''}
                 </p>
-                <div className={`grid gap-4 ${batchRegs.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+                <div
+                  className={`grid gap-4 max-h-[420px] overflow-y-auto p-3 rounded-xl ${batchRegs.length > 1 ? 'grid-cols-1' : 'grid-cols-1'}`}
+                  style={{ backgroundColor: RECEIPT_LIGHT_FILL }}
+                >
                   {batchRegs.map((row) => (
-                    <div key={`qr-${row.id || row.reference_code}`} className="rounded-xl border border-navy-100 bg-white p-3">
-                      <TicketQrDisplay
-                        referenceCode={row.reference_code}
-                        attendeeName={String(row.booked_for_name || '').trim() || 'You'}
-                        size={140}
-                      />
-                    </div>
+                    <SuccessTicketPreview
+                      key={row.id || row.reference_code}
+                      registration={row}
+                      event={event}
+                    />
                   ))}
                 </div>
-                <p className="text-[11px] text-navy-500 mt-3">
-                  Each ticket has its own QR code. Show the matching code at the gate for entry.
+                <p className="text-[11px] text-navy-500 mt-3 text-center">
+                  Show the QR code at the gate for entry. Ticket emails were sent when payment is confirmed.
                 </p>
               </div>
             )}
@@ -1050,12 +1102,22 @@ export default function EventRegistrationFlow({
     : 'Using fallback FX rate';
 
   const showDiscountBreakdown = Boolean(
-    couponPreviewOk && getNumericAmount(appliedCouponMeta.preview.discount_zmw) > 0.005,
+    couponPreviewOk && (
+      getNumericAmount(appliedCouponMeta.preview.discount_zmw) > 0.005
+      || getNumericAmount(appliedCouponMeta.preview.volume_discount_zmw) > 0.005
+      || getNumericAmount(appliedCouponMeta.preview.total_discount_zmw) > 0.005
+    ),
   );
+  const volumeDiscountEach = couponPreviewOk
+    ? getNumericAmount(appliedCouponMeta.preview.volume_discount_zmw)
+    : 0;
+  const couponDiscountEach = couponPreviewOk
+    ? getNumericAmount(appliedCouponMeta.preview.coupon_discount_zmw ?? appliedCouponMeta.preview.discount_zmw)
+    : 0;
   const displayPriceTotal = getPriceBoth(totalZmwDisplay, Boolean(!event.is_free && totalZmwDisplay <= 0.005));
   const displayPriceUnit = getPriceBoth(unitZmwDisplay, Boolean(!event.is_free && unitZmwDisplay <= 0.005));
-  const guestValidation = isInPerson ? validateGuestAttendees(guestAttendees) : { ok: true };
-  const canSubmitTickets = !isInPerson || (ticketCount >= 1 && guestValidation.ok);
+  const guestValidation = allowsMultiAttendee ? validateGuestAttendees(guestAttendees) : { ok: true };
+  const canSubmitTickets = !allowsMultiAttendee || (ticketCount >= 1 && guestValidation.ok);
   const confirmLabel = event.is_free || isFullyWaived
     ? 'Confirm Registration'
     : (needsPaymentStage && !onPaymentStep ? 'Continue to Payment' : 'Proceed to Payment');
@@ -1152,7 +1214,7 @@ export default function EventRegistrationFlow({
         Registration type: <span className="font-semibold text-cyan-700">Subscription</span>
       </div>
 
-      {isInPerson && !onPaymentStep && (
+      {allowsMultiAttendee && !onPaymentStep && (
         <div className="mb-4 space-y-4">
           <label className="flex items-center gap-2 text-sm font-medium text-navy-700 cursor-pointer">
             <input
@@ -1170,7 +1232,7 @@ export default function EventRegistrationFlow({
 
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-3">
-              <label className="block text-sm font-medium text-navy-700">Additional guests</label>
+              <label className="block text-sm font-medium text-navy-700">Additional attendees</label>
               <div className="inline-flex items-center rounded-xl border border-navy-200 overflow-hidden">
                 <button
                   type="button"
@@ -1202,7 +1264,7 @@ export default function EventRegistrationFlow({
               {guestAttendees.map((guest, index) => (
                 <div key={guest.key} className="rounded-xl border border-navy-100 bg-navy-50/60 p-3 space-y-2">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-semibold text-navy-600">Guest {index + 1}</p>
+                    <p className="text-xs font-semibold text-navy-600">Attendee {index + 1}</p>
                     <button
                       type="button"
                       onClick={() => setGuestAttendees((prev) => prev.filter((_, i) => i !== index))}
@@ -1212,6 +1274,39 @@ export default function EventRegistrationFlow({
                       <X size={14} />
                     </button>
                   </div>
+                  <div className="grid sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-medium text-navy-600 mb-1">Attendee type</label>
+                      <select
+                        value={guest.attendee_type || 'adult'}
+                        onChange={(e) => setGuestAttendees((prev) => prev.map((row, i) => (
+                          i === index ? { ...row, attendee_type: e.target.value } : row
+                        )))}
+                        className="w-full px-3 py-2.5 rounded-xl border border-navy-200 bg-white text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                      >
+                        <option value="adult">Adult</option>
+                        <option value="child">Child</option>
+                      </select>
+                    </div>
+                    {normalizeAttendeeType(guest.attendee_type) === 'child' && (
+                      <div>
+                        <label className="block text-xs font-medium text-navy-600 mb-1">Your relationship <span className="text-red-500">*</span></label>
+                        <select
+                          value={guest.relation || ''}
+                          onChange={(e) => setGuestAttendees((prev) => prev.map((row, i) => (
+                            i === index ? { ...row, relation: e.target.value } : row
+                          )))}
+                          className="w-full px-3 py-2.5 rounded-xl border border-navy-200 bg-white text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                        >
+                          <option value="">Select…</option>
+                          <option value="parent">Parent</option>
+                          <option value="guardian">Guardian</option>
+                          <option value="teacher">Teacher</option>
+                          <option value="other">Other</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
                   <div>
                     <label className="block text-xs font-medium text-navy-600 mb-1">Full name <span className="text-red-500">*</span></label>
                     <input
@@ -1220,25 +1315,55 @@ export default function EventRegistrationFlow({
                       onChange={(e) => setGuestAttendees((prev) => prev.map((row, i) => (
                         i === index ? { ...row, name: e.target.value } : row
                       )))}
-                      placeholder="Guest full name"
+                      placeholder={normalizeAttendeeType(guest.attendee_type) === 'child' ? 'Child full name' : 'Attendee full name'}
                       className="w-full px-4 py-2.5 rounded-xl border border-navy-200 bg-white text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                     />
                   </div>
                   <div className="grid sm:grid-cols-2 gap-2">
                     <div>
-                      <label className="block text-xs font-medium text-navy-600 mb-1">Email <span className="text-navy-400 font-normal">(optional)</span></label>
+                      <label className="block text-xs font-medium text-navy-600 mb-1">
+                        Email
+                        {normalizeAttendeeType(guest.attendee_type) === 'child' ? (
+                          <span className="text-navy-400 font-normal"> (not required for children)</span>
+                        ) : (
+                          <span className="text-navy-400 font-normal"> (optional)</span>
+                        )}
+                      </label>
                       <input
                         type="email"
                         value={guest.email}
                         onChange={(e) => setGuestAttendees((prev) => prev.map((row, i) => (
-                          i === index ? { ...row, email: e.target.value } : row
+                          i === index ? { ...row, email: e.target.value, lookupHint: '' } : row
                         )))}
+                        onBlur={async () => {
+                          const name = await lookupGuestEmail(
+                            guest.email,
+                            API_BASE,
+                            getSessionAuthHeaders(),
+                          );
+                          if (!name) return;
+                          setGuestAttendees((prev) => prev.map((row, i) => (
+                            i === index
+                              ? {
+                                ...row,
+                                name: row.name.trim() ? row.name : name,
+                                lookupHint: 'Existing member',
+                              }
+                              : row
+                          )));
+                        }}
                         placeholder="guest@email.com"
                         className="w-full px-4 py-2.5 rounded-xl border border-navy-200 bg-white text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                       />
+                      {guest.lookupHint && (
+                        <p className="text-[11px] text-cyan-700 mt-1">{guest.lookupHint}</p>
+                      )}
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-navy-600 mb-1">Phone <span className="text-navy-400 font-normal">(optional)</span></label>
+                      <label className="block text-xs font-medium text-navy-600 mb-1">
+                        {normalizeAttendeeType(guest.attendee_type) === 'child' ? 'Guardian phone' : 'Phone'}
+                        <span className="text-navy-400 font-normal"> (optional)</span>
+                      </label>
                       <input
                         type="tel"
                         value={guest.phone}
@@ -1250,6 +1375,11 @@ export default function EventRegistrationFlow({
                       />
                     </div>
                   </div>
+                  {normalizeAttendeeType(guest.attendee_type) === 'child' && (
+                    <p className="text-[11px] text-navy-500">
+                      Tickets and certificates for children are sent to your account email.
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
@@ -1314,7 +1444,7 @@ export default function EventRegistrationFlow({
           </div>
         ) : (
           <>
-            {isInPerson && ticketCount > 1 && (
+            {allowsMultiAttendee && ticketCount > 1 && (
               <div className="flex items-center justify-between gap-4">
                 <span className="text-navy-600">Tickets</span>
                 <span className="font-medium text-navy-800 tabular-nums">{ticketCount} × {displayPriceUnit.zmw}</span>
@@ -1328,12 +1458,18 @@ export default function EventRegistrationFlow({
             </div>
             {showDiscountBreakdown && (
               <>
-                <div className="flex items-center justify-between gap-4 text-emerald-700">
-                  <span>Discount ({couponLiveNorm}){ticketCount > 1 ? ' (each)' : ''}</span>
-                  <span className="font-semibold tabular-nums">
-                    -ZMW {getNumericAmount(appliedCouponMeta.preview.discount_zmw).toFixed(2)}
-                  </span>
-                </div>
+                {volumeDiscountEach > 0.005 && (
+                  <div className="flex items-center justify-between gap-4 text-emerald-700">
+                    <span>Group discount{ticketCount > 1 ? ' (each)' : ''}</span>
+                    <span className="font-semibold tabular-nums">-ZMW {volumeDiscountEach.toFixed(2)}</span>
+                  </div>
+                )}
+                {couponDiscountEach > 0.005 && couponLiveNorm && (
+                  <div className="flex items-center justify-between gap-4 text-emerald-700">
+                    <span>Coupon ({couponLiveNorm}){ticketCount > 1 ? ' (each)' : ''}</span>
+                    <span className="font-semibold tabular-nums">-ZMW {couponDiscountEach.toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between gap-4 pt-1 border-t border-navy-100">
                   <span className="text-navy-800 font-medium">You pay</span>
                   <span className={`font-semibold tabular-nums ${totalZmwDisplay <= 0.005 ? 'text-green-600' : 'text-navy-900'}`}>
@@ -1424,7 +1560,7 @@ export default function EventRegistrationFlow({
         </div>
       )}
 
-      {onPaymentStep && isInPerson && ticketCount > 0 && (
+      {onPaymentStep && allowsMultiAttendee && ticketCount > 0 && (
         <div className="mb-4 rounded-xl border border-navy-100 bg-navy-50 px-4 py-3 text-sm space-y-1">
           <p className="text-navy-500">Order summary</p>
           <p className="font-medium text-navy-900">{ticketCount} ticket{ticketCount === 1 ? '' : 's'} · {displayPriceTotal.zmw}</p>

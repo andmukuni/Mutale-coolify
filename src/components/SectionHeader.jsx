@@ -7,7 +7,7 @@ export default function SectionHeader({ label, title, description, light = false
   return (
     <div className={`mb-10 ${center ? 'text-center' : ''}`}>
       <h2 className="text-3xl sm:text-4xl font-bold">
-        <span className={light ? 'text-white' : 'text-[#141D45]'}>{firstWord}</span>
+        <span className={light ? 'text-white' : 'text-navy-900'}>{firstWord}</span>
         {restWords && <span className="text-[#00A79D]"> {restWords}</span>}
       </h2>
       <span className={`mt-3 block h-1 w-12 rounded-full bg-[#E76869] ${center ? 'mx-auto' : ''}`} />

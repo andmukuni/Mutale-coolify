@@ -9,6 +9,8 @@ import EventPublicQrCard from '../../components/admin/EventPublicQrCard';
 import { formatPrice, isEventPast } from '../../utils/eventServices';
 import { getApiBase } from '../../utils/apiBase';
 import { getAdminAuthHeaders } from '../../utils/authHeaders';
+import { prepareEventCoverImage } from '../../utils/prepareEventCoverImage';
+import EventSessionsPanel from '../../components/admin/event/EventSessionsPanel';
 
 const API_BASE = getApiBase();
 
@@ -102,6 +104,12 @@ const emptyEvent = {
   featured_speakers: [],
   partners: [],
   forum_enabled: false,
+  forum_pre_moderated: false,
+  volume_discount_enabled: false,
+  volume_discount_min_qty: 5,
+  volume_discount_type: 'percent',
+  volume_discount_value: 10,
+  certificate_requires_all_sessions: false,
 };
 
 function buildCloneForm(sourceEvent = {}) {
@@ -150,6 +158,7 @@ export default function EventFormPage() {
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [photoError, setPhotoError] = useState('');
+  const [coverUploadProgress, setCoverUploadProgress] = useState(null);
   const [currentStep, setCurrentStep] = useState(0);
   const [stepError, setStepError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -273,8 +282,9 @@ export default function EventFormPage() {
     });
   };
 
-  const handleCoverUpload = (e) => {
+  const handleCoverUpload = async (e) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
@@ -282,20 +292,20 @@ export default function EventFormPage() {
       return;
     }
 
-    const MAX_BYTES = 1.5 * 1024 * 1024; // 1.5 MB — keeps base64 payload under 2 MB
-    if (file.size > MAX_BYTES) {
-      setPhotoError(`Image is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Please resize it to under 1.5 MB before uploading, or paste an image URL instead.`);
-      e.target.value = '';
-      return;
-    }
+    setPhotoError('');
+    setCoverUploadProgress(0);
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      setForm((prev) => ({ ...prev, cover_image: String(reader.result || '') }));
-      setPhotoError('');
+    try {
+      const { dataUrl } = await prepareEventCoverImage(file, {
+        onProgress: setCoverUploadProgress,
+      });
+      setForm((prev) => ({ ...prev, cover_image: dataUrl }));
       if (stepError) setStepError('');
-    };
-    reader.readAsDataURL(file);
+    } catch (err) {
+      setPhotoError(err?.message || 'Could not process the selected image. Try another file or paste an image URL.');
+    } finally {
+      setCoverUploadProgress(null);
+    }
   };
 
   const validateStep = (stepIndex) => {
@@ -566,11 +576,26 @@ export default function EventFormPage() {
                   type="file"
                   accept="image/*"
                   onChange={handleCoverUpload}
-                  className="block w-full text-sm text-navy-600 file:mr-4 file:rounded-lg file:border-0 file:bg-cyan-600 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-cyan-500"
+                  disabled={coverUploadProgress != null}
+                  className="block w-full text-sm text-navy-600 file:mr-4 file:rounded-lg file:border-0 file:bg-cyan-600 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-cyan-500 disabled:opacity-60"
                 />
                 <p className="mt-1 text-xs text-navy-400">
-                  Recommended: <span className="font-medium">1200 × 630 px</span> (16:9) · JPG or WebP · Max <span className="font-medium">1.5 MB</span>
+                  Any size accepted — we optimize to <span className="font-medium">1200 × 630 px</span> (16:9) · JPG · under 2 MB automatically.
                 </p>
+                {coverUploadProgress != null && (
+                  <div className="mt-2.5" aria-live="polite">
+                    <div className="flex items-center justify-between text-xs text-navy-500 mb-1">
+                      <span>Optimizing image…</span>
+                      <span className="tabular-nums font-medium text-cyan-700">{coverUploadProgress}%</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-navy-100 overflow-hidden">
+                      <div
+                        className="h-full bg-cyan-600 transition-[width] duration-200 ease-out"
+                        style={{ width: `${coverUploadProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
                 {photoError && <p className="mt-1 text-xs text-red-500">{photoError}</p>}
               </div>
 
@@ -762,6 +787,81 @@ export default function EventFormPage() {
               <p className="text-xs text-navy-400 -mt-2">
                 Registered attendees can discuss this event in a dedicated forum.
               </p>
+
+              {form.forum_enabled && (
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    name="forum_pre_moderated"
+                    checked={Boolean(form.forum_pre_moderated)}
+                    onChange={handleChange}
+                    className="h-4 w-4 rounded border-navy-300 text-cyan-600 focus:ring-cyan-500"
+                  />
+                  <span className="text-sm font-medium text-navy-700">Require admin approval before posts go live</span>
+                </label>
+              )}
+
+              {!form.is_free && (
+                <div className="rounded-xl border border-navy-100 p-4 space-y-3 bg-navy-50/40">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      name="volume_discount_enabled"
+                      checked={Boolean(form.volume_discount_enabled)}
+                      onChange={handleChange}
+                      className="h-4 w-4 rounded border-navy-300 text-cyan-600 focus:ring-cyan-500"
+                    />
+                    <span className="text-sm font-medium text-navy-700">Group volume discount</span>
+                  </label>
+                  {form.volume_discount_enabled && (
+                    <div className="grid sm:grid-cols-3 gap-3">
+                      <FormField
+                        label="Minimum tickets"
+                        name="volume_discount_min_qty"
+                        type="number"
+                        value={form.volume_discount_min_qty}
+                        onChange={handleChange}
+                      />
+                      <FormField
+                        label="Discount type"
+                        name="volume_discount_type"
+                        type="select"
+                        value={form.volume_discount_type}
+                        onChange={handleChange}
+                        options={[
+                          { value: 'percent', label: 'Percent' },
+                          { value: 'fixed', label: 'Fixed (ZMW)' },
+                        ]}
+                      />
+                      <FormField
+                        label="Discount value"
+                        name="volume_discount_value"
+                        type="number"
+                        value={form.volume_discount_value}
+                        onChange={handleChange}
+                      />
+                    </div>
+                  )}
+                  <p className="text-xs text-navy-400">Volume discount applies to list price; coupon codes apply to the remainder.</p>
+                </div>
+              )}
+
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="certificate_requires_all_sessions"
+                  checked={Boolean(form.certificate_requires_all_sessions)}
+                  onChange={handleChange}
+                  className="h-4 w-4 rounded border-navy-300 text-cyan-600 focus:ring-cyan-500"
+                />
+                <span className="text-sm font-medium text-navy-700">Require attendance at all sessions before certificate issue</span>
+              </label>
+
+              {isEditing && (
+                <div className="pt-2 border-t border-navy-100">
+                  <EventSessionsPanel eventId={form.id} />
+                </div>
+              )}
 
               <div className="grid sm:grid-cols-3 gap-4">
                 <FormField label="Organizer Name" name="organizer_name" value={form.organizer_name} onChange={handleChange} placeholder="Your name" />

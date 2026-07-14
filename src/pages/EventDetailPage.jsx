@@ -12,7 +12,7 @@ import {
   checkEventAvailability,
   getEventDisplayStatus,
   isEventPubliclyVisible,
-  isInPersonEvent,
+  allowsMultiAttendeeRegistration,
 } from '../utils/eventServices';
 import { formatDate, formatTime } from '../utils/helpers';
 import { resolveUserBearerToken } from '../utils/authHeaders';
@@ -71,7 +71,7 @@ export default function EventDetailPage() {
   const inferredMode =
     event.event_mode
     || (String(event.location || '').toLowerCase().includes('virtual') ? 'virtual' : 'in_person');
-  const isInPerson = isInPersonEvent(event);
+  const allowsMultiAttendee = allowsMultiAttendeeRegistration(event);
 
   const startAt = getEventStartDateTime(event);
   const countdown = getCountdown(startAt, now);
@@ -81,8 +81,8 @@ export default function EventDetailPage() {
     (s) => speakerHasAnyDetail(s),
   );
 
-  const canShowRegisterCta = listingAvailability.canBook && canRegisterMore && (!userAlreadyRegistered || isInPerson);
-  const registerCtaLabel = isInPerson && userAlreadyRegistered ? 'Buy More Tickets' : 'Register Now';
+  const canShowRegisterCta = listingAvailability.canBook && canRegisterMore && (!userAlreadyRegistered || allowsMultiAttendee);
+  const registerCtaLabel = userAlreadyRegistered && allowsMultiAttendee ? 'Buy More Tickets' : 'Register Now';
 
   const handleBookClick = () => {
     if (!isUserAuthenticated || !resolveUserBearerToken()) {
@@ -380,8 +380,8 @@ export default function EventDetailPage() {
                 <div className="space-y-2 mb-4">
                   <div className="flex items-center gap-2 p-3.5 bg-green-50 border border-green-200 rounded-xl text-sm text-green-700">
                     <CheckCircle size={16} className="shrink-0" />
-                    {isInPerson
-                      ? 'You have tickets for this event. You can buy more for guests anytime.'
+                    {allowsMultiAttendee
+                      ? 'You have tickets for this event. You can buy more for family or guests anytime.'
                       : 'You\u2019re already registered for this event.'}
                   </div>
                   {event.forum_enabled && (

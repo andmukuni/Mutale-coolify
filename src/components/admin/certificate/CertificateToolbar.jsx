@@ -15,6 +15,13 @@ const PLACEHOLDER_BUTTONS = [
   { key: 'certificate_number', label: 'Certificate #', icon: Hash },
 ];
 
+const BADGE_PLACEHOLDER_BUTTONS = [
+  { key: 'attendee_name', label: 'Attendee Name', icon: User },
+  { key: 'event_name', label: 'Event Title', icon: Type },
+  { key: 'event_date', label: 'Event Date', icon: Calendar },
+  { key: 'reference_code', label: 'Ticket Reference', icon: Hash },
+];
+
 function DraggableChip({ label, icon: Icon, payload, onQuickAdd }) {
   const handleDragStart = (e) => {
     e.dataTransfer.setData('application/x-cert-element', JSON.stringify(payload));
@@ -49,7 +56,10 @@ export default function CertificateToolbar({
   onOrientationChange,
   canvas,
   sampleData = {},
+  mode = 'certificate',
 }) {
+  const isBadgeMode = mode === 'badge';
+  const placeholderButtons = isBadgeMode ? BADGE_PLACEHOLDER_BUTTONS : PLACEHOLDER_BUTTONS;
   const addFromPayload = (payload) => {
     if (payload.elementType === 'text') {
       onAddElement?.(createDesignElement('text', { content: payload.content || 'New text', canvas }));
@@ -66,36 +76,48 @@ export default function CertificateToolbar({
 
   return (
     <div className="space-y-5">
-      <CertificatePresetPicker
-        value={presetId}
-        onChange={onPresetChange}
-      />
+      {!isBadgeMode && (
+        <CertificatePresetPicker
+          value={presetId}
+          onChange={onPresetChange}
+        />
+      )}
 
       <CertificateBackgroundPicker
         value={backgroundTheme}
         onChange={onBackgroundThemeChange}
       />
 
-      <CertificateSealPicker
-        value={sealId}
-        onChange={onSealChange}
-      />
+      {!isBadgeMode && (
+        <CertificateSealPicker
+          value={sealId}
+          onChange={onSealChange}
+        />
+      )}
 
       <div>
         <p className="text-xs font-semibold text-navy-500 uppercase tracking-wide mb-2">Page</p>
-        <select
-          value={orientation}
-          onChange={(e) => onOrientationChange?.(e.target.value)}
-          className="text-sm px-3 py-2 rounded-lg border border-navy-200 bg-white w-full"
-        >
-          <option value="landscape">Landscape A4</option>
-          <option value="portrait">Portrait A4</option>
-        </select>
+        {isBadgeMode ? (
+          <p className="text-sm px-3 py-2 rounded-lg border border-navy-200 bg-navy-50 text-navy-700">
+            6×8 in · Portrait
+          </p>
+        ) : (
+          <select
+            value={orientation}
+            onChange={(e) => onOrientationChange?.(e.target.value)}
+            className="text-sm px-3 py-2 rounded-lg border border-navy-200 bg-white w-full"
+          >
+            <option value="landscape">Landscape A4</option>
+            <option value="portrait">Portrait A4</option>
+          </select>
+        )}
       </div>
 
       <div>
         <p className="text-xs font-semibold text-navy-500 uppercase tracking-wide mb-2">Drag onto canvas</p>
-        <p className="text-[11px] text-navy-400 mb-2">Drag a field to the certificate, or click to add at center.</p>
+        <p className="text-[11px] text-navy-400 mb-2">
+          Drag a field to the {isBadgeMode ? 'badge' : 'certificate'}, or click to add at center.
+        </p>
         <div className="flex flex-wrap gap-2">
           <DraggableChip
             label="Text"
@@ -103,7 +125,7 @@ export default function CertificateToolbar({
             payload={{ elementType: 'text', content: 'New text' }}
             onQuickAdd={addFromPayload}
           />
-          {PLACEHOLDER_BUTTONS.map(({ key, label, icon }) => (
+          {placeholderButtons.map(({ key, label, icon }) => (
             <DraggableChip
               key={key}
               label={label}

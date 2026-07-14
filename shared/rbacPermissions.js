@@ -10,6 +10,7 @@ export const ADMIN_PERMISSIONS = [
   { key: 'events.manage', name: 'Manage events', group: 'Events' },
   { key: 'certificates.manage', name: 'Manage certificates', group: 'Events' },
   { key: 'coupons.manage', name: 'Manage coupons', group: 'Events' },
+  { key: 'forum.moderate', name: 'Moderate event forums', group: 'Events' },
   { key: 'blog.view', name: 'View blog', group: 'Content' },
   { key: 'blog.manage', name: 'Manage blog', group: 'Content' },
   { key: 'publications.view', name: 'View publications', group: 'Content' },
@@ -47,7 +48,7 @@ export const DEFAULT_ADMIN_ROLES = [
     is_system: true,
     permissions: [
       'dashboard.view',
-      'events.view', 'events.manage', 'certificates.manage', 'coupons.manage',
+      'events.view', 'events.manage', 'certificates.manage', 'coupons.manage', 'forum.moderate',
       'blog.view', 'blog.manage',
       'publications.view', 'publications.manage',
       'shop.view', 'shop.manage', 'shop.orders',

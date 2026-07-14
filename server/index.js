@@ -22,6 +22,15 @@ import {
   deactivateTemplate,
   generateTemplatePreviewPdf,
 } from './certificateTemplateService.js';
+import {
+  getBadgeTemplateForEvent,
+  activateOrCreateBadgeTemplate,
+  saveBadgeTemplateDraft,
+  publishBadgeTemplate,
+  generateBadgeTemplatePreviewPdf,
+  generateEventBadgePrintPdf,
+} from './badgeTemplateService.js';
+import { resolveEventUnitPricing, roundMoney2 as roundPricing2 } from '../shared/eventPricing.js';
 import { isValidCertificatePdfBuffer } from '../shared/certificatePdf.js';
 import {
   buildReceiptAttachmentIfEligible,
@@ -36,6 +45,14 @@ import {
   CV_PRODUCT_EVENT_ID,
   SHOP_ORDER_EVENT_ID,
 } from './receiptService.js';
+import {
+  sendTicketEmailsForRegistration,
+  maybeSendTicketEmailsOnSettlement,
+  generateRegistrationTicketBuffer,
+} from './ticketService.js';
+import { buildTicketFilename, isValidTicketPdfBuffer } from '../shared/ticketPdf.js';
+import { buildTicketViewModel, isTicketPaymentEligible } from '../shared/ticketViewModel.js';
+import { loadReceiptLogoDataUrl, loadWhiteLogoDataUrl } from '../shared/receiptLogoAsset.js';
 import { mergeReceiptRecords } from '../shared/receiptHelpers.js';
 import { buildCvStrengthSuggestions } from '../shared/cvStrengthSuggestions.js';
 import { normalizeCvSections, parseCvSectionsFromDb } from '../shared/cvProfileSections.js';
@@ -361,11 +378,14 @@ const EVENT_REGISTRATION_FIELDS = [
   'booked_for_relation',
   'booked_for_email',
   'booked_for_phone',
+  'attendee_type',
+  'guardian_phone',
   'attendee_slot_key',
   'coupon_id',
   'coupon_code',
   'list_price_zmw',
   'discount_zmw',
+  'volume_discount_zmw',
   'notes',
 ];
 
@@ -387,7 +407,21 @@ function normalizeGuestAttendeeInput(raw = {}) {
   const booked_for_name = String(raw.booked_for_name || raw.name || '').trim();
   const booked_for_email = String(raw.booked_for_email || raw.email || '').trim().toLowerCase() || null;
   const booked_for_phone = String(raw.booked_for_phone || raw.phone || '').trim() || null;
-  return { booked_for_name, booked_for_email, booked_for_phone };
+  const attendee_type = String(raw.attendee_type || raw.attendeeType || 'adult').trim().toLowerCase();
+  const normalizedType = attendee_type === 'child' ? 'child' : 'adult';
+  const booked_for_relation = String(raw.booked_for_relation || raw.relation || '').trim().toLowerCase() || null;
+  const guardianRaw = String(raw.guardian_phone || raw.guardianPhone || '').trim();
+  const guardian_phone = normalizedType === 'child'
+    ? (guardianRaw || booked_for_phone || null)
+    : (guardianRaw || null);
+  return {
+    booked_for_name,
+    booked_for_email,
+    booked_for_phone,
+    attendee_type: normalizedType,
+    booked_for_relation,
+    guardian_phone,
+  };
 }
 
 function parseRegistrationQuantity(raw = 1) {
@@ -432,6 +466,43 @@ async function countUserCouponRedemptions(queryFn, couponId, userId) {
     [couponId, String(userId), 'cancelled'],
   );
   return Number(cnt?.n || 0);
+}
+
+async function resolveEventBookingPricing(poolOrConn, eventRow, rawCode = '', userId = null, quantity = 1, opts = {}) {
+  const couponResolved = await resolveEventCouponForBooking(
+    poolOrConn,
+    eventRow,
+    rawCode,
+    userId,
+    opts,
+  );
+  if (!couponResolved.ok) {
+    return { ok: false, error: couponResolved.error };
+  }
+
+  const qty = parseRegistrationQuantity(quantity);
+  const unitPricing = resolveEventUnitPricing(eventRow, {
+    listZmw: couponResolved.list_zmw,
+    couponDiscountZmw: couponResolved.discount_zmw,
+    quantity: qty,
+  });
+
+  return {
+    ok: true,
+    error: null,
+    list_zmw: unitPricing.list_zmw,
+    volume_discount_zmw: unitPricing.volume_discount_zmw,
+    coupon_discount_zmw: unitPricing.coupon_discount_zmw,
+    discount_zmw: unitPricing.discount_zmw,
+    final_zmw: unitPricing.final_zmw,
+    volume_discount_applied: unitPricing.volume_discount_applied,
+    ticket_count: qty,
+    total_final_zmw: roundMoney2(unitPricing.final_zmw * qty),
+    total_discount_zmw: roundMoney2(unitPricing.discount_zmw * qty),
+    total_volume_discount_zmw: roundMoney2(unitPricing.volume_discount_zmw * qty),
+    total_coupon_discount_zmw: roundMoney2(unitPricing.coupon_discount_zmw * qty),
+    coupon: couponResolved.coupon,
+  };
 }
 
 /**
@@ -1302,6 +1373,8 @@ function isAdminProtectedRoute(req) {
   if (/^\/api\/events\/[^/]+\/daily\/join-auth$/.test(routePath) && method === 'POST') return false;
   if (/^\/api\/events\/[^/]+\/video\/join-auth$/.test(routePath) && method === 'POST') return false;
   if (/^\/api\/events\/[^/]+\/coupon-preview$/.test(routePath) && method === 'POST') return false;
+  if (/^\/api\/events\/[^/]+\/forum\/topics$/.test(routePath) && method === 'POST') return false;
+  if (/^\/api\/events\/[^/]+\/forum\/topics\/[^/]+\/replies$/.test(routePath) && method === 'POST') return false;
   if (/^\/api\/certificates\/verify\/[^/]+$/.test(routePath) && method === 'GET') return false;
   if (routePath === '/api/partner-logos' && method === 'GET') {
     const all = String(req.query?.all || '').toLowerCase();
@@ -2158,6 +2231,8 @@ function normalizeRegistrationPayload(payload = {}, idOverride) {
     booked_for_relation: String(payload.booked_for_relation || '').trim().toLowerCase() || null,
     booked_for_email: String(payload.booked_for_email || '').trim().toLowerCase() || null,
     booked_for_phone: String(payload.booked_for_phone || '').trim() || null,
+    attendee_type: String(payload.attendee_type || 'adult').trim().toLowerCase() === 'child' ? 'child' : 'adult',
+    guardian_phone: String(payload.guardian_phone || '').trim() || null,
     attendee_slot_key: payload.attendee_slot_key
       ? String(payload.attendee_slot_key).trim().slice(0, 160)
       : deriveAttendeeSlotKey(payload.booked_for_name, payload.attendee_slot_index),
@@ -2167,6 +2242,7 @@ function normalizeRegistrationPayload(payload = {}, idOverride) {
       ? roundMoney2(toNumber(payload.list_price_zmw, 0))
       : null,
     discount_zmw: roundMoney2(toNumber(payload.discount_zmw, 0)),
+    volume_discount_zmw: roundMoney2(toNumber(payload.volume_discount_zmw, 0)),
     notes: String(payload.notes || '').trim(),
   };
 }
@@ -2444,6 +2520,10 @@ function mapDbForumTopic(row) {
     body: row.body || '',
     pinned: Boolean(row.pinned),
     hidden: Boolean(row.hidden),
+    moderation_status: String(row.moderation_status || 'approved').toLowerCase(),
+    moderated_at: row.moderated_at,
+    moderated_by: row.moderated_by || null,
+    moderation_note: row.moderation_note || '',
     reply_count: Number(row.reply_count || 0),
     last_activity_at: row.last_activity_at,
     created_at: row.created_at,
@@ -2461,6 +2541,26 @@ function mapDbForumReply(row) {
     user_name: row.user_name || '',
     body: row.body || '',
     hidden: Boolean(row.hidden),
+    moderation_status: String(row.moderation_status || 'approved').toLowerCase(),
+    moderated_at: row.moderated_at,
+    moderated_by: row.moderated_by || null,
+    moderation_note: row.moderation_note || '',
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
+function mapDbEventSession(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    event_id: row.event_id,
+    title: row.title || '',
+    session_date: row.session_date,
+    start_time: row.start_time,
+    end_time: row.end_time,
+    sort_order: Number(row.sort_order || 0),
+    meeting_url: row.meeting_url || '',
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -2480,17 +2580,22 @@ async function loadEventForForum(eventId) {
 }
 
 async function userIsRegisteredForEventForum(eventId, userId, userEmail) {
+  const uid = String(userId || '').trim();
+  const email = String(userEmail || '').trim().toLowerCase();
+  if (!uid && !email) return false;
+
   const [rows] = await pool.query(
     `SELECT id FROM event_registrations
-     WHERE event_id = ? AND user_id = ? AND user_email = ? AND status <> 'cancelled'
+     WHERE event_id = ? AND status <> 'cancelled'
        AND LOWER(COALESCE(payment_status, '')) IN ('paid', 'not_required', 'waived')
+       AND (user_id = ? OR LOWER(user_email) = ?)
      LIMIT 1`,
-    [eventId, userId, userEmail],
+    [eventId, uid, email],
   );
   return Boolean(rows?.[0]);
 }
 
-async function assertForumWriteAccess(eventId, authUser) {
+async function assertForumWriteAccess(eventId, authUser, claims = {}) {
   const event = await loadEventForForum(eventId);
   if (!event) {
     return { ok: false, status: 404, message: 'Event not found.' };
@@ -2503,12 +2608,52 @@ async function assertForumWriteAccess(eventId, authUser) {
   if (!userId || !userEmail) {
     return { ok: false, status: 401, message: 'Authentication required.' };
   }
-  const adminAuth = authUser?.role === 'admin';
+  const adminAuth = authUser?.role === 'admin'
+    || claims?.admin === true
+    || (Array.isArray(claims?.permissions) && claims.permissions.length > 0);
   const registered = adminAuth || await userIsRegisteredForEventForum(eventId, userId, userEmail);
   if (!registered) {
     return { ok: false, status: 403, message: 'Register for this event to join the forum.' };
   }
-  return { ok: true, event, userId, userEmail, userName: String(authUser?.name || '').trim() || 'Attendee' };
+  return { ok: true, event, userId, userEmail, userName: String(authUser?.name || '').trim() || 'Attendee', adminAuth };
+}
+
+function userCanModerateForum(req) {
+  const adminAuth = getAdminAuth(req);
+  if (!adminAuth.ok) return false;
+  const perms = adminAuth.claims?.permissions || [];
+  if (adminAuth.claims?.role === 'super_admin') return true;
+  if (Array.isArray(perms) && perms.includes('forum.moderate')) return true;
+  if (Array.isArray(perms) && (perms.includes('*') || perms.includes('events.manage'))) return true;
+  return adminAuth.claims?.admin === true || adminAuth.claims?.role === 'admin';
+}
+
+async function dispatchTicketEmailsForRows({
+  registrations = [],
+  event = {},
+  settings = null,
+  appOrigin = '',
+}) {
+  if (!Array.isArray(registrations) || registrations.length === 0) return;
+  const resolvedSettings = settings || await getSystemSettings();
+  for (const registration of registrations) {
+    try {
+      const result = await sendTicketEmailsForRegistration({
+        registration,
+        event,
+        settings: resolvedSettings,
+        sendEmailNotification,
+        appRoot: __appRoot,
+        appOrigin,
+        pool,
+      });
+      if (result?.status === 'sent') {
+        console.log(`[ticket] ✓ Sent ${result.sentCount || 0} ticket email(s) for ${registration.reference_code || registration.id}`);
+      }
+    } catch (err) {
+      console.warn('[ticket] Ticket email failed:', err.message);
+    }
+  }
 }
 
 async function markEventRegistrationAttendance(registrationId, joinSource = 'zoom') {
@@ -2544,6 +2689,7 @@ function mapPublicTicketLookup(registration = {}, event = {}) {
   return {
     valid: isRegistrationTicketEligible(registration),
     reference_code: String(registration.reference_code || '').trim(),
+    registration_id: String(registration.id || '').trim(),
     attendee_name: attendeeName,
     payer_name: String(registration.user_name || '').trim(),
     event_id: String(registration.event_id || '').trim(),
@@ -2875,6 +3021,7 @@ function buildRegistrationEmailHtml({
   statusLabel = 'CONFIRMED',
   statusNote = 'Your registration is confirmed. No further action is required.',
   previewText = 'You are registered! Your registration has been received.',
+  logoDataUrl = '',
   brand = {},
 } = {}) {
   const NAVY = '#0B1B3A';
@@ -2894,7 +3041,6 @@ function buildRegistrationEmailHtml({
   const youtubeUrl = brand.youtubeUrl || '';
   const instagramUrl = brand.instagramUrl || '';
   const signoffPrimary = escapeHtml(brand.signoffPrimary || 'Thank you for being part of this journey.');
-  const signoffSecondary = escapeHtml(brand.signoffSecondary || 'Real conversations. Meaningful impact.');
 
   const safeName = escapeHtml(recipientName || 'there');
   const safeEmail = escapeHtml(recipientEmail);
@@ -2927,6 +3073,18 @@ function buildRegistrationEmailHtml({
   const socialBadge = (letters, url) => `
     <a href="${escapeHtml(url || websiteUrl || '#')}" target="_blank" style="display:inline-block;width:30px;height:30px;line-height:30px;text-align:center;border:1px solid ${TEAL};border-radius:50%;color:${TEAL};font-size:11px;font-weight:700;text-decoration:none;margin:0 3px">${letters}</a>`;
 
+  const brandHeaderHtml = logoDataUrl
+    ? `<img src="${logoDataUrl}" alt="${brandName}" width="180" style="display:block;height:56px;width:auto;max-width:220px;border:0;outline:none;text-decoration:none" />`
+    : `<table role="presentation" cellpadding="0" cellspacing="0"><tr>
+        <td style="vertical-align:middle">
+          <div style="width:46px;height:46px;border:2px solid ${TEAL};border-radius:12px;text-align:center;line-height:42px;color:#ffffff;font-size:22px;font-weight:800">M</div>
+        </td>
+        <td style="vertical-align:middle;padding-left:12px">
+          <div style="font-size:19px;font-weight:800;letter-spacing:.5px;color:#ffffff">MUTALE <span style="color:${TEAL}">MUBANGA</span></div>
+          <div style="font-size:12px;color:#aab4c5;margin-top:2px">${brandTagline}</div>
+        </td>
+      </tr></table>`;
+
   return `<!doctype html>
 <html>
   <head>
@@ -2946,15 +3104,7 @@ function buildRegistrationEmailHtml({
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                   <tr>
                     <td style="vertical-align:middle">
-                      <table role="presentation" cellpadding="0" cellspacing="0"><tr>
-                        <td style="vertical-align:middle">
-                          <div style="width:46px;height:46px;border:2px solid ${TEAL};border-radius:12px;text-align:center;line-height:42px;color:#ffffff;font-size:22px;font-weight:800">M</div>
-                        </td>
-                        <td style="vertical-align:middle;padding-left:12px">
-                          <div style="font-size:19px;font-weight:800;letter-spacing:.5px;color:#ffffff">MUTALE <span style="color:${TEAL}">MUBANGA</span></div>
-                          <div style="font-size:12px;color:#aab4c5;margin-top:2px">${brandTagline}</div>
-                        </td>
-                      </tr></table>
+                      ${brandHeaderHtml}
                     </td>
                     <td style="vertical-align:middle;text-align:right">
                       <div style="display:inline-block;width:42px;height:42px;border:2px solid ${TEAL};border-radius:50%;text-align:center;line-height:40px;color:${TEAL};font-size:20px;font-weight:700">&#10003;</div>
@@ -3033,8 +3183,7 @@ function buildRegistrationEmailHtml({
             <tr>
               <td style="padding:18px 28px 28px">
                 <div style="border-top:1px solid ${BORDER};padding-top:22px;text-align:center">
-                  <p style="margin:0 0 4px;color:${GRAY};font-size:14px">${signoffPrimary}</p>
-                  <p style="margin:0 0 22px;color:${TEAL};font-size:14px;font-style:italic;font-weight:600">${signoffSecondary}</p>
+                  <p style="margin:0 0 22px;color:${GRAY};font-size:14px">${signoffPrimary}</p>
                   <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
                     <td style="vertical-align:top;text-align:center;padding:6px">
                       <div style="font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:${NAVY_TEXT}">Need help?</div>
@@ -3555,18 +3704,28 @@ async function persistImageIfNeeded(value, req, options = {}) {
   const folder = options.folder || 'uploads';
   const prefix = options.prefix || 'file';
 
-  const mimeType = match[1].toLowerCase();
+  let mimeType = match[1].toLowerCase();
   if (!isAllowedUploadMime(mimeType)) {
     throw new Error('Unsupported image type. Use JPEG, PNG, WebP, or GIF.');
   }
 
   const base64Data = (match[2] || '').replace(/\s+/g, '');
-  const buffer = Buffer.from(base64Data, 'base64');
-  if (buffer.length > MAX_GENERAL_UPLOAD_BYTES) {
-    throw new Error('Image is too large. Maximum size is 3 MB.');
-  }
+  let buffer = Buffer.from(base64Data, 'base64');
   if (!bufferMatchesImageMime(buffer, mimeType)) {
     throw new Error('Image file does not match its declared type.');
+  }
+
+  const isEventCover = folder === 'events' && prefix === 'event';
+  if (buffer.length > MAX_GENERAL_UPLOAD_BYTES || isEventCover) {
+    const { optimizeImageBuffer } = await import('./imageOptimize.js');
+    const optimized = await optimizeImageBuffer(buffer, mimeType, {
+      maxBytes: MAX_GENERAL_UPLOAD_BYTES,
+      maxWidth: isEventCover ? 1200 : 1920,
+      maxHeight: isEventCover ? 630 : 1920,
+      forceDimensions: isEventCover,
+    });
+    buffer = optimized.buffer;
+    mimeType = optimized.mimeType;
   }
 
   const uploadsDir = path.join(process.cwd(), 'uploads', folder);
@@ -3730,6 +3889,12 @@ async function ensureSchema() {
     ['daily_synced_at', 'DATETIME NULL'],
     ['registration_deadline_time', 'TIME NULL'],
     ['forum_enabled', 'TINYINT(1) NOT NULL DEFAULT 0'],
+    ['forum_pre_moderated', 'TINYINT(1) NOT NULL DEFAULT 0'],
+    ['volume_discount_enabled', 'TINYINT(1) NOT NULL DEFAULT 0'],
+    ['volume_discount_min_qty', 'INT NOT NULL DEFAULT 5'],
+    ['volume_discount_type', "VARCHAR(20) DEFAULT 'percent'"],
+    ['volume_discount_value', 'DECIMAL(10,2) NOT NULL DEFAULT 0'],
+    ['certificate_requires_all_sessions', 'TINYINT(1) NOT NULL DEFAULT 0'],
   ];
 
   for (const [name, sqlType] of eventColumnsToAdd) {
@@ -3968,6 +4133,10 @@ async function ensureSchema() {
     ['coupon_code', 'VARCHAR(64) NULL'],
     ['list_price_zmw', 'DECIMAL(12,2) NULL'],
     ['discount_zmw', 'DECIMAL(12,2) NOT NULL DEFAULT 0'],
+    ['ticket_email_sent_at', 'DATETIME NULL'],
+    ['attendee_type', "VARCHAR(20) DEFAULT 'adult'"],
+    ['guardian_phone', 'VARCHAR(40) NULL'],
+    ['volume_discount_zmw', 'DECIMAL(12,2) NOT NULL DEFAULT 0'],
   ];
   for (const [name, sqlType] of registrationColumnsToAdd) {
     try {
@@ -4030,6 +4199,53 @@ async function ensureSchema() {
     )
   `);
 
+  const forumModerationColumns = [
+    ['moderation_status', "VARCHAR(20) NOT NULL DEFAULT 'approved'"],
+    ['moderated_at', 'DATETIME NULL'],
+    ['moderated_by', 'VARCHAR(90) NULL'],
+    ['moderation_note', 'VARCHAR(500) NULL'],
+  ];
+  for (const table of ['event_forum_topics', 'event_forum_replies']) {
+    for (const [name, sqlType] of forumModerationColumns) {
+      try {
+        await pool.query(`ALTER TABLE ${table} ADD COLUMN ${name} ${sqlType}`);
+      } catch (error) {
+        if (error?.code !== 'ER_DUP_FIELDNAME') throw error;
+      }
+    }
+  }
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS event_sessions (
+      id VARCHAR(90) PRIMARY KEY,
+      event_id VARCHAR(90) NOT NULL,
+      title VARCHAR(200) NULL,
+      session_date DATE NOT NULL,
+      start_time TIME NULL,
+      end_time TIME NULL,
+      sort_order INT NOT NULL DEFAULT 0,
+      meeting_url VARCHAR(500) NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_event_sessions_event (event_id),
+      INDEX idx_event_sessions_date (event_id, session_date)
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS event_session_attendance (
+      id VARCHAR(90) PRIMARY KEY,
+      session_id VARCHAR(90) NOT NULL,
+      registration_id VARCHAR(90) NOT NULL,
+      attended_at DATETIME NULL,
+      join_source VARCHAR(40) NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_session_reg (session_id, registration_id),
+      INDEX idx_session_attendance_reg (registration_id)
+    )
+  `);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS event_coupons (
       id VARCHAR(90) PRIMARY KEY,
@@ -4076,6 +4292,24 @@ async function ensureSchema() {
       INDEX idx_event_certificates_user_id (user_id),
       INDEX idx_event_certificates_issued_at (issued_at),
       INDEX idx_event_certificates_email_status (email_status)
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS badge_templates (
+      id VARCHAR(90) PRIMARY KEY,
+      event_id VARCHAR(90) NOT NULL,
+      title VARCHAR(255) NOT NULL DEFAULT 'Name Badge',
+      design_json LONGTEXT NOT NULL,
+      background_image VARCHAR(500) NULL,
+      orientation ENUM('portrait','landscape') NOT NULL DEFAULT 'portrait',
+      paper_size VARCHAR(20) NOT NULL DEFAULT '6x8',
+      is_active TINYINT(1) NOT NULL DEFAULT 0,
+      created_by VARCHAR(90) NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_badge_templates_event (event_id),
+      INDEX idx_badge_templates_active (is_active)
     )
   `);
 
@@ -5107,32 +5341,34 @@ app.post('/api/events/:eventId/coupon-preview', async (req, res) => {
     if (!event) return res.status(404).json({ ok: false, message: 'Event not found.' });
 
     const quantity = parseRegistrationQuantity(req.body?.quantity ?? 1);
-    const couponRes = await resolveEventCouponForBooking(
+    const pricing = await resolveEventBookingPricing(
       pool,
       event,
       req.body?.coupon_code ?? req.body?.code ?? '',
       auth.claims.sub,
+      quantity,
       { lockRow: false },
     );
-    if (!couponRes.ok) {
-      return res.status(400).json({ ok: false, message: couponRes.error });
+    if (!pricing.ok) {
+      return res.status(400).json({ ok: false, message: pricing.error });
     }
-
-    const unitFinalZmw = couponRes.final_zmw;
-    const totalFinalZmw = roundMoney2(unitFinalZmw * quantity);
-    const totalDiscountZmw = roundMoney2(couponRes.discount_zmw * quantity);
 
     return res.json({
       ok: true,
       data: {
-        list_zmw: couponRes.list_zmw,
-        discount_zmw: couponRes.discount_zmw,
-        final_zmw: unitFinalZmw,
-        unit_final_zmw: unitFinalZmw,
+        list_zmw: pricing.list_zmw,
+        discount_zmw: pricing.discount_zmw,
+        coupon_discount_zmw: pricing.coupon_discount_zmw,
+        volume_discount_zmw: pricing.volume_discount_zmw,
+        final_zmw: pricing.final_zmw,
+        unit_final_zmw: pricing.final_zmw,
         ticket_count: quantity,
-        total_final_zmw: totalFinalZmw,
-        total_discount_zmw: totalDiscountZmw,
-        coupon: mapPublicCouponPreviewCoupon(couponRes.coupon),
+        total_final_zmw: pricing.total_final_zmw,
+        total_discount_zmw: pricing.total_discount_zmw,
+        total_volume_discount_zmw: pricing.total_volume_discount_zmw,
+        total_coupon_discount_zmw: pricing.total_coupon_discount_zmw,
+        volume_discount_applied: pricing.volume_discount_applied,
+        coupon: mapPublicCouponPreviewCoupon(pricing.coupon),
       },
     });
   } catch (error) {
@@ -5347,13 +5583,23 @@ app.get('/api/events/:eventId/forum/topics', async (req, res) => {
     }
 
     const adminAuth = getAdminAuth(req);
-    const includeHidden = adminAuth.ok;
+    const jwtAuth = getJwtAuth(req);
+    const viewerId = jwtAuth.ok ? String(jwtAuth.claims?.sub || '').trim() : '';
+
+    let visibilitySql = 'AND hidden = 0 AND moderation_status = \'approved\'';
+    const params = [eventId];
+    if (adminAuth.ok) {
+      visibilitySql = '';
+    } else if (viewerId) {
+      visibilitySql = 'AND hidden = 0 AND (moderation_status = \'approved\' OR (user_id = ? AND moderation_status IN (\'pending\', \'rejected\')))';
+      params.push(viewerId);
+    }
 
     const [rows] = await pool.query(
       `SELECT * FROM event_forum_topics
-       WHERE event_id = ? ${includeHidden ? '' : 'AND hidden = 0'}
+       WHERE event_id = ? ${visibilitySql}
        ORDER BY pinned DESC, last_activity_at DESC`,
-      [eventId],
+      params,
     );
 
     return res.json({ ok: true, data: rows.map(mapDbForumTopic) });
@@ -5373,21 +5619,37 @@ app.get('/api/events/:eventId/forum/topics/:topicId', async (req, res) => {
     }
 
     const adminAuth = getAdminAuth(req);
-    const includeHidden = adminAuth.ok;
+    const jwtAuth = getJwtAuth(req);
+    const viewerId = jwtAuth.ok ? String(jwtAuth.claims?.sub || '').trim() : '';
 
     const [[topicRow]] = await pool.query(
       `SELECT * FROM event_forum_topics WHERE id = ? AND event_id = ? LIMIT 1`,
       [topicId, eventId],
     );
-    if (!topicRow || (!includeHidden && topicRow.hidden)) {
+    if (!topicRow) return res.status(404).json({ ok: false, message: 'Topic not found.' });
+
+    const topicStatus = String(topicRow.moderation_status || 'approved').toLowerCase();
+    const topicVisible = adminAuth.ok
+      || (!topicRow.hidden && topicStatus === 'approved')
+      || (viewerId && topicRow.user_id === viewerId && ['pending', 'rejected', 'approved'].includes(topicStatus));
+    if (!topicVisible) {
       return res.status(404).json({ ok: false, message: 'Topic not found.' });
+    }
+
+    let replyVisibilitySql = 'AND hidden = 0 AND moderation_status = \'approved\'';
+    const replyParams = [topicId, eventId];
+    if (adminAuth.ok) {
+      replyVisibilitySql = '';
+    } else if (viewerId) {
+      replyVisibilitySql = 'AND hidden = 0 AND (moderation_status = \'approved\' OR (user_id = ? AND moderation_status IN (\'pending\', \'rejected\')))';
+      replyParams.push(viewerId);
     }
 
     const [replyRows] = await pool.query(
       `SELECT * FROM event_forum_replies
-       WHERE topic_id = ? AND event_id = ? ${includeHidden ? '' : 'AND hidden = 0'}
+       WHERE topic_id = ? AND event_id = ? ${replyVisibilitySql}
        ORDER BY created_at ASC`,
-      [topicId, eventId],
+      replyParams,
     );
 
     return res.json({
@@ -5411,7 +5673,7 @@ app.post('/api/events/:eventId/forum/topics', async (req, res) => {
     const authUser = await getUserByClaims(auth.claims);
     if (!authUser) return res.status(401).json({ ok: false, message: 'User account not found. Please log in again.' });
 
-    const access = await assertForumWriteAccess(eventId, authUser);
+    const access = await assertForumWriteAccess(eventId, authUser, auth.claims);
     if (!access.ok) return res.status(access.status).json({ ok: false, message: access.message });
 
     const title = sanitizeForumText(req.body?.title, 200);
@@ -5419,17 +5681,24 @@ app.post('/api/events/:eventId/forum/topics', async (req, res) => {
     if (!title) return res.status(400).json({ ok: false, message: 'Topic title is required.' });
     if (!body) return res.status(400).json({ ok: false, message: 'Topic message is required.' });
 
+    const preModerated = parseBoolean(access.event?.forum_pre_moderated, false);
+    const moderationStatus = preModerated ? 'pending' : 'approved';
+
     const topicId = generateEntityId('eft');
     const now = new Date();
     await pool.query(
       `INSERT INTO event_forum_topics (
-        id, event_id, user_id, user_name, title, body, reply_count, last_activity_at
-      ) VALUES (?, ?, ?, ?, ?, ?, 0, ?)`,
-      [topicId, eventId, access.userId, access.userName, title, body, now],
+        id, event_id, user_id, user_name, title, body, reply_count, last_activity_at, moderation_status
+      ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+      [topicId, eventId, access.userId, access.userName, title, body, now, moderationStatus],
     );
 
     const [[row]] = await pool.query('SELECT * FROM event_forum_topics WHERE id = ?', [topicId]);
-    return res.status(201).json({ ok: true, data: mapDbForumTopic(row) });
+    return res.status(201).json({
+      ok: true,
+      data: mapDbForumTopic(row),
+      pending_moderation: moderationStatus === 'pending',
+    });
   } catch (error) {
     return res.status(500).json({ ok: false, message: 'Failed to create forum topic.', error: error.message });
   }
@@ -5445,7 +5714,7 @@ app.post('/api/events/:eventId/forum/topics/:topicId/replies', async (req, res) 
     const authUser = await getUserByClaims(auth.claims);
     if (!authUser) return res.status(401).json({ ok: false, message: 'User account not found. Please log in again.' });
 
-    const access = await assertForumWriteAccess(eventId, authUser);
+    const access = await assertForumWriteAccess(eventId, authUser, auth.claims);
     if (!access.ok) return res.status(access.status).json({ ok: false, message: access.message });
 
     const [[topicRow]] = await pool.query(
@@ -5453,25 +5722,38 @@ app.post('/api/events/:eventId/forum/topics/:topicId/replies', async (req, res) 
       [topicId, eventId],
     );
     if (!topicRow) return res.status(404).json({ ok: false, message: 'Topic not found.' });
+    const topicStatus = String(topicRow.moderation_status || 'approved').toLowerCase();
+    if (topicStatus !== 'approved' && topicRow.user_id !== access.userId) {
+      return res.status(404).json({ ok: false, message: 'Topic not found.' });
+    }
 
     const body = sanitizeForumText(req.body?.body, 3000);
     if (!body) return res.status(400).json({ ok: false, message: 'Reply message is required.' });
 
+    const preModerated = parseBoolean(access.event?.forum_pre_moderated, false);
+    const moderationStatus = preModerated ? 'pending' : 'approved';
+
     const replyId = generateEntityId('efr');
     await pool.query(
-      `INSERT INTO event_forum_replies (id, topic_id, event_id, user_id, user_name, body)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [replyId, topicId, eventId, access.userId, access.userName, body],
+      `INSERT INTO event_forum_replies (id, topic_id, event_id, user_id, user_name, body, moderation_status)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [replyId, topicId, eventId, access.userId, access.userName, body, moderationStatus],
     );
-    await pool.query(
-      `UPDATE event_forum_topics
-       SET reply_count = reply_count + 1, last_activity_at = NOW(), updated_at = NOW()
-       WHERE id = ?`,
-      [topicId],
-    );
+    if (moderationStatus === 'approved') {
+      await pool.query(
+        `UPDATE event_forum_topics
+         SET reply_count = reply_count + 1, last_activity_at = NOW(), updated_at = NOW()
+         WHERE id = ?`,
+        [topicId],
+      );
+    }
 
     const [[row]] = await pool.query('SELECT * FROM event_forum_replies WHERE id = ?', [replyId]);
-    return res.status(201).json({ ok: true, data: mapDbForumReply(row) });
+    return res.status(201).json({
+      ok: true,
+      data: mapDbForumReply(row),
+      pending_moderation: moderationStatus === 'pending',
+    });
   } catch (error) {
     return res.status(500).json({ ok: false, message: 'Failed to post reply.', error: error.message });
   }
@@ -5591,6 +5873,369 @@ app.delete('/api/events/:eventId/forum/replies/:replyId', async (req, res) => {
     return res.json({ ok: true, message: 'Reply deleted.' });
   } catch (error) {
     return res.status(500).json({ ok: false, message: 'Failed to delete forum reply.', error: error.message });
+  }
+});
+
+app.get('/api/admin/events/:eventId/forum/moderation-queue', async (req, res) => {
+  try {
+    if (!userCanModerateForum(req)) {
+      return sendAuthFailure(res, getAdminAuth(req));
+    }
+    const eventId = String(req.params.eventId || '').trim();
+
+    const [topics] = await pool.query(
+      `SELECT * FROM event_forum_topics
+       WHERE event_id = ? AND moderation_status = 'pending'
+       ORDER BY created_at ASC`,
+      [eventId],
+    );
+    const [replies] = await pool.query(
+      `SELECT * FROM event_forum_replies
+       WHERE event_id = ? AND moderation_status = 'pending'
+       ORDER BY created_at ASC`,
+      [eventId],
+    );
+
+    return res.json({
+      ok: true,
+      data: {
+        topics: topics.map(mapDbForumTopic),
+        replies: replies.map(mapDbForumReply),
+        pending_count: topics.length + replies.length,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: 'Failed to load moderation queue.', error: error.message });
+  }
+});
+
+app.patch('/api/admin/events/:eventId/forum/topics/:topicId/moderate', async (req, res) => {
+  try {
+    if (!userCanModerateForum(req)) {
+      return sendAuthFailure(res, getAdminAuth(req));
+    }
+    const eventId = String(req.params.eventId || '').trim();
+    const topicId = String(req.params.topicId || '').trim();
+    const action = String(req.body?.action || '').trim().toLowerCase();
+    if (!['approve', 'reject'].includes(action)) {
+      return res.status(400).json({ ok: false, message: 'action must be approve or reject.' });
+    }
+    const note = sanitizeForumText(req.body?.note, 500);
+    const adminAuth = getAdminAuth(req);
+    const status = action === 'approve' ? 'approved' : 'rejected';
+    const hidden = action === 'reject' ? 1 : 0;
+
+    await pool.query(
+      `UPDATE event_forum_topics
+       SET moderation_status = ?, hidden = ?, moderation_note = ?, moderated_at = NOW(), moderated_by = ?, updated_at = NOW()
+       WHERE id = ? AND event_id = ?`,
+      [status, hidden, note || null, String(adminAuth.claims?.sub || ''), topicId, eventId],
+    );
+
+    const [[row]] = await pool.query(
+      'SELECT * FROM event_forum_topics WHERE id = ? AND event_id = ? LIMIT 1',
+      [topicId, eventId],
+    );
+    if (!row) return res.status(404).json({ ok: false, message: 'Topic not found.' });
+    return res.json({ ok: true, data: mapDbForumTopic(row) });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: 'Failed to moderate topic.', error: error.message });
+  }
+});
+
+app.patch('/api/admin/events/:eventId/forum/replies/:replyId/moderate', async (req, res) => {
+  try {
+    if (!userCanModerateForum(req)) {
+      return sendAuthFailure(res, getAdminAuth(req));
+    }
+    const eventId = String(req.params.eventId || '').trim();
+    const replyId = String(req.params.replyId || '').trim();
+    const action = String(req.body?.action || '').trim().toLowerCase();
+    if (!['approve', 'reject'].includes(action)) {
+      return res.status(400).json({ ok: false, message: 'action must be approve or reject.' });
+    }
+    const note = sanitizeForumText(req.body?.note, 500);
+    const adminAuth = getAdminAuth(req);
+    const status = action === 'approve' ? 'approved' : 'rejected';
+    const hidden = action === 'reject' ? 1 : 0;
+
+    const [[existing]] = await pool.query(
+      'SELECT * FROM event_forum_replies WHERE id = ? AND event_id = ? LIMIT 1',
+      [replyId, eventId],
+    );
+    if (!existing) return res.status(404).json({ ok: false, message: 'Reply not found.' });
+
+    await pool.query(
+      `UPDATE event_forum_replies
+       SET moderation_status = ?, hidden = ?, moderation_note = ?, moderated_at = NOW(), moderated_by = ?, updated_at = NOW()
+       WHERE id = ? AND event_id = ?`,
+      [status, hidden, note || null, String(adminAuth.claims?.sub || ''), replyId, eventId],
+    );
+
+    if (action === 'approve' && String(existing.moderation_status || '').toLowerCase() === 'pending') {
+      await pool.query(
+        `UPDATE event_forum_topics
+         SET reply_count = reply_count + 1, last_activity_at = NOW(), updated_at = NOW()
+         WHERE id = ? AND event_id = ?`,
+        [existing.topic_id, eventId],
+      );
+    }
+
+    const [[row]] = await pool.query(
+      'SELECT * FROM event_forum_replies WHERE id = ? AND event_id = ? LIMIT 1',
+      [replyId, eventId],
+    );
+    return res.json({ ok: true, data: mapDbForumReply(row) });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: 'Failed to moderate reply.', error: error.message });
+  }
+});
+
+// ─── Event sessions ────────────────────────────────────────────────────────────
+
+app.get('/api/events/:eventId/sessions', async (req, res) => {
+  try {
+    const eventId = String(req.params.eventId || '').trim();
+    const [[event]] = await pool.query('SELECT id, status, visibility FROM events WHERE id = ? LIMIT 1', [eventId]);
+    if (!event) return res.status(404).json({ ok: false, message: 'Event not found.' });
+
+    const [rows] = await pool.query(
+      'SELECT id, event_id, title, session_date, start_time, end_time, sort_order FROM event_sessions WHERE event_id = ? ORDER BY sort_order ASC, session_date ASC, start_time ASC',
+      [eventId],
+    );
+    return res.json({ ok: true, data: rows.map(mapDbEventSession) });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: 'Failed to load sessions.', error: error.message });
+  }
+});
+
+app.get('/api/admin/events/:eventId/sessions', async (req, res) => {
+  try {
+    const adminAuth = getAdminAuth(req);
+    if (!adminAuth.ok) return sendAuthFailure(res, adminAuth);
+    const eventId = String(req.params.eventId || '').trim();
+    const [rows] = await pool.query(
+      'SELECT * FROM event_sessions WHERE event_id = ? ORDER BY sort_order ASC, session_date ASC, start_time ASC',
+      [eventId],
+    );
+    return res.json({ ok: true, data: rows.map(mapDbEventSession) });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: 'Failed to load sessions.', error: error.message });
+  }
+});
+
+app.post('/api/admin/events/:eventId/sessions', async (req, res) => {
+  try {
+    const adminAuth = getAdminAuth(req);
+    if (!adminAuth.ok) return sendAuthFailure(res, adminAuth);
+    const eventId = String(req.params.eventId || '').trim();
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const sessionDate = String(body.session_date || body.sessionDate || '').trim();
+    if (!sessionDate) {
+      return res.status(400).json({ ok: false, message: 'session_date is required.' });
+    }
+    const sessionId = generateEntityId('esn');
+    await pool.query(
+      `INSERT INTO event_sessions (id, event_id, title, session_date, start_time, end_time, sort_order, meeting_url)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        sessionId,
+        eventId,
+        String(body.title || '').trim() || null,
+        sessionDate,
+        body.start_time || body.startTime || null,
+        body.end_time || body.endTime || null,
+        Math.floor(toNumber(body.sort_order ?? body.sortOrder, 0)),
+        String(body.meeting_url || body.meetingUrl || '').trim() || null,
+      ],
+    );
+    const [[row]] = await pool.query('SELECT * FROM event_sessions WHERE id = ?', [sessionId]);
+    return res.status(201).json({ ok: true, data: mapDbEventSession(row) });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: 'Failed to create session.', error: error.message });
+  }
+});
+
+app.patch('/api/admin/events/:eventId/sessions/:sessionId', async (req, res) => {
+  try {
+    const adminAuth = getAdminAuth(req);
+    if (!adminAuth.ok) return sendAuthFailure(res, adminAuth);
+    const eventId = String(req.params.eventId || '').trim();
+    const sessionId = String(req.params.sessionId || '').trim();
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const fields = [];
+    const values = [];
+    const allowed = {
+      title: (v) => String(v || '').trim() || null,
+      session_date: (v) => String(v || '').trim(),
+      sessionDate: (v) => String(v || '').trim(),
+      start_time: (v) => v || null,
+      startTime: (v) => v || null,
+      end_time: (v) => v || null,
+      endTime: (v) => v || null,
+      sort_order: (v) => Math.floor(toNumber(v, 0)),
+      sortOrder: (v) => Math.floor(toNumber(v, 0)),
+      meeting_url: (v) => String(v || '').trim() || null,
+      meetingUrl: (v) => String(v || '').trim() || null,
+    };
+    const mapKey = {
+      sessionDate: 'session_date',
+      startTime: 'start_time',
+      endTime: 'end_time',
+      sortOrder: 'sort_order',
+      meetingUrl: 'meeting_url',
+    };
+    for (const [key, fn] of Object.entries(allowed)) {
+      if (body[key] !== undefined) {
+        const col = mapKey[key] || key;
+        if (!fields.some((f) => f.startsWith(`${col} =`))) {
+          fields.push(`${col} = ?`);
+          values.push(fn(body[key]));
+        }
+      }
+    }
+    if (!fields.length) {
+      return res.status(400).json({ ok: false, message: 'No valid fields to update.' });
+    }
+    values.push(sessionId, eventId);
+    await pool.query(
+      `UPDATE event_sessions SET ${fields.join(', ')}, updated_at = NOW() WHERE id = ? AND event_id = ?`,
+      values,
+    );
+    const [[row]] = await pool.query(
+      'SELECT * FROM event_sessions WHERE id = ? AND event_id = ? LIMIT 1',
+      [sessionId, eventId],
+    );
+    if (!row) return res.status(404).json({ ok: false, message: 'Session not found.' });
+    return res.json({ ok: true, data: mapDbEventSession(row) });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: 'Failed to update session.', error: error.message });
+  }
+});
+
+app.delete('/api/admin/events/:eventId/sessions/:sessionId', async (req, res) => {
+  try {
+    const adminAuth = getAdminAuth(req);
+    if (!adminAuth.ok) return sendAuthFailure(res, adminAuth);
+    const eventId = String(req.params.eventId || '').trim();
+    const sessionId = String(req.params.sessionId || '').trim();
+    await pool.query('DELETE FROM event_session_attendance WHERE session_id = ?', [sessionId]);
+    const [result] = await pool.query(
+      'DELETE FROM event_sessions WHERE id = ? AND event_id = ?',
+      [sessionId, eventId],
+    );
+    if (!result?.affectedRows) {
+      return res.status(404).json({ ok: false, message: 'Session not found.' });
+    }
+    return res.json({ ok: true, message: 'Session deleted.' });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: 'Failed to delete session.', error: error.message });
+  }
+});
+
+app.get('/api/admin/events/:eventId/sessions/:sessionId/attendance', async (req, res) => {
+  try {
+    const adminAuth = getAdminAuth(req);
+    if (!adminAuth.ok) return sendAuthFailure(res, adminAuth);
+    const eventId = String(req.params.eventId || '').trim();
+    const sessionId = String(req.params.sessionId || '').trim();
+    const [rows] = await pool.query(
+      `SELECT a.*, r.reference_code, r.booked_for_name, r.user_name, r.user_email
+       FROM event_session_attendance a
+       JOIN event_registrations r ON r.id = a.registration_id
+       WHERE a.session_id = ? AND r.event_id = ?
+       ORDER BY a.attended_at DESC`,
+      [sessionId, eventId],
+    );
+    return res.json({ ok: true, data: rows });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: 'Failed to load attendance.', error: error.message });
+  }
+});
+
+app.post('/api/registrations/:registrationId/sessions/:sessionId/join', async (req, res) => {
+  try {
+    const auth = getJwtAuth(req);
+    if (!auth.ok) return sendAuthFailure(res, auth);
+
+    const authUser = await getUserByClaims(auth.claims);
+    if (!authUser) return res.status(401).json({ ok: false, message: 'User account not found. Please log in again.' });
+
+    const registrationId = String(req.params.registrationId || '').trim();
+    const sessionId = String(req.params.sessionId || '').trim();
+
+    const [[registration]] = await pool.query(
+      'SELECT * FROM event_registrations WHERE id = ? LIMIT 1',
+      [registrationId],
+    );
+    if (!registration) return res.status(404).json({ ok: false, message: 'Registration not found.' });
+
+    const isAdmin = authUser.role === 'admin' || auth.claims?.admin === true;
+    if (registration.user_id !== authUser.id && !isAdmin) {
+      return res.status(403).json({ ok: false, message: 'Only the ticket purchaser can join sessions for this registration.' });
+    }
+
+    if (!isRegistrationTicketEligible(registration)) {
+      return res.status(403).json({ ok: false, message: 'Registration is not eligible for session access.' });
+    }
+
+    const [[session]] = await pool.query(
+      'SELECT * FROM event_sessions WHERE id = ? AND event_id = ? LIMIT 1',
+      [sessionId, registration.event_id],
+    );
+    if (!session) return res.status(404).json({ ok: false, message: 'Session not found.' });
+
+    const [[event]] = await pool.query('SELECT * FROM events WHERE id = ? LIMIT 1', [registration.event_id]);
+    const attendanceId = generateEntityId('esa');
+    await pool.query(
+      `INSERT INTO event_session_attendance (id, session_id, registration_id, attended_at, join_source)
+       VALUES (?, ?, ?, NOW(), ?)
+       ON DUPLICATE KEY UPDATE attended_at = COALESCE(attended_at, NOW()), join_source = VALUES(join_source), updated_at = NOW()`,
+      [attendanceId, sessionId, registrationId, String(req.body?.join_source || 'app').slice(0, 40)],
+    );
+
+    await markEventRegistrationAttendance(registrationId, 'session');
+
+    const meetingUrl = String(session.meeting_url || '').trim()
+      || String(event?.zoom_join_url || event?.daily_room_url || event?.meeting_link || '').trim();
+
+    return res.json({
+      ok: true,
+      data: {
+        session: mapDbEventSession(session),
+        meeting_url: meetingUrl,
+        registration_id: registrationId,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: 'Failed to join session.', error: error.message });
+  }
+});
+
+app.get('/api/users/lookup', async (req, res) => {
+  try {
+    const auth = getJwtAuth(req);
+    if (!auth.ok) return sendAuthFailure(res, auth);
+
+    const email = String(req.query?.email || '').trim().toLowerCase();
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ ok: false, message: 'Valid email query parameter is required.' });
+    }
+
+    const [[user]] = await pool.query(
+      'SELECT name FROM users WHERE LOWER(email) = ? LIMIT 1',
+      [email],
+    );
+
+    return res.json({
+      ok: true,
+      data: {
+        found: Boolean(user?.name),
+        name: user?.name ? String(user.name).trim() : null,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: 'User lookup failed.', error: error.message });
   }
 });
 
@@ -7264,6 +7909,68 @@ app.get('/api/receipts/:source/:id/pdf', async (req, res) => {
   }
 });
 
+// GET /api/registrations/:id/ticket/pdf — download entry ticket PDF (admin or owner)
+app.get('/api/registrations/:id/ticket/pdf', async (req, res) => {
+  try {
+    const adminAuth = getAdminAuth(req);
+    const jwtAuth = getJwtAuth(req);
+    const hasBearerToken = Boolean(getBearerToken(req));
+
+    if (!adminAuth.ok && !jwtAuth.ok) {
+      if (hasBearerToken) return sendAuthFailure(res, jwtAuth);
+      return res.status(401).json({ ok: false, message: 'Authentication required to download tickets.' });
+    }
+
+    const id = String(req.params.id || '').trim();
+    if (!id) {
+      return res.status(400).json({ ok: false, message: 'Registration id is required.' });
+    }
+
+    const [[row]] = await pool.query('SELECT * FROM event_registrations WHERE id = ? LIMIT 1', [id]);
+    if (!row) {
+      return res.status(404).json({ ok: false, message: 'Registration not found.' });
+    }
+
+    const registration = mapDbRegistration(row);
+    if (!isTicketPaymentEligible(registration)) {
+      return res.status(403).json({ ok: false, message: 'Payment status not eligible for ticket download.' });
+    }
+
+    if (!adminAuth.ok) {
+      const ownerUserId = String(row.user_id || '').trim();
+      const ownerEmail = String(row.user_email || '').trim().toLowerCase();
+      const allowed = assertReceiptDownloadAllowedForUser({
+        jwtAuth,
+        ownerUserId,
+        ownerEmail,
+      });
+      if (!allowed.ok) {
+        return res.status(allowed.status).json({ ok: false, message: allowed.message });
+      }
+    }
+
+    const [[eventRow]] = await pool.query('SELECT * FROM events WHERE id = ? LIMIT 1', [registration.event_id]);
+    const pdfBuffer = await generateRegistrationTicketBuffer({
+      registration,
+      event: eventRow || {},
+      appRoot: __appRoot,
+      appOrigin: resolvePublicAppUrl(req),
+    });
+
+    if (!isValidTicketPdfBuffer(pdfBuffer)) {
+      throw new Error('Generated ticket PDF was empty or invalid.');
+    }
+
+    const filename = buildTicketFilename(registration);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(pdfBuffer);
+  } catch (error) {
+    console.error('[ticket/download]', error.message);
+    return res.status(500).json({ ok: false, message: 'Failed to generate ticket PDF.', error: error.message });
+  }
+});
+
 app.get('/api/registrations', async (req, res) => {
   try {
     const adminAuth = getAdminAuth(req);
@@ -7409,22 +8116,23 @@ app.post('/api/registrations', async (req, res) => {
     try {
       await conn.beginTransaction();
 
-      const couponResolved = await resolveEventCouponForBooking(
+      const pricing = await resolveEventBookingPricing(
         conn,
         event,
         incoming.coupon_code ?? incoming.code ?? '',
         payload.user_id,
+        1,
         { lockRow: needsCouponLock },
       );
-      if (!couponResolved.ok) {
+      if (!pricing.ok) {
         await conn.rollback();
         conn.release();
-        return res.status(400).json({ ok: false, message: couponResolved.error });
+        return res.status(400).json({ ok: false, message: pricing.error });
       }
 
       const amountForRow = payCurrency === 'ZMW'
-        ? couponResolved.final_zmw
-        : (payAmountIncoming != null ? payAmountIncoming : couponResolved.final_zmw);
+        ? pricing.final_zmw
+        : (payAmountIncoming != null ? payAmountIncoming : pricing.final_zmw);
 
       const mergedForNorm = normalizeRegistrationPayload({
         ...payload,
@@ -7434,11 +8142,12 @@ app.post('/api/registrations', async (req, res) => {
         is_free_event: parseBoolean(event.is_free, false),
         currency: payCurrency,
         amount: amountForRow,
-        amount_zmw: couponResolved.final_zmw,
-        coupon_id: couponResolved.coupon?.id || null,
-        coupon_code: couponResolved.coupon ? normalizeEventCouponCode(incoming.coupon_code ?? incoming.code ?? '') : null,
-        list_price_zmw: couponResolved.list_zmw,
-        discount_zmw: couponResolved.discount_zmw,
+        amount_zmw: pricing.final_zmw,
+        coupon_id: pricing.coupon?.id || null,
+        coupon_code: pricing.coupon ? normalizeEventCouponCode(incoming.coupon_code ?? incoming.code ?? '') : null,
+        list_price_zmw: pricing.list_zmw,
+        discount_zmw: pricing.coupon_discount_zmw,
+        volume_discount_zmw: pricing.volume_discount_zmw,
       }, payload.id);
 
       enriched = await applyTrustedRegistrationPaymentState(mergedForNorm, event);
@@ -7451,10 +8160,10 @@ app.post('/api/registrations', async (req, res) => {
         regValues,
       );
 
-      if (couponResolved.coupon) {
+      if (pricing.coupon) {
         await conn.query(
           'UPDATE event_coupons SET redemptions_count = redemptions_count + 1 WHERE id = ?',
-          [couponResolved.coupon.id],
+          [pricing.coupon.id],
         );
       }
 
@@ -7503,7 +8212,9 @@ app.post('/api/registrations', async (req, res) => {
         const refCode = enriched.reference_code || '';
         const eventMode = String(event.event_mode || '').trim().toLowerCase()
           || (String(event.location || '').toLowerCase().includes('virtual') ? 'virtual' : 'in_person');
-        const ticketUrl = refCode && eventMode === 'in_person' ? `${appUrl}/tickets/${encodeURIComponent(refCode)}` : '';
+        const ticketUrl = refCode && eventMode === 'in_person' && isRegistrationTicketEligible(enriched)
+          ? `${appUrl}/tickets/${encodeURIComponent(refCode)}`
+          : '';
         const listZmwStored = enriched.list_price_zmw != null
           ? roundMoney2(toNumber(enriched.list_price_zmw, Number(event.price || 0)))
           : roundMoney2(toNumber(event.price, 0));
@@ -7577,6 +8288,7 @@ app.post('/api/registrations', async (req, res) => {
           websiteUrl: appUrl,
           linkedinUrl: 'https://www.linkedin.com/in/mutale-mubanga',
         };
+        const logoDataUrl = await loadWhiteLogoDataUrl(__appRoot);
 
         const confirmResult = await sendEmailNotification({
           settings,
@@ -7594,11 +8306,12 @@ app.post('/api/registrations', async (req, res) => {
             eventLocation,
             registrationTypeLabel,
             referenceCode: refCode,
-            accessPassUrl: eventUrl,
+            accessPassUrl: ticketUrl,
             addToCalendarUrl,
             statusNote: receiptAttached
               ? 'Your registration is confirmed and your receipt is attached. No further action is required.'
               : 'Your registration is confirmed. No further action is required.',
+            logoDataUrl,
             brand: brandFooter,
           }),
           attachments: receiptAttachments,
@@ -7647,6 +8360,13 @@ app.post('/api/registrations', async (req, res) => {
           console.warn(`[registration] Confirmation WhatsApp failed: ${result.reason}`);
         }
       }
+
+      await dispatchTicketEmailsForRows({
+        registrations: [mapDbRegistration(row)],
+        event,
+        settings,
+        appOrigin: appUrl,
+      });
     } catch (notifyErr) {
       console.warn('[registration] Confirmation notification failed:', notifyErr.message);
     }
@@ -7712,7 +8432,10 @@ app.post('/api/registrations/batch', async (req, res) => {
 
     for (const guest of guests) {
       if (!guest.booked_for_name) {
-        return res.status(400).json({ ok: false, message: 'Each guest must have a name.' });
+        return res.status(400).json({ ok: false, message: 'Each attendee must have a name.' });
+      }
+      if (guest.attendee_type === 'child' && !guest.booked_for_relation) {
+        return res.status(400).json({ ok: false, message: 'Each child attendee must include your relationship (parent, guardian, etc.).' });
       }
     }
 
@@ -7730,9 +8453,6 @@ app.post('/api/registrations/batch', async (req, res) => {
 
     const eventMode = String(event.event_mode || '').trim().toLowerCase()
       || (String(event.location || '').toLowerCase().includes('virtual') ? 'virtual' : 'in_person');
-    if (eventMode !== 'in_person') {
-      return res.status(400).json({ ok: false, message: 'Multi-ticket registration is only available for in-person events.' });
-    }
 
     const gateReason = getEventRegistrationGateReason(event);
     if (gateReason) return res.status(400).json({ ok: false, message: gateReason });
@@ -7782,21 +8502,22 @@ app.post('/api/registrations/batch', async (req, res) => {
     try {
       await conn.beginTransaction();
 
-      const couponResolved = await resolveEventCouponForBooking(
+      const pricing = await resolveEventBookingPricing(
         conn,
         event,
         couponCodeRaw,
         authUser.id,
+        ticketCount,
         { lockRow: needsCouponLock },
       );
-      if (!couponResolved.ok) {
+      if (!pricing.ok) {
         await conn.rollback();
         conn.release();
-        return res.status(400).json({ ok: false, message: couponResolved.error });
+        return res.status(400).json({ ok: false, message: pricing.error });
       }
 
-      unitFinalZmw = couponResolved.final_zmw;
-      totalZmw = roundMoney2(unitFinalZmw * ticketCount);
+      unitFinalZmw = pricing.final_zmw;
+      totalZmw = pricing.total_final_zmw;
 
       if (!isFreeCatalog && totalZmw > 0 && !paymentReference) {
         await conn.rollback();
@@ -7810,6 +8531,9 @@ app.post('/api/registrations/batch', async (req, res) => {
           booked_for_name: null,
           booked_for_email: null,
           booked_for_phone: null,
+          booked_for_relation: null,
+          attendee_type: 'adult',
+          guardian_phone: null,
           attendee_slot_key: '__self__',
         });
       }
@@ -7818,11 +8542,14 @@ app.post('/api/registrations/batch', async (req, res) => {
           booked_for_name: guest.booked_for_name,
           booked_for_email: guest.booked_for_email,
           booked_for_phone: guest.booked_for_phone,
+          booked_for_relation: guest.booked_for_relation,
+          attendee_type: guest.attendee_type,
+          guardian_phone: guest.guardian_phone,
           attendee_slot_key: guest.attendee_slot_key,
         });
       }
 
-      const couponCodeNorm = couponResolved.coupon
+      const couponCodeNorm = pricing.coupon
         ? normalizeEventCouponCode(couponCodeRaw)
         : null;
 
@@ -7851,11 +8578,15 @@ app.post('/api/registrations/batch', async (req, res) => {
           booked_for_name: ticket.booked_for_name,
           booked_for_email: ticket.booked_for_email,
           booked_for_phone: ticket.booked_for_phone,
+          booked_for_relation: ticket.booked_for_relation,
+          attendee_type: ticket.attendee_type,
+          guardian_phone: ticket.guardian_phone,
           attendee_slot_key: ticket.attendee_slot_key,
-          coupon_id: couponResolved.coupon?.id || null,
+          coupon_id: pricing.coupon?.id || null,
           coupon_code: couponCodeNorm,
-          list_price_zmw: couponResolved.list_zmw,
-          discount_zmw: couponResolved.discount_zmw,
+          list_price_zmw: pricing.list_zmw,
+          discount_zmw: pricing.coupon_discount_zmw,
+          volume_discount_zmw: pricing.volume_discount_zmw,
           notes,
         });
 
@@ -7870,10 +8601,10 @@ app.post('/api/registrations/batch', async (req, res) => {
         insertedRows.push(enriched);
       }
 
-      if (couponResolved.coupon) {
+      if (pricing.coupon) {
         await conn.query(
           'UPDATE event_coupons SET redemptions_count = redemptions_count + 1 WHERE id = ?',
-          [couponResolved.coupon.id],
+          [pricing.coupon.id],
         );
       }
 
@@ -7900,6 +8631,19 @@ app.post('/api/registrations/batch', async (req, res) => {
       : [[]];
 
     const registrations = rows.map(mapDbRegistration);
+
+    try {
+      const settings = await getSystemSettings();
+      const appUrl = resolvePublicAppUrl(req);
+      await dispatchTicketEmailsForRows({
+        registrations,
+        event,
+        settings,
+        appOrigin: appUrl,
+      });
+    } catch (ticketErr) {
+      console.warn('[registration/batch] Ticket email dispatch failed:', ticketErr.message);
+    }
 
     return res.status(201).json({
       ok: true,
@@ -7931,9 +8675,16 @@ app.get('/api/tickets/:reference', async (req, res) => {
     }
 
     const [[event]] = await pool.query('SELECT * FROM events WHERE id = ? LIMIT 1', [registration.event_id]);
+    const logoDataUrl = await loadReceiptLogoDataUrl(__appRoot);
+    const viewModel = await buildTicketViewModel({
+      registration: mapDbRegistration(registration),
+      event: event || {},
+      appOrigin: resolvePublicAppUrl(req),
+      logoDataUrl,
+    });
     const ticket = mapPublicTicketLookup(registration, event || {});
 
-    return res.json({ ok: true, data: ticket });
+    return res.json({ ok: true, data: { ...ticket, viewModel } });
   } catch (error) {
     return res.status(500).json({ ok: false, message: 'Failed to look up ticket', error: error.message });
   }
@@ -8051,8 +8802,17 @@ app.patch('/api/registrations/:id', async (req, res) => {
             appOrigin: resolvePublicAppUrl(req),
             pool,
           });
+          await maybeSendTicketEmailsOnSettlement({
+            registration: mapped,
+            event: eventRow || {},
+            settings,
+            sendEmailNotification,
+            appRoot: __appRoot,
+            appOrigin: resolvePublicAppUrl(req),
+            pool,
+          });
         } catch (receiptErr) {
-          console.warn('[registration] Receipt email failed:', receiptErr.message);
+          console.warn('[registration] Receipt/ticket email failed:', receiptErr.message);
         }
         return res.json({ ok: true, data: mapped });
       }
@@ -8115,8 +8875,17 @@ app.patch('/api/registrations/:id', async (req, res) => {
           appOrigin: resolvePublicAppUrl(req),
           pool,
         });
+        await maybeSendTicketEmailsOnSettlement({
+          registration: mapped,
+          event: eventRow || {},
+          settings,
+          sendEmailNotification,
+          appRoot: __appRoot,
+          appOrigin: resolvePublicAppUrl(req),
+          pool,
+        });
       } catch (receiptErr) {
-        console.warn('[registration] Receipt email failed:', receiptErr.message);
+        console.warn('[registration] Receipt/ticket email failed:', receiptErr.message);
       }
     }
     return res.json({ ok: true, data: mapped });
@@ -9373,12 +10142,12 @@ app.post('/api/payments/lenco/mobile-money/checkout', async (req, res) => {
       return res.status(400).json({ ok: false, message: 'This event does not require payment.' });
     }
 
-    const couponRes = await resolveEventCouponForBooking(pool, event, couponCode, authUser.id, { lockRow: false });
-    if (!couponRes.ok) {
-      return res.status(400).json({ ok: false, message: couponRes.error });
+    const pricing = await resolveEventBookingPricing(pool, event, couponCode, authUser.id, quantity, { lockRow: false });
+    if (!pricing.ok) {
+      return res.status(400).json({ ok: false, message: pricing.error });
     }
 
-    const expectedZmw = roundMoney2(couponRes.final_zmw * quantity);
+    const expectedZmw = pricing.total_final_zmw;
     if (expectedZmw <= 0) {
       return res.status(400).json({
         ok: false,
@@ -9394,7 +10163,7 @@ app.post('/api/payments/lenco/mobile-money/checkout', async (req, res) => {
     const customerEmail = String(authUser.email || '').trim();
     const customerName = String(authUser.name || '').trim();
     if (currency.toUpperCase() === 'ZMW' && Math.abs(amount - expectedZmw) > 0.01) {
-      return res.status(400).json({ ok: false, message: 'Payment amount does not match the event price (after any coupon).' });
+      return res.status(400).json({ ok: false, message: 'Payment amount does not match the event price (after discounts).' });
     }
 
     const settings = await getSystemSettings();
@@ -9498,12 +10267,12 @@ app.post('/api/payments/lenco/card/checkout-session', async (req, res) => {
       return res.status(400).json({ ok: false, message: 'This event does not require payment.' });
     }
 
-    const couponRes = await resolveEventCouponForBooking(pool, event, couponCode, authUser.id, { lockRow: false });
-    if (!couponRes.ok) {
-      return res.status(400).json({ ok: false, message: couponRes.error });
+    const pricing = await resolveEventBookingPricing(pool, event, couponCode, authUser.id, quantity, { lockRow: false });
+    if (!pricing.ok) {
+      return res.status(400).json({ ok: false, message: pricing.error });
     }
 
-    const expectedZmw = roundMoney2(couponRes.final_zmw * quantity);
+    const expectedZmw = pricing.total_final_zmw;
     if (expectedZmw <= 0) {
       return res.status(400).json({
         ok: false,
@@ -9513,7 +10282,7 @@ app.post('/api/payments/lenco/card/checkout-session', async (req, res) => {
 
     const curUpper = currency.toUpperCase();
     if (curUpper === 'ZMW' && Math.abs(amount - expectedZmw) > 0.01) {
-      return res.status(400).json({ ok: false, message: 'Payment amount does not match the event price (after any coupon).' });
+      return res.status(400).json({ ok: false, message: 'Payment amount does not match the event price (after discounts).' });
     }
 
     if (curUpper !== 'ZMW') {
@@ -11751,6 +12520,242 @@ app.post('/api/admin/events/:eventId/certificate-template/deactivate', async (re
     return res.json({ ok: true, data: result.template });
   } catch (error) {
     return res.status(500).json({ ok: false, message: 'Failed to deactivate certificate template.', error: error.message });
+  }
+});
+
+// ─── Badge templates (per-event designer) ───────────────────────────────────
+
+function resolveEventModeFromRow(event = {}) {
+  const explicit = String(event.event_mode || '').trim().toLowerCase();
+  if (explicit) return explicit;
+  return String(event.location || '').toLowerCase().includes('virtual') ? 'virtual' : 'in_person';
+}
+
+async function persistBadgeImage(value, req) {
+  return persistImageIfNeeded(value, req, { folder: 'badges', prefix: 'badge' });
+}
+
+app.get('/api/admin/events/:eventId/badge-template', async (req, res) => {
+  try {
+    const eventId = String(req.params.eventId || '').trim();
+    const [[evt]] = await pool.query('SELECT id, title FROM events WHERE id = ? LIMIT 1', [eventId]);
+    if (!evt) return res.status(404).json({ ok: false, message: 'Event not found.' });
+
+    const template = await getBadgeTemplateForEvent(pool, eventId);
+    return res.json({
+      ok: true,
+      data: {
+        configured: Boolean(template),
+        template,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: 'Failed to load badge template.', error: error.message });
+  }
+});
+
+app.post('/api/admin/events/:eventId/badge-template/activate', async (req, res) => {
+  try {
+    const eventId = String(req.params.eventId || '').trim();
+    const [[evt]] = await pool.query('SELECT * FROM events WHERE id = ? LIMIT 1', [eventId]);
+    if (!evt) return res.status(404).json({ ok: false, message: 'Event not found.' });
+
+    const adminUserId = req.adminUser?.sub || req.adminUser?.id || null;
+    const outcome = await activateOrCreateBadgeTemplate(pool, eventId, adminUserId, evt);
+
+    return res.json({
+      ok: true,
+      data: {
+        template: outcome.template,
+        created: outcome.created,
+        redirectPath: `/admin/events/${eventId}/badge-designer`,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: 'Failed to activate badge template.', error: error.message });
+  }
+});
+
+app.put('/api/admin/events/:eventId/badge-template', async (req, res) => {
+  try {
+    const eventId = String(req.params.eventId || '').trim();
+    const [[evt]] = await pool.query('SELECT id FROM events WHERE id = ? LIMIT 1', [eventId]);
+    if (!evt) return res.status(404).json({ ok: false, message: 'Event not found.' });
+
+    const result = await saveBadgeTemplateDraft(pool, eventId, req.body || {}, {
+      persistImage: (value) => persistBadgeImage(value, req),
+    });
+    if (!result.ok) {
+      return res.status(400).json({ ok: false, message: result.message });
+    }
+    return res.json({ ok: true, data: result.template });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: 'Failed to save badge template.', error: error.message });
+  }
+});
+
+app.post('/api/admin/events/:eventId/badge-template/preview', async (req, res) => {
+  try {
+    const eventId = String(req.params.eventId || '').trim();
+    const [[evt]] = await pool.query('SELECT id FROM events WHERE id = ? LIMIT 1', [eventId]);
+    if (!evt) return res.status(404).json({ ok: false, message: 'Event not found.' });
+
+    if (req.body?.design_json) {
+      await saveBadgeTemplateDraft(pool, eventId, req.body, {
+        persistImage: (value) => persistBadgeImage(value, req),
+      });
+    }
+
+    const preview = await generateBadgeTemplatePreviewPdf(
+      pool,
+      eventId,
+      __appRoot,
+      getAppOriginFromRequest(req),
+    );
+    if (!preview.ok) {
+      return res.status(400).json({ ok: false, message: preview.message });
+    }
+    if (!isValidCertificatePdfBuffer(preview.buffer)) {
+      return res.status(500).json({ ok: false, message: 'Preview PDF generation failed.' });
+    }
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${preview.filename}"`);
+    return res.send(preview.buffer);
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: 'Failed to generate badge preview.', error: error.message });
+  }
+});
+
+app.post('/api/admin/events/:eventId/badge-template/publish', async (req, res) => {
+  try {
+    const eventId = String(req.params.eventId || '').trim();
+    const [[evt]] = await pool.query('SELECT id FROM events WHERE id = ? LIMIT 1', [eventId]);
+    if (!evt) return res.status(404).json({ ok: false, message: 'Event not found.' });
+
+    if (req.body?.design_json) {
+      await saveBadgeTemplateDraft(pool, eventId, req.body, {
+        persistImage: (value) => persistBadgeImage(value, req),
+      });
+    }
+
+    const result = await publishBadgeTemplate(pool, eventId);
+    if (!result.ok) {
+      return res.status(400).json({ ok: false, message: result.message, errors: result.errors || [] });
+    }
+    return res.json({ ok: true, data: result.template });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: 'Failed to publish badge template.', error: error.message });
+  }
+});
+
+app.post('/api/admin/events/:eventId/badges/print', async (req, res) => {
+  try {
+    const eventId = String(req.params.eventId || '').trim();
+    const [[evt]] = await pool.query('SELECT id FROM events WHERE id = ? LIMIT 1', [eventId]);
+    if (!evt) return res.status(404).json({ ok: false, message: 'Event not found.' });
+
+    const template = await getBadgeTemplateForEvent(pool, eventId);
+    if (!template) {
+      return res.status(400).json({ ok: false, message: 'Badge template not found. Design badges first.' });
+    }
+    if (!template.is_active) {
+      return res.status(400).json({ ok: false, message: 'Publish the badge template before printing.' });
+    }
+
+    const registrationIds = Array.isArray(req.body?.registration_ids)
+      ? req.body.registration_ids.map((id) => String(id || '').trim()).filter(Boolean)
+      : [];
+
+    const result = await generateEventBadgePrintPdf(
+      pool,
+      eventId,
+      __appRoot,
+      getAppOriginFromRequest(req),
+      { registrationIds },
+    );
+    if (!result.ok) {
+      return res.status(400).json({ ok: false, message: result.message });
+    }
+    if (!isValidCertificatePdfBuffer(result.buffer)) {
+      return res.status(500).json({ ok: false, message: 'Badge PDF generation failed.' });
+    }
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+    return res.send(result.buffer);
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: 'Failed to generate badge print sheet.', error: error.message });
+  }
+});
+
+app.post('/api/admin/events/:eventId/walk-in-registrations', async (req, res) => {
+  try {
+    const eventId = String(req.params.eventId || '').trim();
+    const [[event]] = await pool.query('SELECT * FROM events WHERE id = ? LIMIT 1', [eventId]);
+    if (!event) return res.status(404).json({ ok: false, message: 'Event not found.' });
+
+    const eventMode = resolveEventModeFromRow(event);
+    if (eventMode === 'virtual') {
+      return res.status(400).json({ ok: false, message: 'Walk-in registration is only available for in-person or hybrid events.' });
+    }
+
+    const incoming = req.body && typeof req.body === 'object' ? req.body : {};
+    const name = String(incoming.name || incoming.booked_for_name || '').trim();
+    if (!name) {
+      return res.status(400).json({ ok: false, message: 'Attendee name is required.' });
+    }
+
+    const email = String(incoming.email || incoming.booked_for_email || '').trim().toLowerCase();
+    const phone = String(incoming.phone || incoming.booked_for_phone || '').trim();
+    const regId = generateEntityId('reg');
+
+    const enriched = normalizeRegistrationPayload({
+      id: regId,
+      user_id: `walk-in-${regId}`,
+      user_name: name,
+      user_email: email,
+      event_id: eventId,
+      event_title: event.title,
+      event_slug: event.slug,
+      event_price: 0,
+      is_free_event: true,
+      registration_type: 'booking',
+      status: 'confirmed',
+      amount: 0,
+      amount_zmw: 0,
+      currency: 'ZMW',
+      payment_status: 'waived',
+      payment_method: 'walk_in',
+      booked_for_name: name,
+      booked_for_email: email || null,
+      booked_for_phone: phone || null,
+      attendee_slot_key: deriveAttendeeSlotKey(name),
+      notes: 'walk_in',
+    }, regId);
+
+    const placeholders = EVENT_REGISTRATION_FIELDS.map(() => '?').join(', ');
+    const regValues = EVENT_REGISTRATION_FIELDS.map((field) => enriched[field]);
+
+    await pool.query(
+      `INSERT INTO event_registrations (${EVENT_REGISTRATION_FIELDS.join(', ')}) VALUES (${placeholders})`,
+      regValues,
+    );
+
+    const refreshed = await markEventRegistrationAttendance(regId, 'gate');
+    const mapped = mapDbRegistration(refreshed || enriched);
+
+    return res.json({
+      ok: true,
+      data: {
+        registration: mapped,
+      },
+    });
+  } catch (error) {
+    if (String(error.message || '').includes('uq_event_reference_code')) {
+      return res.status(409).json({ ok: false, message: 'Duplicate reference code. Please retry.' });
+    }
+    return res.status(500).json({ ok: false, message: 'Failed to add walk-in attendee.', error: error.message });
   }
 });
 

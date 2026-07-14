@@ -1,4 +1,4 @@
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useState, Suspense, useRef, useCallback } from 'react';
 import { NavLink, Outlet, Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -11,7 +11,7 @@ import {
   Settings,
   Menu,
   X,
-  ChevronDown,
+  ChevronRight,
   Receipt,
   ReceiptText,
   FileUser,
@@ -134,14 +134,163 @@ function AdminOutletLoader() {
   );
 }
 
+const SIDEBAR_WIDTH_PX = 288;
+const FLYOUT_CLOSE_DELAY_MS = 120;
+
+function SidebarNavGroup({
+  item,
+  groupActive,
+  isChildActive,
+  onNavigate,
+  sidebarOpen = true,
+}) {
+  const [open, setOpen] = useState(false);
+  const [panelTop, setPanelTop] = useState(0);
+  const triggerRef = useRef(null);
+  const closeTimerRef = useRef(null);
+  const location = useLocation();
+
+  const updatePanelPosition = useCallback(() => {
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const maxTop = window.innerHeight - 16;
+    setPanelTop(Math.min(rect.top, maxTop));
+  }, []);
+
+  const clearCloseTimer = useCallback(() => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  }, []);
+
+  const showPanel = useCallback(() => {
+    clearCloseTimer();
+    updatePanelPosition();
+    setOpen(true);
+  }, [clearCloseTimer, updatePanelPosition]);
+
+  const hidePanel = useCallback(() => {
+    clearCloseTimer();
+    closeTimerRef.current = setTimeout(() => setOpen(false), FLYOUT_CLOSE_DELAY_MS);
+  }, [clearCloseTimer]);
+
+  const handleTriggerClick = (event) => {
+    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+      event.preventDefault();
+      updatePanelPosition();
+      setOpen((prev) => !prev);
+    }
+  };
+
+  useEffect(() => () => clearCloseTimer(), [clearCloseTimer]);
+
+  useEffect(() => {
+    setOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!sidebarOpen) setOpen(false);
+  }, [sidebarOpen]);
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={handleTriggerClick}
+        onMouseEnter={showPanel}
+        onMouseLeave={hidePanel}
+        aria-expanded={open}
+        aria-haspopup="true"
+        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+          groupActive
+            ? 'bg-cyan-600/10 text-cyan-400'
+            : 'text-navy-300 hover:bg-navy-800 hover:text-white'
+        }`}
+      >
+        <item.icon size={18} />
+        <span className="flex-1 text-left">{item.name}</span>
+        <ChevronRight size={16} className={`text-navy-500 transition-transform ${open ? 'translate-x-0.5' : ''}`} />
+      </button>
+
+      {open && (
+        <div
+          className="fixed z-[60] w-60 rounded-xl border border-navy-700 bg-navy-900 py-2 shadow-2xl shadow-black/40 animate-[fadeIn_0.15s_ease-out]"
+          style={{ top: panelTop, left: SIDEBAR_WIDTH_PX + 8 }}
+          onMouseEnter={showPanel}
+          onMouseLeave={hidePanel}
+          role="menu"
+          aria-label={`${item.name} submenu`}
+        >
+          <p className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-navy-500">
+            {item.name}
+          </p>
+          <div className="space-y-0.5 px-2">
+            {item.children.map((subItem) => (
+              <NavLink
+                key={subItem.key}
+                to={subItem.to}
+                end={subItem.end}
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  onNavigate?.();
+                }}
+                className={({ isActive }) => {
+                  const active = isChildActive(subItem, isActive);
+                  return `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    active
+                      ? 'bg-cyan-600/15 text-cyan-400'
+                      : 'text-navy-300 hover:bg-navy-800 hover:text-white'
+                  }`;
+                }}
+              >
+                <subItem.icon size={16} />
+                {subItem.name}
+              </NavLink>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function SidebarNavLink({ item, isItemActive, onNavigate }) {
+  return (
+    <NavLink
+      to={item.to}
+      end={item.end}
+      onClick={() => onNavigate?.()}
+      className={({ isActive }) => {
+        const active = isItemActive(item, isActive);
+        return `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+          active
+            ? 'bg-cyan-600/10 text-cyan-400'
+            : 'text-navy-300 hover:bg-navy-800 hover:text-white'
+        }`;
+      }}
+    >
+      <item.icon size={18} />
+      {item.name}
+    </NavLink>
+  );
+}
+
+const GROUP_ACTIVE_CHECKS = {
+  'events-group': (pathname) => pathname.startsWith('/admin/events') || pathname.startsWith('/admin/certificates'),
+  'blog-group': (pathname) => pathname.startsWith('/admin/blog'),
+  'publications-group': (pathname) => pathname.startsWith('/admin/publications'),
+  'books-group': (pathname) => pathname.startsWith('/admin/books')
+    || pathname.startsWith('/admin/shipping')
+    || pathname.startsWith('/admin/shop'),
+};
+
 export default function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user, hasPermission } = useAuth();
   const location = useLocation();
-  const [eventsOpen, setEventsOpen] = useState(true);
-  const [blogOpen, setBlogOpen] = useState(true);
-  const [publicationsOpen, setPublicationsOpen] = useState(true);
-  const [booksOpen, setBooksOpen] = useState(true);
 
   const [videoStatus, setVideoStatus] = useState(null);
 
@@ -231,26 +380,11 @@ export default function AdminLayout() {
     return defaultIsActive;
   };
 
-  const isEventsGroupActive = () => {
-    const { pathname } = location;
-    return pathname.startsWith('/admin/events') || pathname.startsWith('/admin/coupons');
-  };
+  const closeSidebar = () => setSidebarOpen(false);
 
-  const isBlogGroupActive = () => {
-    const { pathname } = location;
-    return pathname.startsWith('/admin/blog');
-  };
-
-  const isPublicationsGroupActive = () => {
-    const { pathname } = location;
-    return pathname.startsWith('/admin/publications');
-  };
-
-  const isBooksGroupActive = () => {
-    const { pathname } = location;
-    return pathname.startsWith('/admin/books')
-      || pathname.startsWith('/admin/shipping')
-      || pathname.startsWith('/admin/shop');
+  const isNavGroupActive = (item) => {
+    const checker = GROUP_ACTIVE_CHECKS[item.key];
+    return checker ? checker(location.pathname) : false;
   };
 
   useEffect(() => {
@@ -300,204 +434,27 @@ export default function AdminLayout() {
             Content
           </p>
           {contentNavigation.map((item) => {
-            if (item.key === 'events-group') {
-              const groupActive = isEventsGroupActive();
+            if (item.children) {
               return (
-                <div key={item.key} className="space-y-1">
-                  <button
-                    type="button"
-                    onClick={() => setEventsOpen((prev) => !prev)}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                      groupActive
-                        ? 'bg-cyan-600/10 text-cyan-400'
-                        : 'text-navy-300 hover:bg-navy-800 hover:text-white'
-                    }`}
-                  >
-                    <item.icon size={18} />
-                    <span className="flex-1 text-left">{item.name}</span>
-                    <ChevronDown size={16} className={`transition-transform ${eventsOpen ? 'rotate-180' : ''}`} />
-                  </button>
-
-                  {eventsOpen && (
-                    <div className="ml-4 pl-3 border-l border-navy-800 space-y-1">
-                      {item.children.map((subItem) => (
-                        <NavLink
-                          key={subItem.key}
-                          to={subItem.to}
-                          end={subItem.end}
-                          onClick={() => setSidebarOpen(false)}
-                          className={({ isActive }) => {
-                            const active = isContentItemActive(subItem, isActive);
-                            return `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                              active
-                                ? 'bg-cyan-600/10 text-cyan-400'
-                                : 'text-navy-300 hover:bg-navy-800 hover:text-white'
-                            }`;
-                          }}
-                        >
-                          <subItem.icon size={16} />
-                          {subItem.name}
-                        </NavLink>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            }
-
-            if (item.key === 'blog-group') {
-              const groupActive = isBlogGroupActive();
-              return (
-                <div key={item.key} className="space-y-1">
-                  <button
-                    type="button"
-                    onClick={() => setBlogOpen((prev) => !prev)}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                      groupActive
-                        ? 'bg-cyan-600/10 text-cyan-400'
-                        : 'text-navy-300 hover:bg-navy-800 hover:text-white'
-                    }`}
-                  >
-                    <item.icon size={18} />
-                    <span className="flex-1 text-left">{item.name}</span>
-                    <ChevronDown size={16} className={`transition-transform ${blogOpen ? 'rotate-180' : ''}`} />
-                  </button>
-
-                  {blogOpen && (
-                    <div className="ml-4 pl-3 border-l border-navy-800 space-y-1">
-                      {item.children.map((subItem) => (
-                        <NavLink
-                          key={subItem.key}
-                          to={subItem.to}
-                          end={subItem.end}
-                          onClick={() => setSidebarOpen(false)}
-                          className={({ isActive }) => {
-                            const active = isContentItemActive(subItem, isActive);
-                            return `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                              active
-                                ? 'bg-cyan-600/10 text-cyan-400'
-                                : 'text-navy-300 hover:bg-navy-800 hover:text-white'
-                            }`;
-                          }}
-                        >
-                          <subItem.icon size={16} />
-                          {subItem.name}
-                        </NavLink>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            }
-
-            if (item.key === 'publications-group') {
-              const groupActive = isPublicationsGroupActive();
-              return (
-                <div key={item.key} className="space-y-1">
-                  <button
-                    type="button"
-                    onClick={() => setPublicationsOpen((prev) => !prev)}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                      groupActive
-                        ? 'bg-cyan-600/10 text-cyan-400'
-                        : 'text-navy-300 hover:bg-navy-800 hover:text-white'
-                    }`}
-                  >
-                    <item.icon size={18} />
-                    <span className="flex-1 text-left">{item.name}</span>
-                    <ChevronDown size={16} className={`transition-transform ${publicationsOpen ? 'rotate-180' : ''}`} />
-                  </button>
-
-                  {publicationsOpen && (
-                    <div className="ml-4 pl-3 border-l border-navy-800 space-y-1">
-                      {item.children.map((subItem) => (
-                        <NavLink
-                          key={subItem.key}
-                          to={subItem.to}
-                          end={subItem.end}
-                          onClick={() => setSidebarOpen(false)}
-                          className={({ isActive }) => {
-                            const active = isContentItemActive(subItem, isActive);
-                            return `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                              active
-                                ? 'bg-cyan-600/10 text-cyan-400'
-                                : 'text-navy-300 hover:bg-navy-800 hover:text-white'
-                            }`;
-                          }}
-                        >
-                          <subItem.icon size={16} />
-                          {subItem.name}
-                        </NavLink>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            }
-
-            if (item.key === 'books-group') {
-              const groupActive = isBooksGroupActive();
-              return (
-                <div key={item.key} className="space-y-1">
-                  <button
-                    type="button"
-                    onClick={() => setBooksOpen((prev) => !prev)}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                      groupActive
-                        ? 'bg-cyan-600/10 text-cyan-400'
-                        : 'text-navy-300 hover:bg-navy-800 hover:text-white'
-                    }`}
-                  >
-                    <item.icon size={18} />
-                    <span className="flex-1 text-left">{item.name}</span>
-                    <ChevronDown size={16} className={`transition-transform ${booksOpen ? 'rotate-180' : ''}`} />
-                  </button>
-
-                  {booksOpen && (
-                    <div className="ml-4 pl-3 border-l border-navy-800 space-y-1">
-                      {item.children.map((subItem) => (
-                        <NavLink
-                          key={subItem.key}
-                          to={subItem.to}
-                          end={subItem.end}
-                          onClick={() => setSidebarOpen(false)}
-                          className={({ isActive }) => {
-                            const active = isContentItemActive(subItem, isActive);
-                            return `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                              active
-                                ? 'bg-cyan-600/10 text-cyan-400'
-                                : 'text-navy-300 hover:bg-navy-800 hover:text-white'
-                            }`;
-                          }}
-                        >
-                          <subItem.icon size={16} />
-                          {subItem.name}
-                        </NavLink>
-                      ))}
-                    </div>
-                  )}
+                <div key={item.key}>
+                  <SidebarNavGroup
+                    item={item}
+                    groupActive={isNavGroupActive(item)}
+                    isChildActive={isContentItemActive}
+                    onNavigate={closeSidebar}
+                    sidebarOpen={sidebarOpen}
+                  />
                 </div>
               );
             }
 
             return (
-              <NavLink
-                key={item.name}
-                to={item.to}
-                end={item.end}
-                onClick={() => setSidebarOpen(false)}
-                className={({ isActive }) => {
-                  const active = isContentItemActive(item, isActive);
-                  return `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                    active
-                      ? 'bg-cyan-600/10 text-cyan-400'
-                      : 'text-navy-300 hover:bg-navy-800 hover:text-white'
-                  }`;
-                }}
-              >
-                <item.icon size={18} />
-                {item.name}
-              </NavLink>
+              <SidebarNavLink
+                key={item.key}
+                item={item}
+                isItemActive={isContentItemActive}
+                onNavigate={closeSidebar}
+              />
             );
           })}
 
@@ -506,21 +463,12 @@ export default function AdminLayout() {
               System
             </p>
             {systemNavigation.map((item) => (
-              <NavLink
-                key={item.name}
-                to={item.to}
-                onClick={() => setSidebarOpen(false)}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                    isActive
-                      ? 'bg-cyan-600/10 text-cyan-400'
-                      : 'text-navy-300 hover:bg-navy-800 hover:text-white'
-                  }`
-                }
-              >
-                <item.icon size={18} />
-                {item.name}
-              </NavLink>
+              <SidebarNavLink
+                key={item.key}
+                item={item}
+                isItemActive={(_item, isActive) => isActive}
+                onNavigate={closeSidebar}
+              />
             ))}
           </div>
 

@@ -11,6 +11,7 @@ import { registerCertificatePdfFonts, applyCertificatePdfTextStyle } from './cer
 import { CERTIFICATE_BUNDLED_LOGO_SRC } from './certificateBundledAssets.js';
 import { drawCertificateBackgroundPdf, getBackgroundTheme, isImageBackgroundTheme } from './certificateBackgrounds.js';
 import { buildCertificateQrDataUrl } from './certificateQr.js';
+import { buildTicketQrDataUrl } from './ticketQr.js';
 import { loadCertificateLogoDataUrl } from './certificateLogoAsset.js';
 import { loadCertificateSealDataUrl, isBundledCertificateSealSrc } from './certificateSealAsset.js';
 import { resolveCertificateBackgroundImageSrc } from './certificateBackgroundAssets.js';
@@ -83,9 +84,9 @@ function applyTextStyle(doc, style = {}) {
   doc.setTextColor(r, g, b);
 }
 
-function drawTextElement(doc, element, pageW, pageH, text) {
-  const x = (Number(element.x) || 0) * pageW;
-  const y = (Number(element.y) || 0) * pageH;
+function drawTextElement(doc, element, pageW, pageH, text, offset = { x: 0, y: 0 }) {
+  const x = offset.x + (Number(element.x) || 0) * pageW;
+  const y = offset.y + (Number(element.y) || 0) * pageH;
   const width = (Number(element.width) || 0.4) * pageW;
   const style = element.style || {};
   const align = style.align || 'center';
@@ -137,10 +138,10 @@ function drawTextElement(doc, element, pageW, pageH, text) {
   }
 }
 
-async function drawImageElement(doc, element, pageW, pageH, dataUrl) {
+async function drawImageElement(doc, element, pageW, pageH, dataUrl, offset = { x: 0, y: 0 }) {
   if (!dataUrl) return;
-  const x = ((Number(element.x) || 0) - (Number(element.width) || 0.1) / 2) * pageW;
-  const y = ((Number(element.y) || 0) - (Number(element.height) || 0.1) / 2) * pageH;
+  const x = offset.x + ((Number(element.x) || 0) - (Number(element.width) || 0.1) / 2) * pageW;
+  const y = offset.y + ((Number(element.y) || 0) - (Number(element.height) || 0.1) / 2) * pageH;
   const w = (Number(element.width) || 0.1) * pageW;
   const h = (Number(element.height) || 0.1) * pageH;
   const format = dataUrl.includes('image/png') ? 'PNG' : 'JPEG';
@@ -157,6 +158,100 @@ async function drawImageElement(doc, element, pageW, pageH, dataUrl) {
  * @param {{ appOrigin?: string, appRoot?: string, qrDataUrl?: string }} [opts]
  * @returns {Promise<Buffer>}
  */
+/**
+ * Draw template content onto an existing jsPDF document region.
+ */
+export async function renderCertificateTemplateContent(doc, template, data = {}, opts = {}, layout = {}) {
+  const design = parseDesignJson(template?.design_json);
+  if (!design) {
+    throw new Error('Template design is invalid.');
+  }
+
+  const orientation = template?.orientation === 'portrait' ? 'portrait' : 'landscape';
+  const paperSize = String(template?.paper_size || 'A4');
+  const canvas = design.canvas || getCanvasDimensions(orientation, paperSize);
+  const pageW = layout.pageW || canvas.widthMm || 152.4;
+  const pageH = layout.pageH || canvas.heightMm || 203.2;
+  const offset = { x: layout.offsetX || 0, y: layout.offsetY || 0 };
+  const appRoot = opts.appRoot || process.cwd();
+  const appOrigin = opts.appOrigin || '';
+
+  const bgTheme = resolveBackgroundTheme(design, template);
+  if (bgTheme && isImageBackgroundTheme(bgTheme)) {
+    const theme = getBackgroundTheme(bgTheme);
+    const frameDataUrl = await resolveCertificateBackgroundImageSrc(theme.imageSrc, appRoot);
+    if (frameDataUrl) {
+      try {
+        doc.addImage(frameDataUrl, 'PNG', offset.x, offset.y, pageW, pageH);
+      } catch {
+        drawCertificateBackgroundPdf(doc, pageW, pageH, 'elegant-gold', offset.x, offset.y);
+      }
+    } else {
+      drawCertificateBackgroundPdf(doc, pageW, pageH, 'elegant-gold', offset.x, offset.y);
+    }
+  } else if (bgTheme) {
+    drawCertificateBackgroundPdf(doc, pageW, pageH, bgTheme, offset.x, offset.y);
+  } else if (template?.background_image) {
+    const bgDataUrl = await loadImageAsDataUrl(template.background_image, appRoot);
+    if (bgDataUrl) {
+      const format = bgDataUrl.includes('image/png') ? 'PNG' : 'JPEG';
+      try {
+        doc.addImage(bgDataUrl, format, offset.x, offset.y, pageW, pageH);
+      } catch {
+        drawCertificateBackgroundPdf(doc, pageW, pageH, 'elegant-gold', offset.x, offset.y);
+      }
+    } else {
+      drawCertificateBackgroundPdf(doc, pageW, pageH, 'elegant-gold', offset.x, offset.y);
+    }
+  } else {
+    drawCertificateBackgroundPdf(doc, pageW, pageH, 'modern-teal', offset.x, offset.y);
+  }
+
+  if (offset.x || offset.y) {
+    doc.setDrawColor(210, 218, 226);
+    doc.setLineWidth(0.2);
+    doc.rect(offset.x, offset.y, pageW, pageH);
+  }
+
+  let qrDataUrl = opts.qrDataUrl || '';
+  if (!qrDataUrl && data.reference_code && appOrigin) {
+    qrDataUrl = await buildTicketQrDataUrl(data.reference_code, appOrigin, {
+      size: Math.round(Math.min(pageW, pageH) * 12),
+    });
+  } else if (!qrDataUrl && data.certificate_number && appOrigin) {
+    qrDataUrl = await buildCertificateQrDataUrl(data.certificate_number, appOrigin, {
+      size: Math.round(Math.min(pageW, pageH) * 12),
+    });
+  }
+
+  const elements = Array.isArray(design.elements) ? design.elements : [];
+  for (const element of elements) {
+    if (element.type === 'qr') {
+      await drawImageElement(doc, element, pageW, pageH, qrDataUrl, offset);
+      continue;
+    }
+    if (element.type === 'image') {
+      const imgDataUrl = await loadImageAsDataUrl(element.src, appRoot);
+      await drawImageElement(doc, element, pageW, pageH, imgDataUrl, offset);
+      continue;
+    }
+    if (element.type === 'placeholder') {
+      const key = element.key || 'attendee_name';
+      if (key === 'qr_code') {
+        await drawImageElement(doc, element, pageW, pageH, qrDataUrl, offset);
+        continue;
+      }
+      const value = data[key] ?? resolvePlaceholders(`{{${key}}}`, data);
+      drawTextElement(doc, element, pageW, pageH, value, offset);
+      continue;
+    }
+    if (element.type === 'text') {
+      const text = resolvePlaceholders(element.content || '', data);
+      drawTextElement(doc, element, pageW, pageH, text, offset);
+    }
+  }
+}
+
 export async function generateCertificatePdfFromTemplate(template, data = {}, opts = {}) {
   const design = parseDesignJson(template?.design_json);
   if (!design) {
@@ -167,10 +262,14 @@ export async function generateCertificatePdfFromTemplate(template, data = {}, op
   const paperSize = String(template?.paper_size || 'A4');
   const canvas = design.canvas || getCanvasDimensions(orientation, paperSize);
 
+  const pdfFormat = String(paperSize).toLowerCase() === '6x8'
+    ? [152.4, 203.2]
+    : 'a4';
+
   const doc = new jsPDF({
     orientation,
     unit: 'mm',
-    format: paperSize.toLowerCase() === 'a4' ? 'a4' : 'a4',
+    format: pdfFormat,
   });
 
   const appRoot = opts.appRoot || process.cwd();
@@ -179,76 +278,7 @@ export async function generateCertificatePdfFromTemplate(template, data = {}, op
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
 
-  const appOrigin = opts.appOrigin || '';
-
-  const bgTheme = resolveBackgroundTheme(design, template);
-  if (bgTheme && isImageBackgroundTheme(bgTheme)) {
-    const theme = getBackgroundTheme(bgTheme);
-    const frameDataUrl = await resolveCertificateBackgroundImageSrc(theme.imageSrc, appRoot);
-    if (frameDataUrl) {
-      try {
-        doc.addImage(frameDataUrl, 'PNG', 0, 0, pageW, pageH);
-      } catch {
-        drawCertificateBackgroundPdf(doc, pageW, pageH, 'elegant-gold');
-      }
-    } else {
-      drawCertificateBackgroundPdf(doc, pageW, pageH, 'elegant-gold');
-    }
-  } else if (bgTheme) {
-    drawCertificateBackgroundPdf(doc, pageW, pageH, bgTheme);
-  } else if (template?.background_image) {
-    const bgDataUrl = await loadImageAsDataUrl(template.background_image, appRoot);
-    if (bgDataUrl) {
-      const format = bgDataUrl.includes('image/png') ? 'PNG' : 'JPEG';
-      try {
-        doc.addImage(bgDataUrl, format, 0, 0, pageW, pageH);
-      } catch {
-        drawCertificateBackgroundPdf(doc, pageW, pageH, 'elegant-gold');
-      }
-    } else {
-      drawCertificateBackgroundPdf(doc, pageW, pageH, 'elegant-gold');
-    }
-  } else {
-    drawCertificateBackgroundPdf(doc, pageW, pageH, 'elegant-gold');
-  }
-
-  let qrDataUrl = opts.qrDataUrl || '';
-  if (!qrDataUrl && data.certificate_number && appOrigin) {
-    qrDataUrl = await buildCertificateQrDataUrl(data.certificate_number, appOrigin, {
-      size: Math.round(Math.min(pageW, pageH) * 12),
-    });
-  }
-
-  const elements = Array.isArray(design.elements) ? design.elements : [];
-
-  for (const element of elements) {
-    if (element.type === 'qr') {
-      await drawImageElement(doc, element, pageW, pageH, qrDataUrl);
-      continue;
-    }
-
-    if (element.type === 'image') {
-      const imgDataUrl = await loadImageAsDataUrl(element.src, appRoot);
-      await drawImageElement(doc, element, pageW, pageH, imgDataUrl);
-      continue;
-    }
-
-    if (element.type === 'placeholder') {
-      const key = element.key || 'attendee_name';
-      if (key === 'qr_code') {
-        await drawImageElement(doc, element, pageW, pageH, qrDataUrl);
-        continue;
-      }
-      const value = data[key] ?? resolvePlaceholders(`{{${key}}}`, data);
-      drawTextElement(doc, element, pageW, pageH, value);
-      continue;
-    }
-
-    if (element.type === 'text') {
-      const text = resolvePlaceholders(element.content || '', data);
-      drawTextElement(doc, element, pageW, pageH, text);
-    }
-  }
+  await renderCertificateTemplateContent(doc, template, data, opts, { pageW, pageH, offsetX: 0, offsetY: 0 });
 
   return Buffer.from(doc.output('arraybuffer'));
 }

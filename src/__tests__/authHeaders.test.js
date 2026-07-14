@@ -1,11 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildPublicUserSession,
+  decodeJwtPayload,
   getSessionAuthHeaders,
   getUserAuthHeaders,
   hasUserAuthToken,
+  isBearerTokenExpired,
+  purgeInvalidAuthState,
   resolveUserBearerToken,
 } from '../utils/authHeaders';
+
+function makeJwt(payload) {
+  const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const body = btoa(JSON.stringify(payload)).replace(/=+$/, '');
+  return `${header}.${body}.signature`;
+}
 
 describe('authHeaders', () => {
   beforeEach(() => {
@@ -55,5 +64,25 @@ describe('authHeaders', () => {
     expect(session.expiresAt).toBe(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
     vi.useRealTimers();
+  });
+
+  it('detects expired bearer tokens', () => {
+    const expired = makeJwt({ sub: '1', exp: Math.floor(Date.now() / 1000) - 60 });
+    const valid = makeJwt({ sub: '1', exp: Math.floor(Date.now() / 1000) + 3600 });
+    expect(isBearerTokenExpired(expired)).toBe(true);
+    expect(isBearerTokenExpired(valid)).toBe(false);
+    expect(decodeJwtPayload(valid)?.sub).toBe('1');
+  });
+
+  it('purges expired user session tokens before resolving bearer', () => {
+    const expired = makeJwt({ sub: '9', exp: Math.floor(Date.now() / 1000) - 10 });
+    localStorage.setItem('mm_user_token', expired);
+    localStorage.setItem('mm_user_session', JSON.stringify({ id: '9', expiresAt: Date.now() + 999999 }));
+
+    purgeInvalidAuthState();
+
+    expect(localStorage.getItem('mm_user_token')).toBeNull();
+    expect(localStorage.getItem('mm_user_session')).toBeNull();
+    expect(resolveUserBearerToken()).toBe('');
   });
 });

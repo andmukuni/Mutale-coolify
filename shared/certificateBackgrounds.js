@@ -109,36 +109,39 @@ function setDraw(doc, hex, width = 0.4) {
   doc.setLineWidth(width);
 }
 
-function drawCornerOrnaments(doc, pageW, pageH, color, inset = 18) {
+function drawCornerOrnaments(doc, pageW, pageH, color, inset = 18, offsetX = 0, offsetY = 0) {
+  const ox = Number(offsetX) || 0;
+  const oy = Number(offsetY) || 0;
+  const line = (x1, y1, x2, y2) => doc.line(ox + x1, oy + y1, ox + x2, oy + y2);
   setDraw(doc, color, 0.6);
   const len = 12;
-  // top-left
-  doc.line(inset, inset + len, inset, inset);
-  doc.line(inset, inset, inset + len, inset);
-  // top-right
-  doc.line(pageW - inset - len, inset, pageW - inset, inset);
-  doc.line(pageW - inset, inset, pageW - inset, inset + len);
-  // bottom-left
-  doc.line(inset, pageH - inset - len, inset, pageH - inset);
-  doc.line(inset, pageH - inset, inset + len, pageH - inset);
-  // bottom-right
-  doc.line(pageW - inset - len, pageH - inset, pageW - inset, pageH - inset);
-  doc.line(pageW - inset, pageH - inset, pageW - inset, pageH - inset - len);
+  line(inset, inset + len, inset, inset);
+  line(inset, inset, inset + len, inset);
+  line(pageW - inset - len, inset, pageW - inset, inset);
+  line(pageW - inset, inset, pageW - inset, inset + len);
+  line(inset, pageH - inset - len, inset, pageH - inset);
+  line(inset, pageH - inset, inset + len, pageH - inset);
+  line(pageW - inset - len, pageH - inset, pageW - inset, pageH - inset);
+  line(pageW - inset, pageH - inset, pageW - inset, pageH - inset - len);
 }
 
-function drawParchmentLines(doc, pageW, pageH) {
+function drawParchmentLines(doc, pageW, pageH, offsetX = 0, offsetY = 0) {
+  const ox = Number(offsetX) || 0;
+  const oy = Number(offsetY) || 0;
   setDraw(doc, '#E8DCC8', 0.08);
   for (let y = 24; y < pageH - 20; y += 4) {
-    doc.line(20, y, pageW - 20, y);
+    doc.line(ox + 20, oy + y, ox + pageW - 20, oy + y);
   }
 }
 
-function drawGeometricAccents(doc, pageW, pageH, color) {
+function drawGeometricAccents(doc, pageW, pageH, color, offsetX = 0, offsetY = 0) {
+  const ox = Number(offsetX) || 0;
+  const oy = Number(offsetY) || 0;
   setFill(doc, color);
-  doc.rect(pageW - 22, 0, 22, 22, 'F');
-  doc.rect(0, pageH - 22, 22, 22, 'F');
+  doc.rect(ox + pageW - 22, oy, 22, 22, 'F');
+  doc.rect(ox, oy + pageH - 22, 22, 22, 'F');
   setDraw(doc, color, 0.5);
-  doc.line(14, pageH / 2, pageW - 14, pageH / 2);
+  doc.line(ox + 14, oy + pageH / 2, ox + pageW - 14, oy + pageH / 2);
 }
 
 /**
@@ -148,79 +151,82 @@ function drawGeometricAccents(doc, pageW, pageH, color) {
  * @param {number} pageH
  * @param {string} themeId
  */
-export function drawCertificateBackgroundPdf(doc, pageW, pageH, themeId) {
+export function drawCertificateBackgroundPdf(doc, pageW, pageH, themeId, offsetX = 0, offsetY = 0) {
   const theme = getBackgroundTheme(themeId);
   const id = theme.id;
+  const ox = Number(offsetX) || 0;
+  const oy = Number(offsetY) || 0;
+  const rect = (x, y, w, h, op) => doc.rect(ox + x, oy + y, w, h, op);
 
   if (id === 'classic-navy') {
     setFill(doc, '#0B1D36');
-    doc.rect(0, 0, pageW, pageH, 'F');
+    rect(0, 0, pageW, pageH, 'F');
     setFill(doc, '#132D4F');
-    doc.rect(8, 8, pageW - 16, pageH - 16, 'F');
+    rect(8, 8, pageW - 16, pageH - 16, 'F');
     setDraw(doc, '#06B6D4', 1.2);
-    doc.rect(14, 14, pageW - 28, pageH - 28);
+    rect(14, 14, pageW - 28, pageH - 28);
     setDraw(doc, '#FFFFFF', 0.35);
-    doc.rect(18, 18, pageW - 36, pageH - 36);
-    drawCornerOrnaments(doc, pageW, pageH, '#06B6D4', 22);
+    rect(18, 18, pageW - 36, pageH - 36);
+    drawCornerOrnaments(doc, pageW, pageH, '#06B6D4', 22, ox, oy);
     return;
   }
 
   if (id === 'elegant-gold') {
     setFill(doc, '#F5EDD8');
-    doc.rect(0, 0, pageW, pageH, 'F');
+    rect(0, 0, pageW, pageH, 'F');
     setFill(doc, '#FFFDF7');
-    doc.rect(10, 10, pageW - 20, pageH - 20, 'F');
+    rect(10, 10, pageW - 20, pageH - 20, 'F');
     setDraw(doc, '#C9A227', 1.5);
-    doc.rect(14, 14, pageW - 28, pageH - 28);
+    rect(14, 14, pageW - 28, pageH - 28);
     setDraw(doc, '#8B6914', 0.4);
-    doc.rect(18, 18, pageW - 36, pageH - 36);
-    drawCornerOrnaments(doc, pageW, pageH, '#C9A227', 20);
+    rect(18, 18, pageW - 36, pageH - 36);
+    drawCornerOrnaments(doc, pageW, pageH, '#C9A227', 20, ox, oy);
     return;
   }
 
   if (id === 'modern-teal') {
     setFill(doc, '#FFFFFF');
-    doc.rect(0, 0, pageW, pageH, 'F');
+    rect(0, 0, pageW, pageH, 'F');
     setFill(doc, '#F0FDFA');
-    doc.rect(12, 12, pageW - 24, pageH - 24, 'F');
+    rect(12, 12, pageW - 24, pageH - 24, 'F');
     setDraw(doc, '#0D9488', 0.8);
-    doc.rect(16, 16, pageW - 32, pageH - 32);
-    drawGeometricAccents(doc, pageW, pageH, '#14B8A6');
+    rect(16, 16, pageW - 32, pageH - 32);
+    drawGeometricAccents(doc, pageW, pageH, '#14B8A6', ox, oy);
     return;
   }
 
   if (id === 'royal-burgundy') {
     setFill(doc, '#4A1C28');
-    doc.rect(0, 0, pageW, pageH, 'F');
+    rect(0, 0, pageW, pageH, 'F');
     setFill(doc, '#5C2433');
-    doc.rect(10, 10, pageW - 20, pageH - 20, 'F');
+    rect(10, 10, pageW - 20, pageH - 20, 'F');
     setDraw(doc, '#D4AF37', 1.4);
-    doc.rect(14, 14, pageW - 28, pageH - 28);
+    rect(14, 14, pageW - 28, pageH - 28);
     setDraw(doc, '#F5E6C8', 0.35);
-    doc.rect(18, 18, pageW - 36, pageH - 36);
-    drawCornerOrnaments(doc, pageW, pageH, '#D4AF37', 20);
+    rect(18, 18, pageW - 36, pageH - 36);
+    drawCornerOrnaments(doc, pageW, pageH, '#D4AF37', 20, ox, oy);
     return;
   }
 
   if (id === 'parchment') {
     setFill(doc, '#EDE0C8');
-    doc.rect(0, 0, pageW, pageH, 'F');
+    rect(0, 0, pageW, pageH, 'F');
     setFill(doc, '#FAF3E8');
-    doc.rect(12, 12, pageW - 24, pageH - 24, 'F');
-    drawParchmentLines(doc, pageW, pageH);
+    rect(12, 12, pageW - 24, pageH - 24, 'F');
+    drawParchmentLines(doc, pageW, pageH, ox, oy);
     setDraw(doc, '#A68B5B', 0.9);
-    doc.rect(16, 16, pageW - 32, pageH - 32);
-    drawCornerOrnaments(doc, pageW, pageH, '#A68B5B', 20);
+    rect(16, 16, pageW - 32, pageH - 32);
+    drawCornerOrnaments(doc, pageW, pageH, '#A68B5B', 20, ox, oy);
     return;
   }
 
   // minimal-slate (default fallback)
   setFill(doc, '#F8FAFC');
-  doc.rect(0, 0, pageW, pageH, 'F');
+  rect(0, 0, pageW, pageH, 'F');
   setFill(doc, '#FFFFFF');
-  doc.rect(14, 14, pageW - 28, pageH - 28, 'F');
+  rect(14, 14, pageW - 28, pageH - 28, 'F');
   setDraw(doc, '#64748B', 0.6);
-  doc.rect(18, 18, pageW - 36, pageH - 36);
+  rect(18, 18, pageW - 36, pageH - 36);
 }
 
 /** CSS inline style for canvas preview background layer. */

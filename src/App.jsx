@@ -6,6 +6,7 @@ import { Modal } from './components/ui';
 import TopProgressBar from './components/ui/TopProgressBar';
 import { useUserAuth } from './context/UserAuthContext';
 import { useAuth } from './context/AuthContext';
+import { purgeInvalidAuthState } from './utils/authHeaders';
 import { lazyWithRetry } from './utils/lazyWithRetry';
 
 const MainLayout = lazy(() => import('./layouts/MainLayout'));
@@ -18,6 +19,7 @@ const EventsPage = lazy(() => import('./pages/EventsPage'));
 const EventDetailPage = lazy(() => import('./pages/EventDetailPage'));
 const EventRegisterPage = lazy(() => import('./pages/EventRegisterPage'));
 const TicketPage = lazy(() => import('./pages/TicketPage'));
+const GateCheckInPage = lazy(() => import('./pages/GateCheckInPage'));
 const EventForumPage = lazy(() => import('./pages/EventForumPage'));
 const EventJoinPage = lazy(() => import('./pages/EventJoinPage'));
 const BlogPage = lazy(() => import('./pages/BlogPage'));
@@ -61,6 +63,7 @@ const ReceiptsPage = lazy(() => import('./pages/admin/ReceiptsPage'));
 const CvsPage = lazy(() => import('./pages/admin/CvsPage'));
 const CertificatesListPage = lazy(() => import('./pages/admin/CertificatesListPage'));
 const CertificateDesignerPage = lazy(() => import('./pages/admin/CertificateDesignerPage'));
+const BadgeDesignerPage = lazy(() => import('./pages/admin/BadgeDesignerPage'));
 const CertificateVerifyPage = lazy(() => import('./pages/CertificateVerifyPage'));
 const CollectionsPage = lazy(() => import('./pages/admin/CollectionsPage'));
 const PayoutsPage = lazy(() => import('./pages/admin/PayoutsPage'));
@@ -137,11 +140,13 @@ export default function App() {
 
   const openUserLogin = () => {
     dismissIdleLogoutPrompt();
-    navigate('/account/login', { state: { from: { pathname: location.pathname } } });
+    purgeInvalidAuthState();
+    navigate('/account/login');
   };
 
   const openAdminLogin = () => {
     dismissAdminIdleLogoutPrompt();
+    purgeInvalidAuthState();
     navigate('/admin/login', { state: { from: { pathname: location.pathname } } });
   };
 
@@ -187,6 +192,7 @@ export default function App() {
         <Route path="/pages/:slug" element={<CustomPage />} />
         <Route path="/certificates/verify/:code" element={<CertificateVerifyPage />} />
         <Route path="/tickets/:code" element={<TicketPage />} />
+        <Route path="/check-in/:code" element={<GateCheckInPage />} />
 
         {/* Public user account routes */}
         <Route path="/account/login" element={<UserLoginPage />} />
@@ -239,6 +245,7 @@ export default function App() {
         <Route path="events/new" element={<EventFormPage />} />
         <Route path="events/:id" element={<EventProfilePage />} />
         <Route path="events/:eventId/certificate-designer" element={<CertificateDesignerPage />} />
+        <Route path="events/:eventId/badge-designer" element={<BadgeDesignerPage />} />
         <Route path="events/:id/edit" element={<EventFormPage />} />
         <Route path="events/:id/attendees" element={<EventAttendeesPage />} />
         <Route path="events/:id/check-in" element={<EventCheckInPage />} />

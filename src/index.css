@@ -83,7 +83,8 @@ body {
 .dark .bg-slate-50,
 .dark .bg-slate-100 { background-color: var(--app-surface-muted); }
 
-.dark .text-navy-900 { color: var(--app-text); }
+.dark .text-navy-900,
+.dark .text-\[\#141D45\] { color: var(--app-text); }
 .dark .text-navy-800 { color: color-mix(in srgb, var(--app-text) 94%, transparent); }
 .dark .text-navy-700 { color: var(--app-text-secondary); }
 .dark .text-navy-600,

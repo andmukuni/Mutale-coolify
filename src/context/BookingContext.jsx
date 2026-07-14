@@ -236,6 +236,9 @@ export function BookingProvider({ children }) {
       booked_for_name: String(row.name || row.booked_for_name || '').trim(),
       booked_for_email: String(row.email || row.booked_for_email || '').trim(),
       booked_for_phone: String(row.phone || row.booked_for_phone || '').trim(),
+      booked_for_relation: String(row.relation || row.booked_for_relation || '').trim(),
+      attendee_type: String(row.attendee_type || row.attendeeType || 'adult').trim().toLowerCase(),
+      guardian_phone: String(row.guardian_phone || row.guardianPhone || '').trim(),
     }));
 
     const ccRaw = String(couponCode ?? '').trim();

@@ -2,8 +2,14 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   resolveAttendeeName,
   formatTicketDate,
-  downloadBlob,
-} from './ticketDocument.js';
+} from './ticketViewModel.js';
+
+vi.mock('./ticketPdf.js', () => ({
+  generateTicketPdfBlob: vi.fn(),
+  buildTicketFilename: vi.fn(),
+}));
+
+import { downloadBlob } from './ticketDocument.js';
 
 vi.mock('jspdf', () => ({
   jsPDF: vi.fn().mockImplementation(() => ({

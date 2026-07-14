@@ -32,7 +32,7 @@ export function resolveEventMode(event) {
   return String(event?.location || '').toLowerCase().includes('virtual') ? 'virtual' : 'in_person';
 }
 
-/** Virtual and hybrid events are treated as online — no guest registration. */
+/** Virtual and hybrid events support guest registration (payer buys for others). */
 export function isOnlineEvent(event) {
   const mode = resolveEventMode(event);
   return mode === 'virtual' || mode === 'hybrid';
@@ -40,6 +40,24 @@ export function isOnlineEvent(event) {
 
 export function isInPersonEvent(event) {
   return resolveEventMode(event) === 'in_person';
+}
+
+/** All event modes allow multi-attendee (self + guest) registration. */
+export function allowsMultiAttendeeRegistration(event) {
+  return Boolean(event?.id);
+}
+
+const VALID_ATTENDEE_TYPES = new Set(['adult', 'child']);
+const VALID_CHILD_RELATIONS = new Set(['parent', 'guardian', 'teacher', 'other']);
+
+export function normalizeAttendeeType(raw = 'adult') {
+  const t = String(raw || 'adult').trim().toLowerCase();
+  return VALID_ATTENDEE_TYPES.has(t) ? t : 'adult';
+}
+
+export function normalizeAttendeeRelation(raw = '') {
+  const r = String(raw || '').trim().toLowerCase();
+  return VALID_CHILD_RELATIONS.has(r) ? r : '';
 }
 
 export function deriveGuestAttendeeSlotKey(name, index) {
@@ -54,13 +72,21 @@ export function validateGuestAttendees(attendees = []) {
 
   const seenNames = new Set();
   for (let i = 0; i < attendees.length; i += 1) {
-    const name = String(attendees[i]?.name || attendees[i]?.booked_for_name || '').trim();
+    const row = attendees[i] || {};
+    const name = String(row.name || row.booked_for_name || '').trim();
     if (!name) {
-      return { ok: false, error: `Guest ${i + 1} needs a name.` };
+      return { ok: false, error: `Attendee ${i + 1} needs a name.` };
+    }
+    const attendeeType = normalizeAttendeeType(row.attendee_type || row.attendeeType);
+    if (attendeeType === 'child') {
+      const relation = normalizeAttendeeRelation(row.relation || row.booked_for_relation);
+      if (!relation) {
+        return { ok: false, error: `Attendee ${i + 1} (${name}): select your relationship (parent, guardian, etc.).` };
+      }
     }
     const key = name.toLowerCase();
     if (seenNames.has(key)) {
-      return { ok: false, error: 'Each guest must have a unique name in this order.' };
+      return { ok: false, error: 'Each attendee must have a unique name in this order.' };
     }
     seenNames.add(key);
   }

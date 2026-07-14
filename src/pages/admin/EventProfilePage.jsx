@@ -24,7 +24,7 @@ import { useData } from '../../context/DataContext';
 import { useBooking } from '../../context/BookingContext';
 import { StatusBadge, LoadingButton, Spinner } from '../../components/ui';
 import { formatDate, formatTime } from '../../utils/helpers';
-import { getEventDisplayStatus, isEventPast } from '../../utils/eventServices';
+import { getEventDisplayStatus, isEventPast, resolveEventMode } from '../../utils/eventServices';
 import { getApiBase } from '../../utils/apiBase';
 import { getAdminAuthHeaders } from '../../utils/authHeaders';
 import { useToast } from '../../context/ToastContext';
@@ -958,15 +958,25 @@ export default function EventProfilePage() {
           {activeTab === 'tickets' && (
       <FeedCard
         title="Tickets sold"
-        subtitle="Every registration is one ticket — download the ticket card or QR for gate entry"
-        actions={(
-          <Link
-            to={`/admin/events/${event.id}/check-in`}
-            className="text-xs text-cyan-600 hover:text-cyan-700 font-medium"
-          >
-            Gate check-in →
-          </Link>
-        )}
+        subtitle={resolveEventMode(event) === 'virtual'
+          ? 'Every registration is one ticket — share access links for virtual entry'
+          : 'Every registration is one ticket — download the ticket card or QR for gate entry'}
+        actions={resolveEventMode(event) !== 'virtual' ? (
+          <div className="flex items-center gap-3">
+            <Link
+              to={`/admin/events/${event.id}/badge-designer`}
+              className="text-xs text-navy-600 hover:text-cyan-700 font-medium"
+            >
+              Badge designer →
+            </Link>
+            <Link
+              to={`/admin/events/${event.id}/check-in`}
+              className="text-xs text-cyan-600 hover:text-cyan-700 font-medium"
+            >
+              Gate check-in →
+            </Link>
+          </div>
+        ) : null}
       >
         <EventTicketsPanel event={event} registrations={registrations} />
       </FeedCard>

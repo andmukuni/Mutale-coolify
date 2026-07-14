@@ -252,7 +252,27 @@ function resolveAttendeeName(reg, user) {
 }
 
 function resolveAttendeeEmail(reg, user) {
-  return String(reg.user_email || user?.email || '').trim();
+  return String(reg.booked_for_email || reg.user_email || user?.email || '').trim();
+}
+
+async function registrationMeetsSessionRequirements(pool, reg, event) {
+  const requiresAll = event?.certificate_requires_all_sessions === 1
+    || event?.certificate_requires_all_sessions === true
+    || String(event?.certificate_requires_all_sessions || '') === '1';
+  if (!requiresAll) return true;
+
+  const [[countRow]] = await pool.query(
+    'SELECT COUNT(*) AS n FROM event_sessions WHERE event_id = ?',
+    [reg.event_id],
+  );
+  const totalSessions = Number(countRow?.n || 0);
+  if (totalSessions <= 0) return true;
+
+  const [[attendedRow]] = await pool.query(
+    'SELECT COUNT(*) AS n FROM event_session_attendance WHERE registration_id = ? AND attended_at IS NOT NULL',
+    [reg.id],
+  );
+  return Number(attendedRow?.n || 0) >= totalSessions;
 }
 
 export async function issueCertificateForRegistration(pool, registrationId, appRoot) {
@@ -275,6 +295,11 @@ export async function issueCertificateForRegistration(pool, registrationId, appR
   if (!event) return { status: 'error', reason: 'Event not found.' };
   if (!isEventEnded(event)) {
     return { status: 'skipped', reason: 'Event has not ended yet.' };
+  }
+
+  const sessionsOk = await registrationMeetsSessionRequirements(pool, reg, event);
+  if (!sessionsOk) {
+    return { status: 'skipped', reason: 'Registration has not attended all required sessions.' };
   }
 
   const template = await getActiveTemplateForEvent(pool, reg.event_id);

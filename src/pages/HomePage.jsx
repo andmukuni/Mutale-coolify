@@ -99,9 +99,10 @@ export default function HomePage() {
   }
 
   useEffect(() => {
+    if (testimonials.length <= 1) return undefined;
     const timer = window.setInterval(() => {
       setActiveTestimonial((prev) => (prev + 1) % testimonials.length);
-    }, 5500);
+    }, 10000);
 
     return () => window.clearInterval(timer);
   }, [testimonials.length]);
@@ -276,7 +277,7 @@ export default function HomePage() {
                 const restWords = spaceIdx === -1 ? '' : trimmed.slice(spaceIdx + 1);
                 return (
                   <h2 className="text-3xl sm:text-4xl font-bold mb-3">
-                    <span className="text-[#141D45]">{firstWord}</span>
+                    <span className="text-navy-900">{firstWord}</span>
                     {restWords && <span className="text-[#00A79D]"> {restWords}</span>}
                   </h2>
                 );

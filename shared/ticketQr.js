@@ -1,7 +1,8 @@
 import QRCode from 'qrcode';
 
 /**
- * Public ticket page URL encoded in entry QR codes.
+ * Public gate check-in URL encoded in entry QR codes.
+ * Opens the check-in page; staff with an admin session auto-check-in on scan.
  * @param {string} referenceCode - Unique per-ticket reference (REG-…)
  * @param {string} appOrigin - Site origin without trailing slash
  * @returns {string|null}
@@ -10,7 +11,7 @@ export function buildTicketScanUrl(referenceCode = '', appOrigin = '') {
   const code = String(referenceCode || '').trim();
   const origin = String(appOrigin || '').trim().replace(/\/$/, '');
   if (!code || !origin) return null;
-  return `${origin}/tickets/${encodeURIComponent(code)}`;
+  return `${origin}/check-in/${encodeURIComponent(code)}`;
 }
 
 /**
@@ -32,6 +33,20 @@ export function parseTicketReferenceFromScan(value = '') {
       }
     } catch {
       const match = raw.match(/\/tickets\/([^/?#]+)/i);
+      if (match?.[1]) return decodeURIComponent(match[1]).trim();
+    }
+  }
+
+  if (raw.includes('/check-in/')) {
+    try {
+      const url = raw.includes('://') ? new URL(raw) : new URL(`https://local${raw.startsWith('/') ? raw : `/${raw}`}`);
+      const parts = url.pathname.split('/').filter(Boolean);
+      const idx = parts.indexOf('check-in');
+      if (idx >= 0 && parts[idx + 1]) {
+        return decodeURIComponent(parts[idx + 1]).trim();
+      }
+    } catch {
+      const match = raw.match(/\/check-in\/([^/?#]+)/i);
       if (match?.[1]) return decodeURIComponent(match[1]).trim();
     }
   }
