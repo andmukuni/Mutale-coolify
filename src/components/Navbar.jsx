@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   Menu,
@@ -393,13 +393,18 @@ function AccountMenu({ user, profilePhotoUrl, accountOpen, setAccountOpen, onLog
 }
 
 const SCROLL_COMPACT_THRESHOLD = 24;
+const MOBILE_COMPACT_BAR_HEIGHT = 52;
+const HEADER_COLLAPSE_MS = 220;
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [eventsMenuOpen, setEventsMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const [topBlockHeight, setTopBlockHeight] = useState(0);
   const isScrolledRef = useRef(false);
+  const topBlockRef = useRef(null);
+  const scrollRafRef = useRef(0);
   const { mainNavLinks: navLinks } = useSiteMenu();
   const { currentUser: user, userLogout } = useUserAuth();
   const { cartItemCount } = useBookStore();
@@ -428,8 +433,21 @@ export default function Navbar() {
     };
   }, [open]);
 
+  useLayoutEffect(() => {
+    const measureTopBlock = () => {
+      const node = topBlockRef.current;
+      if (!node) return;
+      setTopBlockHeight(node.scrollHeight);
+    };
+
+    measureTopBlock();
+    window.addEventListener('resize', measureTopBlock, { passive: true });
+    return () => window.removeEventListener('resize', measureTopBlock);
+  }, []);
+
   useEffect(() => {
     const updateScrolled = () => {
+      scrollRafRef.current = 0;
       const next = window.scrollY > SCROLL_COMPACT_THRESHOLD;
       if (next !== isScrolledRef.current) {
         isScrolledRef.current = next;
@@ -437,9 +455,19 @@ export default function Navbar() {
       }
     };
 
+    const onScroll = () => {
+      if (scrollRafRef.current) return;
+      scrollRafRef.current = window.requestAnimationFrame(updateScrolled);
+    };
+
     updateScrolled();
-    window.addEventListener('scroll', updateScrolled, { passive: true });
-    return () => window.removeEventListener('scroll', updateScrolled);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (scrollRafRef.current) {
+        window.cancelAnimationFrame(scrollRafRef.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -456,6 +484,11 @@ export default function Navbar() {
 
   const closeMobile = () => setOpen(false);
 
+  const collapseTop = isScrolled && topBlockHeight > 0;
+  const topSectionStyle = topBlockHeight > 0
+    ? { height: collapseTop ? 0 : topBlockHeight }
+    : undefined;
+
   const mobileCart = user ? (
     <CartIconButton
       count={cartItemCount}
@@ -467,12 +500,17 @@ export default function Navbar() {
   ) : null;
 
   return (
-    <header className="theme-fixed sticky top-0 z-50 shadow-md">
+    <header className="theme-fixed sticky top-0 z-50 shadow-md contain-layout">
       <div
-        className={`overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out ${
-          isScrolled ? 'max-h-0 opacity-0 pointer-events-none' : 'max-h-48 opacity-100'
-        }`}
-        aria-hidden={isScrolled}
+        ref={topBlockRef}
+        className={`overflow-hidden will-change-[height] motion-reduce:transition-none${collapseTop ? ' pointer-events-none' : ''}`}
+        style={{
+          ...topSectionStyle,
+          transitionProperty: topBlockHeight > 0 ? 'height' : undefined,
+          transitionDuration: topBlockHeight > 0 ? `${HEADER_COLLAPSE_MS}ms` : undefined,
+          transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
+        }}
+        aria-hidden={collapseTop}
       >
         <HeaderUtilityBar />
         <HeaderBrandBar
@@ -483,32 +521,39 @@ export default function Navbar() {
         />
       </div>
 
-      {isScrolled && (
-        <div className="md:hidden theme-fixed bg-navy-900 border-b border-navy-800/80">
-          <div className={`${containerClass} flex items-center justify-between gap-3 py-2`}>
-            <Link to="/" className="group flex items-center gap-2 min-w-0" aria-label="Home">
-              <SiteLogo
-                variant="white"
-                className="h-9 w-auto shrink-0 transition-opacity duration-200 group-hover:opacity-90"
-                alt={headerBrand.name}
-              />
-              <span className="text-sm font-semibold text-white truncate">{headerBrand.name}</span>
-            </Link>
-            <div className="flex items-center gap-1 shrink-0">
-              {mobileCart}
-              <button
-                type="button"
-                onClick={() => setOpen(!open)}
-                className="text-navy-200 hover:text-white transition-colors p-2"
-                aria-label="Toggle menu"
-                aria-expanded={open}
-              >
-                {open ? <X size={24} /> : <Menu size={24} />}
-              </button>
-            </div>
+      <div
+        className={`md:hidden theme-fixed bg-navy-900 border-b border-navy-800/80 overflow-hidden will-change-[height] motion-reduce:transition-none${isScrolled ? '' : ' pointer-events-none'}`}
+        style={{
+          height: isScrolled ? MOBILE_COMPACT_BAR_HEIGHT : 0,
+          transitionProperty: 'height',
+          transitionDuration: `${HEADER_COLLAPSE_MS}ms`,
+          transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
+        }}
+        aria-hidden={!isScrolled}
+      >
+        <div className={`${containerClass} flex items-center justify-between gap-3 py-2`}>
+          <Link to="/" className="group flex items-center gap-2 min-w-0" aria-label="Home">
+            <SiteLogo
+              variant="white"
+              className="h-9 w-auto shrink-0 transition-opacity duration-200 group-hover:opacity-90"
+              alt={headerBrand.name}
+            />
+            <span className="text-sm font-semibold text-white truncate">{headerBrand.name}</span>
+          </Link>
+          <div className="flex items-center gap-1 shrink-0">
+            {mobileCart}
+            <button
+              type="button"
+              onClick={() => setOpen(!open)}
+              className="text-navy-200 hover:text-white transition-colors p-2"
+              aria-label="Toggle menu"
+              aria-expanded={open}
+            >
+              {open ? <X size={24} /> : <Menu size={24} />}
+            </button>
           </div>
         </div>
-      )}
+      </div>
 
       {/* Tier 3 — main navigation (desktop) */}
       <div className="theme-fixed hidden md:block bg-navy-800 border-b border-navy-700/80 overflow-visible">
