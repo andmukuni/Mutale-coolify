@@ -1004,17 +1004,7 @@ export default function EventProfilePage() {
           )}
         </div>
 
-        <EventProfileSidebar
-          event={event}
-          registrationsCount={registrations.length}
-          confirmed={confirmed}
-          activeCount={active}
-          attendedCount={attended}
-          cancelled={cancelled}
-          attendanceRate={attendanceRate}
-          capacity={capacity}
-          occupancy={occupancy}
-        />
+        <EventProfileSidebar event={event} />
       </div>
       </div>
 
