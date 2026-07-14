@@ -77,7 +77,7 @@ export default function EventProfileSummaryHero({
           Events
         </Link>
 
-        <div className="absolute bottom-3 right-3 sm:bottom-4 sm:right-4 md:right-6 z-10 w-[min(100%,17.5rem)] sm:w-72 pointer-events-auto">
+        <div className="absolute bottom-3 right-3 sm:bottom-4 sm:right-4 md:right-6 z-10 pointer-events-auto">
           <EventPublicQrCard
             event={{ id: event.id, slug: event.slug, title: event.title }}
             variant="overlay"

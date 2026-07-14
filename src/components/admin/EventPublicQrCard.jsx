@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Copy, ExternalLink, QrCode } from 'lucide-react';
+import { Copy, ExternalLink, QrCode, Share2 } from 'lucide-react';
 import { buildPublicEventPageUrl, buildPublicEventQrDataUrl } from '../../../shared/receiptQr.js';
 import { getAppOrigin } from '../../utils/apiBase.js';
 import { useToast } from '../../context/ToastContext';
@@ -12,10 +12,15 @@ export default function EventPublicQrCard({ event = {}, compact = false, variant
   const toast = useToast();
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [publicUrl, setPublicUrl] = useState('');
+  const [canNativeShare, setCanNativeShare] = useState(false);
 
   const eventId = event.id;
   const eventSlug = event.slug;
   const eventTitle = event.title;
+
+  useEffect(() => {
+    setCanNativeShare(typeof navigator !== 'undefined' && typeof navigator.share === 'function');
+  }, []);
 
   useEffect(() => {
     const origin = getAppOrigin();
@@ -27,7 +32,7 @@ export default function EventPublicQrCard({ event = {}, compact = false, variant
       return undefined;
     }
     let cancelled = false;
-    buildPublicEventQrDataUrl(target, origin, { size: (compact || variant === 'overlay') ? 140 : 180 })
+    buildPublicEventQrDataUrl(target, origin, { size: (compact || variant === 'overlay') ? 160 : 180 })
       .then((dataUrl) => {
         if (!cancelled) setQrDataUrl(dataUrl);
       })
@@ -47,6 +52,25 @@ export default function EventPublicQrCard({ event = {}, compact = false, variant
     }
   }, [publicUrl, toast]);
 
+  const handleShare = useCallback(async () => {
+    if (!publicUrl) return;
+
+    if (canNativeShare) {
+      try {
+        await navigator.share({
+          title: eventTitle || 'Event',
+          text: eventTitle ? `Check out ${eventTitle}` : undefined,
+          url: publicUrl,
+        });
+        return;
+      } catch (error) {
+        if (error?.name === 'AbortError') return;
+      }
+    }
+
+    await handleCopyLink();
+  }, [canNativeShare, eventTitle, handleCopyLink, publicUrl]);
+
   if (!publicUrl) {
     return (
       <div className={`rounded-xl border p-4 text-sm ${
@@ -61,27 +85,55 @@ export default function EventPublicQrCard({ event = {}, compact = false, variant
   }
 
   const isOverlay = variant === 'overlay';
-  const isCompact = compact || isOverlay;
+
+  if (isOverlay) {
+    return (
+      <div className={`rounded-xl border border-white/40 bg-white/95 backdrop-blur-md shadow-xl p-3 flex flex-col items-center gap-2.5 ${className}`}>
+        {qrDataUrl ? (
+          <img
+            src={qrDataUrl}
+            alt="QR code for public event page"
+            className="rounded-lg bg-white border border-white shadow-sm w-28 h-28 sm:w-32 sm:h-32"
+            width={128}
+            height={128}
+          />
+        ) : (
+          <div
+            className="flex items-center justify-center rounded-lg bg-white border border-navy-100 text-navy-300 w-28 h-28 sm:w-32 sm:h-32"
+            aria-hidden
+          >
+            <QrCode size={32} />
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => { void handleShare(); }}
+          className="inline-flex items-center justify-center gap-1.5 w-full text-xs font-semibold bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-2 rounded-lg transition-colors"
+        >
+          <Share2 size={14} />
+          {canNativeShare ? 'Share link' : 'Copy link'}
+        </button>
+      </div>
+    );
+  }
+
+  const isCompact = compact;
 
   return (
-    <div className={`${
-      isOverlay
-        ? 'rounded-xl border border-white/40 bg-white/95 backdrop-blur-md shadow-xl p-3'
-        : 'rounded-xl border border-cyan-100 bg-cyan-50/40 p-4'
-    } ${className}`}>
+    <div className={`rounded-xl border border-cyan-100 bg-cyan-50/40 p-4 ${className}`}>
       <div className={`flex ${isCompact ? 'flex-col items-center text-center gap-3' : 'gap-4 items-start'}`}>
         <div className={isCompact ? '' : 'shrink-0'}>
           {qrDataUrl ? (
             <img
               src={qrDataUrl}
               alt="QR code for public event page"
-              className={`rounded-lg bg-white border border-white shadow-sm ${isCompact ? 'w-24 h-24 sm:w-28 sm:h-28' : 'w-32 h-32'}`}
+              className={`rounded-lg bg-white border border-white shadow-sm ${isCompact ? 'w-28 h-28' : 'w-32 h-32'}`}
               width={isCompact ? 112 : 128}
               height={isCompact ? 112 : 128}
             />
           ) : (
             <div
-              className={`flex items-center justify-center rounded-lg bg-white border border-navy-100 text-navy-300 ${isCompact ? 'w-24 h-24 sm:w-28 sm:h-28' : 'w-32 h-32'}`}
+              className={`flex items-center justify-center rounded-lg bg-white border border-navy-100 text-navy-300 ${isCompact ? 'w-28 h-28' : 'w-32 h-32'}`}
               aria-hidden
             >
               <QrCode size={32} />
