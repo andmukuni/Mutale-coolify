@@ -112,7 +112,7 @@ if (process.env.TRUST_PROXY === '1' || IS_PRODUCTION) {
 }
 
 /** Bumps when auth/API behavior changes — check GET /api/health on cPanel after deploy */
-const API_DEPLOYMENT_TAG = '2026-06-02-cv-generator';
+const API_DEPLOYMENT_TAG = '2026-07-17-mobile-api';
 
 const CORS_ORIGINS = String(process.env.CORS_ORIGINS || '').split(',').map((v) => v.trim()).filter(Boolean);
 
@@ -1400,6 +1400,8 @@ function isAdminProtectedRoute(req) {
   if (routePath === '/api/books/orders' && method === 'POST') return false;
   if (routePath === '/api/books/orders' && method === 'GET') return true;
   if (/^\/api\/books\/orders\/[^/]+\/status$/.test(routePath)) return true;
+  // Order-owner checkout — handlers enforce their own user-JWT + ownership auth
+  if (/^\/api\/books\/orders\/checkout\/(mobile-money|card-session|complete)$/.test(routePath) && method === 'POST') return false;
   if (routePath.startsWith('/api/books') && ['POST', 'PUT', 'DELETE'].includes(method)) return true;
   if (routePath.startsWith('/api/shipping/config') && method === 'PUT') return true;
   if (routePath === '/api/payments/lenco/dashboard') return true;
@@ -3636,14 +3638,48 @@ async function persistEventPeopleImages(incoming, req) {
 const MAX_PROFILE_PHOTO_BYTES = 2 * 1024 * 1024;
 const PROFILE_PHOTO_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
-function resolvePublicUploadUrl(stored, req) {
+function getRequestPublicOrigin(req) {
+  const proto = String(req?.headers?.['x-forwarded-proto'] || req?.protocol || 'http').trim() || 'http';
+  const host = String(req?.headers?.['x-forwarded-host'] || req?.get?.('host') || '').trim();
+  if (!host) return '';
+  return `${proto}://${host}`.replace(/\/$/, '');
+}
+
+function isMobileApiClient(req) {
+  return String(req?.headers?.['x-client'] || '').trim().toLowerCase() === 'mobile';
+}
+
+function resolvePublicMediaUrl(stored, req) {
   const raw = String(stored || '').trim();
   if (!raw) return '';
-  if (/^https?:\/\//i.test(raw) || raw.startsWith('data:')) return raw;
+  if (raw.startsWith('data:')) return raw;
+
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const parsed = new URL(raw);
+      const host = parsed.hostname.toLowerCase();
+      if (host === 'localhost' || host === '127.0.0.1') {
+        const origin = getRequestPublicOrigin(req);
+        if (origin) {
+          parsed.protocol = `${origin.split('://')[0]}:`;
+          parsed.host = origin.split('://')[1];
+          return parsed.href;
+        }
+      }
+      return raw;
+    } catch {
+      return raw;
+    }
+  }
+
   const relative = raw.replace(/^\/+/, '').replace(/^uploads\//, '');
   if (!req) return `/uploads/${relative}`;
-  const baseUrl = `${req.protocol}://${req.get('host')}`;
-  return `${baseUrl}/uploads/${relative}`;
+  const origin = getRequestPublicOrigin(req);
+  return origin ? `${origin}/uploads/${relative}` : `/uploads/${relative}`;
+}
+
+function resolvePublicUploadUrl(stored, req) {
+  return resolvePublicMediaUrl(stored, req);
 }
 
 function profilePhotoRelativePath(stored) {
@@ -3798,12 +3834,24 @@ const ZOOM_PRIVATE_FIELDS = [
   'zoom_password', 'zoom_join_url', 'daily_room_url', 'daily_created_at', 'daily_synced_at',
   'meeting_link',
 ];
-function mapPublicEvent(row) {
+function mapPublicEvent(row, req) {
   const event = mapDbEvent(row);
   for (const field of ZOOM_PRIVATE_FIELDS) {
     delete event[field];
   }
+  if (event.cover_image) {
+    event.cover_image = resolvePublicMediaUrl(event.cover_image, req);
+  }
   return event;
+}
+
+function isEventPubliclyVisible(event) {
+  if (!event) return false;
+  const status = String(event.status || 'published').toLowerCase();
+  const visibility = String(event.visibility || 'public').toLowerCase();
+  if (status === 'draft' || status === 'cancelled') return false;
+  if (visibility === 'private') return false;
+  return true;
 }
 
 function mapDbBlogPost(row) {
@@ -4719,12 +4767,21 @@ async function seedDefaultAdmin() {
   console.log(`[auth] Default admin user seeded: ${ADMIN_EMAIL}`);
 }
 
-app.get('/api/health', (_req, res) => {
+app.get('/api/health', (req, res) => {
   res.json({
     ok: true,
     service: 'mutale-api',
     deploymentTag: API_DEPLOYMENT_TAG,
-    features: { authForgotPassword: true, adminUsersMysql: true, cvGenerator: true },
+    client: isMobileApiClient(req) ? 'mobile' : 'web',
+    appOrigin: getRequestPublicOrigin(req) || resolvePublicAppUrl(req),
+    features: {
+      authForgotPassword: true,
+      adminUsersMysql: true,
+      cvGenerator: true,
+      mobileAuth: true,
+      mobileEvents: true,
+      mobileRegistrations: true,
+    },
   });
 });
 
@@ -5195,6 +5252,32 @@ app.post('/api/auth/login', rateLimitAuth({ windowMs: 15 * 60 * 1000, max: 10 })
   }
 });
 
+// GET /api/auth/me — restore session from stored JWT (mobile + web)
+app.get('/api/auth/me', async (req, res) => {
+  try {
+    const auth = getJwtAuth(req);
+    if (!auth.ok) return sendAuthFailure(res, auth);
+
+    const [[user]] = await pool.query('SELECT * FROM users WHERE id = ? LIMIT 1', [auth.claims.sub]);
+    if (!user) {
+      return res.status(404).json({ ok: false, message: 'User not found.' });
+    }
+
+    const adminPermissions = await loadUserAdminPermissions(pool, user.id, { legacyRole: user.role });
+    const canAccessAdmin = userCanAccessAdmin(user.role, adminPermissions);
+    const sessionUser = {
+      ...mapAuthSessionUser(user, req),
+      admin_permissions: canAccessAdmin ? adminPermissions : [],
+      admin_access: canAccessAdmin,
+    };
+
+    return res.json({ ok: true, data: sessionUser });
+  } catch (error) {
+    console.error('[auth/me]', error.message);
+    return res.status(500).json({ ok: false, message: 'Failed to load session.' });
+  }
+});
+
 // PUT /api/auth/profile  (update user profile)
 app.put('/api/auth/profile', async (req, res) => {
   try {
@@ -5318,8 +5401,10 @@ app.get('/api/events', async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM events ORDER BY start_date ASC');
     const adminAuth = getAdminAuth(req);
-    const mapper = adminAuth.ok ? mapDbEvent : mapPublicEvent;
-    res.json({ ok: true, data: rows.map(mapper) });
+    const data = rows
+      .map((row) => (adminAuth.ok ? mapDbEvent(row) : mapPublicEvent(row, req)))
+      .filter((event) => adminAuth.ok || isEventPubliclyVisible(event));
+    res.json({ ok: true, data });
   } catch (error) {
     res.status(500).json({
       ok: false,
