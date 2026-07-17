@@ -80,6 +80,12 @@ export default function EventDetailPage() {
   const featuredSpeakersList = parseFeaturedSpeakers(event.featured_speakers).filter(
     (s) => speakerHasAnyDetail(s),
   );
+  const featuredGuestsList = parseFeaturedSpeakers(event.featured_guests).filter(
+    (s) => speakerHasAnyDetail(s),
+  );
+  const subscriberPreview = event.subscriber_preview || { count: 0, avatars: [] };
+  const subscriberAvatars = Array.isArray(subscriberPreview.avatars) ? subscriberPreview.avatars : [];
+  const subscriberCount = Number(subscriberPreview.count || 0);
 
   const canShowRegisterCta = listingAvailability.canBook && canRegisterMore && (!userAlreadyRegistered || allowsMultiAttendee);
   const registerCtaLabel = userAlreadyRegistered && allowsMultiAttendee ? 'Buy More Tickets' : 'Register Now';
@@ -107,13 +113,32 @@ export default function EventDetailPage() {
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(34,211,238,0.16),transparent_45%)]" />
 
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 pb-14 sm:pt-14 sm:pb-20">
-          <Link
-            to="/events"
-            className="inline-flex items-center gap-1.5 text-sm text-navy-300 hover:text-cyan-300 transition-colors mb-6"
-          >
-            <ArrowLeft size={15} />
-            Back to Events
-          </Link>
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+            <Link
+              to="/events"
+              className="inline-flex items-center gap-1.5 text-sm text-navy-300 hover:text-cyan-300 transition-colors"
+            >
+              <ArrowLeft size={15} />
+              Back to Events
+            </Link>
+            {subscriberAvatars.length > 0 ? (
+              <div className="inline-flex items-center gap-2">
+                <div className="flex -space-x-2">
+                  {subscriberAvatars.slice(0, 5).map((avatar, idx) => (
+                    <PersonPhoto
+                      key={avatar.id || idx}
+                      src={avatar.photo}
+                      name={avatar.name || 'Attendee'}
+                      className="w-8 h-8 rounded-full object-cover ring-2 ring-navy-950"
+                    />
+                  ))}
+                </div>
+                <span className="text-xs font-semibold text-navy-200">
+                  {subscriberCount} subscribed
+                </span>
+              </div>
+            ) : null}
+          </div>
 
           <div className="flex flex-wrap gap-2 mb-4">
             <StatusBadge status={displayStatus} size="md" />
@@ -193,73 +218,22 @@ export default function EventDetailPage() {
 
             {/* Featured Speakers */}
             {featuredSpeakersList.length > 0 && (
-              <div className="bg-white rounded-2xl border border-navy-100 p-6 sm:p-8 shadow-sm">
-                <h2 className="text-xl font-bold text-navy-900 mb-4 flex items-center gap-2">
-                  <Mic size={20} className="text-cyan-600" /> Featured Speakers
-                </h2>
-                <div className="space-y-4">
-                  {featuredSpeakersList.map((speaker, idx) => {
-                    const displayName = speakerDisplayName(speaker);
-                    const organisation = speakerOrganisation(speaker);
-                    const roleTitle = speakerTitle(speaker);
-                    const bio = speakerBio(speaker);
+              <PeopleListCard
+                title="Featured Speakers"
+                icon={Mic}
+                people={featuredSpeakersList}
+                fallbackLabel="Speaker"
+              />
+            )}
 
-                    return (
-                      <div
-                        key={idx}
-                        className="flex gap-4 rounded-xl border border-navy-100 bg-navy-50/50 p-4 sm:p-5"
-                      >
-                        {speaker.photo ? (
-                          <img
-                            src={speaker.photo}
-                            alt={displayName || 'Speaker'}
-                            className="w-14 h-14 sm:w-16 sm:h-16 rounded-full object-cover shrink-0 ring-2 ring-white shadow-sm"
-                          />
-                        ) : (
-                          <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-indigo-100 flex items-center justify-center shrink-0 ring-2 ring-white shadow-sm">
-                            <User size={22} className="text-indigo-600" />
-                          </div>
-                        )}
-                        <div className="min-w-0 flex-1 space-y-2">
-                          <h3 className="text-base font-bold text-navy-900 leading-snug">
-                            {displayName || 'Speaker'}
-                          </h3>
-
-                          <dl className="space-y-1.5 text-sm">
-                            {organisation ? (
-                              <div className="flex flex-col sm:flex-row sm:gap-2 sm:items-baseline">
-                                <dt className="text-navy-400 text-xs font-semibold uppercase tracking-wide shrink-0">
-                                  Organisation
-                                </dt>
-                                <dd className="text-navy-800 font-medium">{organisation}</dd>
-                              </div>
-                            ) : null}
-                            {roleTitle ? (
-                              <div className="flex flex-col sm:flex-row sm:gap-2 sm:items-baseline">
-                                <dt className="text-navy-400 text-xs font-semibold uppercase tracking-wide shrink-0">
-                                  Role
-                                </dt>
-                                <dd className="text-cyan-700 font-semibold">{roleTitle}</dd>
-                              </div>
-                            ) : null}
-                          </dl>
-
-                          {bio ? (
-                            <div className="pt-2 border-t border-navy-100/90">
-                              <p className="text-xs font-semibold text-navy-400 uppercase tracking-wide mb-1">
-                                About
-                              </p>
-                              <p className="text-sm text-navy-600 leading-relaxed whitespace-pre-line">
-                                {bio}
-                              </p>
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+            {/* Featured Guests */}
+            {featuredGuestsList.length > 0 && (
+              <PeopleListCard
+                title="Guests"
+                icon={Handshake}
+                people={featuredGuestsList}
+                fallbackLabel="Guest"
+              />
             )}
 
             {/* Event Partners */}
@@ -541,6 +515,100 @@ function TimeChip({ label, value }) {
     <div className="rounded-lg bg-white border border-cyan-100 px-2 py-2 text-center">
       <div className="text-base font-bold text-cyan-800 tabular-nums">{String(value).padStart(2, '0')}</div>
       <div className="text-[10px] uppercase tracking-wide text-cyan-600">{label}</div>
+    </div>
+  );
+}
+
+function PersonPhoto({ src, name, className }) {
+  const [failed, setFailed] = useState(false);
+  const initials = String(name || 'G')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || '')
+    .join('') || 'G';
+
+  if (!src || failed) {
+    return (
+      <div
+        className={`${className} bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold shrink-0`}
+        aria-label={name || 'Profile'}
+      >
+        {initials}
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={name || 'Profile'}
+      className={`${className} shrink-0 bg-navy-100`}
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
+function PeopleListCard({ title, icon: Icon, people, fallbackLabel }) {
+  return (
+    <div className="bg-white rounded-2xl border border-navy-100 p-6 sm:p-8 shadow-sm">
+      <h2 className="text-xl font-bold text-navy-900 mb-4 flex items-center gap-2">
+        <Icon size={20} className="text-cyan-600" /> {title}
+      </h2>
+      <div className="space-y-4">
+        {people.map((person, idx) => {
+          const displayName = speakerDisplayName(person);
+          const organisation = speakerOrganisation(person);
+          const roleTitle = speakerTitle(person);
+          const bio = speakerBio(person);
+
+          return (
+            <div
+              key={idx}
+              className="flex gap-4 rounded-xl border border-navy-100 bg-navy-50/50 p-4 sm:p-5"
+            >
+              <PersonPhoto
+                src={person.photo}
+                name={displayName || fallbackLabel}
+                className="w-14 h-14 sm:w-16 sm:h-16 rounded-full object-cover ring-2 ring-white shadow-sm"
+              />
+              <div className="min-w-0 flex-1 space-y-2">
+                <h3 className="text-base font-bold text-navy-900 leading-snug">
+                  {displayName || fallbackLabel}
+                </h3>
+                <dl className="space-y-1.5 text-sm">
+                  {organisation ? (
+                    <div className="flex flex-col sm:flex-row sm:gap-2 sm:items-baseline">
+                      <dt className="text-navy-400 text-xs font-semibold uppercase tracking-wide shrink-0">
+                        Organisation
+                      </dt>
+                      <dd className="text-navy-800 font-medium">{organisation}</dd>
+                    </div>
+                  ) : null}
+                  {roleTitle ? (
+                    <div className="flex flex-col sm:flex-row sm:gap-2 sm:items-baseline">
+                      <dt className="text-navy-400 text-xs font-semibold uppercase tracking-wide shrink-0">
+                        Role
+                      </dt>
+                      <dd className="text-cyan-700 font-semibold">{roleTitle}</dd>
+                    </div>
+                  ) : null}
+                </dl>
+                {bio ? (
+                  <div className="pt-2 border-t border-navy-100/90">
+                    <p className="text-xs font-semibold text-navy-400 uppercase tracking-wide mb-1">
+                      About
+                    </p>
+                    <p className="text-sm text-navy-600 leading-relaxed whitespace-pre-line">
+                      {bio}
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

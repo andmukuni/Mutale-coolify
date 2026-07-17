@@ -102,6 +102,7 @@ const emptyEvent = {
   category: 'Workshop',
   featured: false,
   featured_speakers: [],
+  featured_guests: [],
   partners: [],
   forum_enabled: false,
   forum_pre_moderated: false,
@@ -937,6 +938,70 @@ export default function EventFormPage() {
                 ))}
               </div>
 
+              {/* Featured Guests */}
+              <div className="space-y-3 mt-6">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-navy-700">Guests</label>
+                  <button type="button" onClick={() => setForm(prev => ({ ...prev, featured_guests: [...(prev.featured_guests || []), { name: '', organisation: '', title: '', bio: '', photo: '' }] }))} className="inline-flex items-center gap-1 text-xs font-medium text-cyan-600 hover:text-cyan-700">
+                    <Plus size={14} /> Add Guest
+                  </button>
+                </div>
+                {(form.featured_guests || []).length === 0 && (
+                  <p className="text-xs text-navy-400 italic">No guests added yet.</p>
+                )}
+                {(form.featured_guests || []).map((guest, idx) => (
+                  <div key={idx} className="rounded-xl border border-navy-100 bg-navy-50/50 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-navy-500">Guest {idx + 1}</span>
+                      <button type="button" onClick={() => setForm(prev => ({ ...prev, featured_guests: prev.featured_guests.filter((_, i) => i !== idx) }))} className="text-red-400 hover:text-red-600">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                    <div className="grid sm:grid-cols-2 gap-3">
+                      <FormField label="Name" value={guest.name || ''} onChange={(e) => { const arr = [...form.featured_guests]; arr[idx] = { ...arr[idx], name: e.target.value }; setForm(prev => ({ ...prev, featured_guests: arr })); }} placeholder="Guest name" />
+                      <FormField label="Title / Role" value={guest.title || ''} onChange={(e) => { const arr = [...form.featured_guests]; arr[idx] = { ...arr[idx], title: e.target.value }; setForm(prev => ({ ...prev, featured_guests: arr })); }} placeholder="Guest of Honour" />
+                    </div>
+                    <FormField
+                      label="Organisation"
+                      value={guest.organisation || guest.organization || ''}
+                      onChange={(e) => { const arr = [...form.featured_guests]; arr[idx] = { ...arr[idx], organisation: e.target.value }; setForm(prev => ({ ...prev, featured_guests: arr })); }}
+                      placeholder="Company or institution"
+                    />
+                    <FormField label="Short Bio" value={guest.bio} onChange={(e) => { const arr = [...form.featured_guests]; arr[idx] = { ...arr[idx], bio: e.target.value }; setForm(prev => ({ ...prev, featured_guests: arr })); }} placeholder="Brief description..." type="textarea" />
+                    <div>
+                      <label className="block text-sm font-medium text-navy-700 mb-1.5">Guest Photo</label>
+                      <div className="flex items-center gap-3">
+                        {guest.photo ? (
+                          <img src={guest.photo} alt="Guest" className="w-14 h-14 rounded-full object-cover border border-navy-200" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                        ) : (
+                          <div className="w-14 h-14 rounded-full bg-navy-100 flex items-center justify-center text-navy-400">
+                            <Upload size={18} />
+                          </div>
+                        )}
+                        <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-navy-200 bg-white text-xs font-medium text-navy-600 hover:bg-navy-50 transition-colors">
+                          <Upload size={13} />
+                          {guest.photo ? 'Change' : 'Upload'}
+                          <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (!file || !file.type.startsWith('image/')) return;
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                              const arr = [...form.featured_guests];
+                              arr[idx] = { ...arr[idx], photo: String(reader.result || '') };
+                              setForm(prev => ({ ...prev, featured_guests: arr }));
+                            };
+                            reader.readAsDataURL(file);
+                          }} />
+                        </label>
+                        {guest.photo && (
+                          <button type="button" onClick={() => { const arr = [...form.featured_guests]; arr[idx] = { ...arr[idx], photo: '' }; setForm(prev => ({ ...prev, featured_guests: arr })); }} className="text-xs text-red-400 hover:text-red-600">Remove</button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
               {/* Partners */}
               <div className="space-y-3 mt-6">
                 <div className="flex items-center justify-between">
@@ -1020,6 +1085,7 @@ export default function EventFormPage() {
                 <SummaryItem label="Price" value={formatPrice(form)} />
                 <SummaryItem label="Organizer" value={form.organizer_name || '—'} />
                 <SummaryItem label="Speakers" value={`${(form.featured_speakers || []).length} speaker(s)`} />
+                <SummaryItem label="Guests" value={`${(form.featured_guests || []).length} guest(s)`} />
                 <SummaryItem label="Partners" value={`${(form.partners || []).length} partner(s)`} />
               </div>
 

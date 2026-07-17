@@ -221,6 +221,7 @@ const EVENT_FIELDS = [
   'category',
   'featured',
   'featured_speakers',
+  'featured_guests',
   'partners',
   'delivery_mode',
   'provider',
@@ -1922,6 +1923,11 @@ function normalizeEventPayload(payload = {}, fallbackId = null) {
       Array.isArray(payload.featured_speakers)
         ? payload.featured_speakers
         : (() => { try { return JSON.parse(payload.featured_speakers); } catch { return []; } })()
+    ) : null,
+    featured_guests: payload.featured_guests ? JSON.stringify(
+      Array.isArray(payload.featured_guests)
+        ? payload.featured_guests
+        : (() => { try { return JSON.parse(payload.featured_guests); } catch { return []; } })()
     ) : null,
     partners: payload.partners ? JSON.stringify(
       Array.isArray(payload.partners)
@@ -3625,6 +3631,14 @@ async function persistEventPeopleImages(incoming, req) {
       }
     }
   }
+  if (Array.isArray(incoming.featured_guests)) {
+    for (let i = 0; i < incoming.featured_guests.length; i++) {
+      const g = incoming.featured_guests[i];
+      if (g.photo && String(g.photo).startsWith('data:')) {
+        incoming.featured_guests[i] = { ...g, photo: await persistSpeakerPhotoIfNeeded(g.photo, req) };
+      }
+    }
+  }
   if (Array.isArray(incoming.partners)) {
     for (let i = 0; i < incoming.partners.length; i++) {
       const p = incoming.partners[i];
@@ -3633,6 +3647,62 @@ async function persistEventPeopleImages(incoming, req) {
       }
     }
   }
+}
+
+function resolvePeopleMediaList(list, req, photoKey = 'photo') {
+  if (!Array.isArray(list)) return [];
+  return list.map((item) => {
+    if (!item || typeof item !== 'object') return item;
+    const next = { ...item };
+    if (next[photoKey]) {
+      next[photoKey] = resolvePublicMediaUrl(next[photoKey], req);
+    }
+    return next;
+  });
+}
+
+async function loadSubscriberPreviewByEventIds(eventIds, req) {
+  const ids = (Array.isArray(eventIds) ? eventIds : []).map((id) => String(id || '').trim()).filter(Boolean);
+  const map = new Map();
+  if (!ids.length) return map;
+
+  try {
+    const placeholders = ids.map(() => '?').join(', ');
+    const [rows] = await pool.query(
+      `SELECT er.event_id, er.user_id, er.user_name, u.profile_photo
+       FROM event_registrations er
+       LEFT JOIN users u ON u.id = er.user_id
+       WHERE er.event_id IN (${placeholders})
+         AND LOWER(COALESCE(er.status, '')) NOT IN ('cancelled', 'refunded')
+       ORDER BY er.created_at DESC`,
+      ids,
+    );
+
+    for (const row of rows) {
+      const eventId = String(row.event_id || '');
+      if (!eventId) continue;
+      if (!map.has(eventId)) {
+        map.set(eventId, { count: 0, avatars: [], seen: new Set() });
+      }
+      const bucket = map.get(eventId);
+      bucket.count += 1;
+      const userId = String(row.user_id || '');
+      if (!userId || bucket.seen.has(userId) || bucket.avatars.length >= 5) continue;
+      bucket.seen.add(userId);
+      bucket.avatars.push({
+        id: userId,
+        name: String(row.user_name || 'Attendee').trim() || 'Attendee',
+        photo: resolvePublicMediaUrl(row.profile_photo, req) || '',
+      });
+    }
+  } catch (error) {
+    console.warn('[events] subscriber preview failed:', error.message);
+  }
+
+  for (const [eventId, bucket] of map.entries()) {
+    map.set(eventId, { count: bucket.count, avatars: bucket.avatars });
+  }
+  return map;
 }
 
 const MAX_PROFILE_PHOTO_BYTES = 2 * 1024 * 1024;
@@ -3824,6 +3894,7 @@ function mapDbEvent(row) {
   return {
     ...row,
     featured_speakers: safeParseJson(row.featured_speakers),
+    featured_guests: safeParseJson(row.featured_guests),
     partners: safeParseJson(row.partners),
   };
 }
@@ -3842,6 +3913,10 @@ function mapPublicEvent(row, req) {
   if (event.cover_image) {
     event.cover_image = resolvePublicMediaUrl(event.cover_image, req);
   }
+  event.featured_speakers = resolvePeopleMediaList(event.featured_speakers, req, 'photo');
+  event.featured_guests = resolvePeopleMediaList(event.featured_guests, req, 'photo');
+  event.partners = resolvePeopleMediaList(event.partners, req, 'logo');
+  event.subscriber_preview = { count: 0, avatars: [] };
   return event;
 }
 
@@ -3894,6 +3969,7 @@ async function ensureSchema() {
       category VARCHAR(100),
       featured BOOLEAN DEFAULT FALSE,
       featured_speakers JSON,
+      featured_guests JSON,
       partners JSON,
       delivery_mode VARCHAR(30) DEFAULT 'virtual',
       provider VARCHAR(30) DEFAULT 'internal',
@@ -3918,6 +3994,7 @@ async function ensureSchema() {
 
   const eventColumnsToAdd = [
     ['featured_speakers', 'JSON NULL'],
+    ['featured_guests', 'JSON NULL'],
     ['partners', 'JSON NULL'],
     ['delivery_mode', "VARCHAR(30) DEFAULT 'virtual'"],
     ['provider', "VARCHAR(30) DEFAULT 'internal'"],
@@ -4726,6 +4803,15 @@ async function ensureSchema() {
     try { await pool.query(`ALTER TABLE users ADD COLUMN ${col} ${def}`); } catch (e) { if (e?.code !== 'ER_DUP_FIELDNAME') throw e; }
   }
 
+  // Allow longer remote avatar URLs (e.g. Unsplash) for demo / seeded profile photos.
+  try {
+    await pool.query('ALTER TABLE users MODIFY COLUMN profile_photo VARCHAR(1000) NULL');
+  } catch (e) {
+    if (e?.code !== 'ER_BAD_FIELD_ERROR') {
+      console.warn('[schema] profile_photo widen skipped:', e.message);
+    }
+  }
+
   // Backward-compatible migration: add index for password reset lookups.
   try { await pool.query('ALTER TABLE users ADD INDEX idx_users_password_reset_token_hash (password_reset_token_hash)'); } catch (e) {
     if (e?.code !== 'ER_DUP_KEYNAME') throw e;
@@ -5401,9 +5487,21 @@ app.get('/api/events', async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT * FROM events ORDER BY start_date ASC');
     const adminAuth = getAdminAuth(req);
-    const data = rows
+    let data = rows
       .map((row) => (adminAuth.ok ? mapDbEvent(row) : mapPublicEvent(row, req)))
       .filter((event) => adminAuth.ok || isEventPubliclyVisible(event));
+
+    if (!adminAuth.ok && data.length) {
+      const previewMap = await loadSubscriberPreviewByEventIds(
+        data.map((event) => event.id),
+        req,
+      );
+      data = data.map((event) => ({
+        ...event,
+        subscriber_preview: previewMap.get(String(event.id)) || { count: 0, avatars: [] },
+      }));
+    }
+
     res.json({ ok: true, data });
   } catch (error) {
     res.status(500).json({
@@ -7740,7 +7838,7 @@ app.get('/api/admin/users/:id', async (req, res) => {
 const ADMIN_USER_WRITABLE_FIELDS = [
   'name', 'email', 'phone', 'whatsapp', 'role', 'user_type', 'nrc_id',
   'profession', 'organization', 'about', 'occupation', 'address',
-  'portfolio_url', 'linkedin_url', 'linkedin_handle',
+  'portfolio_url', 'linkedin_url', 'linkedin_handle', 'profile_photo',
 ];
 
 function normalizeAdminUserPayload(payload = {}) {
