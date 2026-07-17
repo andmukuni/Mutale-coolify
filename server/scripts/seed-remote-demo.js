@@ -305,24 +305,42 @@ async function upsertEvent(token, event) {
   }
 }
 
+function eventLooksPast(event) {
+  const end = String(event?.end_date || event?.start_date || '').trim();
+  if (!end) return false;
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+  return end < `${yyyy}-${mm}-${dd}`;
+}
+
 async function enrichExistingEvents(token) {
   const list = await api('/events', { token });
   const events = list.data || [];
   let patched = 0;
   for (const event of events) {
+    if (eventLooksPast(event) || String(event.status || '').toLowerCase() === 'cancelled') {
+      console.log(`[event] skip enrich (past/cancelled): ${event.title}`);
+      continue;
+    }
     const speakers = Array.isArray(event.featured_speakers) ? event.featured_speakers : [];
     const guests = Array.isArray(event.featured_guests) ? event.featured_guests : [];
     if (speakers.length && guests.length) continue;
-    await api(`/events/${event.id}`, {
-      method: 'PUT',
-      token,
-      body: {
-        featured_speakers: speakers.length ? speakers : speakersFor(event.title),
-        featured_guests: guests.length ? guests : guestsFor(),
-      },
-    });
-    patched += 1;
-    console.log(`[event] enriched speakers/guests: ${event.title}`);
+    try {
+      await api(`/events/${event.id}`, {
+        method: 'PUT',
+        token,
+        body: {
+          featured_speakers: speakers.length ? speakers : speakersFor(event.title),
+          featured_guests: guests.length ? guests : guestsFor(),
+        },
+      });
+      patched += 1;
+      console.log(`[event] enriched speakers/guests: ${event.title}`);
+    } catch (error) {
+      console.warn(`[event] enrich failed for ${event.title}: ${error.message}`);
+    }
   }
   return patched;
 }
