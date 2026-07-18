@@ -179,7 +179,22 @@ const DEMO_EVENTS = [
   },
 ];
 
-const DEMO_PRODUCTS = [
+/** Product photos verified HTTP 200 — avoid white-on-white / broken Unsplash IDs. */
+const PRODUCT_PHOTOS = {
+  tshirt: 'https://images.unsplash.com/photo-1576566588028-4147f3842f27?auto=format&fit=crop&w=900&q=80',
+  sweatshirt: 'https://images.unsplash.com/photo-1556821840-3a63f95609a7?auto=format&fit=crop&w=900&q=80',
+  cap: 'https://images.unsplash.com/photo-1521369909029-2afed882baee?auto=format&fit=crop&w=900&q=80',
+  mug: 'https://images.unsplash.com/photo-1514228742587-6b1558fcca3d?auto=format&fit=crop&w=900&q=80',
+  sticker: 'https://images.unsplash.com/photo-1534670007418-fbb7f6cf32c3?auto=format&fit=crop&w=900&q=80',
+  bag: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=900&q=80',
+  book1: 'https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&w=900&q=80',
+  book2: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=900&q=80',
+  book3: 'https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=900&q=80',
+  book4: 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&w=900&q=80',
+};
+
+/** Shared merch catalog — cloned onto every event during seed (products have a single event_id). */
+const DEMO_MERCH_TEMPLATES = [
   {
     id: 'prod-demo-tee-teal',
     title: 'Mutale Teal Wordmark T-Shirt',
@@ -188,7 +203,7 @@ const DEMO_PRODUCTS = [
     product_type: 'tshirt',
     short_description: 'Soft cotton tee with the Mutale wordmark.',
     description: 'Premium cotton t-shirt featuring the Mutale Mubanga wordmark. Ideal event merch and everyday wear.',
-    cover_image: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=1200&q=80',
+    cover_image: PRODUCT_PHOTOS.tshirt,
     price: 180,
     compare_at_price: 220,
     stock: 80,
@@ -205,6 +220,29 @@ const DEMO_PRODUCTS = [
     ],
   },
   {
+    id: 'prod-demo-sweatshirt',
+    title: 'Mutale Quality Crew Sweatshirt',
+    author: 'Mutale Mubanga',
+    category: 'Apparel',
+    product_type: 'sweatshirt',
+    short_description: 'Midweight crewneck for workshops and travel days.',
+    description: 'Soft fleece crewneck with a clean Mutale wordmark. Comfortable layer for lab visits and conference halls.',
+    cover_image: PRODUCT_PHOTOS.sweatshirt,
+    price: 280,
+    compare_at_price: 320,
+    stock: 45,
+    weight_kg: 0.55,
+    is_digital: false,
+    is_published: true,
+    featured: true,
+    format: 'physical',
+    variants: [
+      { id: 'sw-m', label: 'M', value: 'M', stock: 15 },
+      { id: 'sw-l', label: 'L', value: 'L', stock: 15 },
+      { id: 'sw-xl', label: 'XL', value: 'XL', stock: 15 },
+    ],
+  },
+  {
     id: 'prod-demo-mug',
     title: 'Quality First Ceramic Mug',
     author: 'Mutale Mubanga',
@@ -212,7 +250,7 @@ const DEMO_PRODUCTS = [
     product_type: 'mug',
     short_description: '11oz ceramic mug for lab & office mornings.',
     description: 'Dishwasher-safe ceramic mug with a clean “Quality First” print. Perfect companion for long audit days.',
-    cover_image: 'https://images.unsplash.com/photo-1514228742587-6b1558fcca3d?auto=format&fit=crop&w=1200&q=80',
+    cover_image: PRODUCT_PHOTOS.mug,
     price: 95,
     stock: 120,
     weight_kg: 0.4,
@@ -229,7 +267,7 @@ const DEMO_PRODUCTS = [
     product_type: 'cap',
     short_description: 'Structured cap for workshops and field visits.',
     description: 'Breathable structured cap with embroidered Mutale mark. One size with adjustable strap.',
-    cover_image: 'https://images.unsplash.com/photo-1588850561407-ed78c282e89b?auto=format&fit=crop&w=1200&q=80',
+    cover_image: PRODUCT_PHOTOS.cap,
     price: 120,
     stock: 60,
     weight_kg: 0.15,
@@ -246,7 +284,7 @@ const DEMO_PRODUCTS = [
     product_type: 'sticker',
     short_description: 'Vinyl sticker pack for laptops and lab notebooks.',
     description: 'Set of 6 waterproof vinyl stickers celebrating laboratory quality culture.',
-    cover_image: 'https://images.unsplash.com/photo-1611532736597-de2d4265fba3?auto=format&fit=crop&w=1200&q=80',
+    cover_image: PRODUCT_PHOTOS.sticker,
     price: 45,
     stock: 200,
     weight_kg: 0.05,
@@ -254,6 +292,97 @@ const DEMO_PRODUCTS = [
     is_published: true,
     featured: false,
     format: 'physical',
+  },
+  {
+    id: 'prod-demo-tote',
+    title: 'Workshop Field Tote',
+    author: 'Mutale Mubanga',
+    category: 'Accessories',
+    product_type: 'bag',
+    short_description: 'Durable tote for manuals, badges, and field notes.',
+    description: 'Canvas tote sized for workshop packs — manuals, badge lanyards, and a water bottle fit comfortably.',
+    cover_image: PRODUCT_PHOTOS.bag,
+    price: 140,
+    stock: 70,
+    weight_kg: 0.3,
+    is_digital: false,
+    is_published: true,
+    featured: false,
+    format: 'physical',
+  },
+];
+
+/** Catalog books (not tied to a single event). */
+const DEMO_BOOKS = [
+  {
+    id: 'book-seed-001',
+    title: 'Quality Management in Medical Laboratories',
+    author: 'Mutale Mubanga',
+    isbn: '978-0-000-00001-0',
+    category: 'Laboratory Science',
+    product_type: 'book',
+    short_description: 'A comprehensive guide to quality management systems in medical laboratories.',
+    description:
+      'A comprehensive guide to implementing and maintaining quality management systems in medical laboratories across sub-Saharan Africa.',
+    cover_image: PRODUCT_PHOTOS.book1,
+    price: 250,
+    compare_at_price: 320,
+    stock: 50,
+    weight_kg: 0.45,
+    is_digital: false,
+    is_published: true,
+    featured: true,
+    pages: 312,
+    publisher: 'Lusaka Academic Press',
+    publish_year: 2024,
+    language: 'English',
+    format: 'paperback',
+  },
+  {
+    id: 'book-seed-002',
+    title: "Diagnostic Excellence: A Practitioner's Handbook",
+    author: 'Mutale Mubanga',
+    isbn: '978-0-000-00002-7',
+    category: 'Diagnostics',
+    product_type: 'book',
+    short_description: 'Practical approaches to diagnostic challenges from a Zambian perspective.',
+    description:
+      'Practical approaches to common and complex diagnostic challenges, with case studies from Zambian healthcare settings.',
+    cover_image: PRODUCT_PHOTOS.book2,
+    price: 180,
+    stock: 35,
+    weight_kg: 0.35,
+    is_digital: false,
+    is_published: true,
+    featured: false,
+    pages: 248,
+    publisher: 'Lusaka Academic Press',
+    publish_year: 2025,
+    language: 'English',
+    format: 'paperback',
+  },
+  {
+    id: 'book-seed-003',
+    title: 'Health Policy & Systems Strengthening in Africa',
+    author: 'Mutale Mubanga & Contributors',
+    isbn: '978-0-000-00003-4',
+    category: 'Health Policy',
+    product_type: 'book',
+    short_description: 'Exploring health policy and laboratory systems strengthening in Africa.',
+    description:
+      'An edited volume exploring health policy, laboratory systems, and public health capacity building across Africa.',
+    cover_image: PRODUCT_PHOTOS.book3,
+    price: 0,
+    stock: 999,
+    weight_kg: 0,
+    is_digital: true,
+    is_published: true,
+    featured: true,
+    pages: 180,
+    publisher: 'Open Access Africa',
+    publish_year: 2025,
+    language: 'English',
+    format: 'ebook',
   },
   {
     id: 'book-seed-004',
@@ -265,7 +394,7 @@ const DEMO_PRODUCTS = [
     short_description: 'Practical internal audit templates and checklists for ISO 15189 labs.',
     description:
       'A practitioner playbook with audit schedules, finding formats, CAPA workflows, and sample checklists tailored to medical laboratories.',
-    cover_image: 'https://images.unsplash.com/photo-1456513080080-7f3ff4d8d1df?auto=format&fit=crop&w=1200&q=80',
+    cover_image: PRODUCT_PHOTOS.book4,
     price: 210,
     compare_at_price: 260,
     stock: 40,
@@ -280,6 +409,28 @@ const DEMO_PRODUCTS = [
     format: 'paperback',
   },
 ];
+
+function eventKey(event) {
+  const raw = String(event?.id || event?.slug || event?.title || 'event');
+  return slugify(raw.replace(/^evt-demo-/, '')).slice(0, 28) || 'event';
+}
+
+/** Clone merch templates onto a specific event with stable unique ids/slugs. */
+function merchForEvent(event) {
+  const key = eventKey(event);
+  return DEMO_MERCH_TEMPLATES.map((product) => ({
+    ...product,
+    id: `${product.id}--${key}`,
+    slug: `${slugify(product.title)}-${key}`,
+    event_id: event.id,
+    variants: Array.isArray(product.variants)
+      ? product.variants.map((variant) => ({
+          ...variant,
+          id: `${variant.id || slugify(variant.value || variant.label)}--${key}`,
+        }))
+      : undefined,
+  }));
+}
 
 async function upsertEvent(token, event) {
   const payload = {
@@ -355,8 +506,14 @@ async function upsertProduct(token, product) {
     variants: product.variants || undefined,
   };
 
-  const created = await api('/products', { method: 'POST', token, body: payload });
-  return { action: 'upserted', id: created.data?.id || payload.id, title: payload.title };
+  try {
+    const created = await api('/products', { method: 'POST', token, body: payload });
+    return { action: 'created', id: created.data?.id || payload.id, title: payload.title };
+  } catch (error) {
+    if (!/already exists|Slug already|duplicate/i.test(error.message)) throw error;
+    const updated = await api(`/products/${payload.id}`, { method: 'PUT', token, body: payload });
+    return { action: 'updated', id: updated.data?.id || payload.id, title: payload.title };
+  }
 }
 
 async function ensureAttendee(adminToken, attendee) {
@@ -447,10 +604,28 @@ async function main() {
   const enriched = await enrichExistingEvents(token);
   console.log(`[event] enriched ${enriched} existing event(s) with speakers/guests`);
 
-  for (const product of DEMO_PRODUCTS) {
-    const result = await upsertProduct(token, product);
+  for (const book of DEMO_BOOKS) {
+    const result = await upsertProduct(token, book);
     console.log(`[product] ${result.action}: ${result.title}`);
   }
+
+  const publicEvents = await api('/events');
+  const liveEvents = (publicEvents.data || []).filter(
+    (event) =>
+      event?.id &&
+      !eventLooksPast(event) &&
+      String(event.status || '').toLowerCase() !== 'cancelled',
+  );
+
+  let merchCount = 0;
+  for (const event of liveEvents) {
+    for (const product of merchForEvent(event)) {
+      const result = await upsertProduct(token, product);
+      merchCount += 1;
+      console.log(`[product] ${result.action}: ${result.title} → ${event.id}`);
+    }
+  }
+  console.log(`[product] merch linked across ${liveEvents.length} event(s) (${merchCount} rows)`);
 
   const attendeeIds = [];
   for (const attendee of DEMO_ATTENDEES) {
@@ -459,8 +634,7 @@ async function main() {
     console.log(`[attendee] ${result.action}: ${result.email}`);
   }
 
-  const publicEvents = await api('/events');
-  const eventIds = (publicEvents.data || []).map((event) => event.id).filter(Boolean);
+  const eventIds = liveEvents.map((event) => event.id).filter(Boolean);
 
   let totalRegs = 0;
   for (const attendee of DEMO_ATTENDEES) {
@@ -476,8 +650,19 @@ async function main() {
   const withSubs = (verify.data || []).filter(
     (event) => Number(event.subscriber_preview?.count || 0) > 0,
   );
+
+  let eventsWithMerch = 0;
+  for (const event of liveEvents) {
+    try {
+      const products = await api(`/events/${encodeURIComponent(event.id)}/products`);
+      if ((products.data || []).length > 0) eventsWithMerch += 1;
+    } catch {
+      // ignore verify failures
+    }
+  }
+
   console.log(
-    `[seed-remote] Done. events=${(verify.data || []).length}, with speakers/guests=${withPeople.length}, with subscribers=${withSubs.length}, new regs≈${totalRegs}`,
+    `[seed-remote] Done. events=${(verify.data || []).length}, with speakers/guests=${withPeople.length}, with subscribers=${withSubs.length}, with merch=${eventsWithMerch}, new regs≈${totalRegs}`,
   );
 }
 
