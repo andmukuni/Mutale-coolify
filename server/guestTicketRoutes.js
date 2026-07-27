@@ -243,6 +243,50 @@ export function registerGuestTicketRoutes(app, deps) {
     }
   });
 
+  app.get('/api/tickets/:reference/video/presence', rateLimitTicket, async (req, res) => {
+    try {
+      const loaded = await loadRegistrationByReference(deps.pool, req.params.reference);
+      if (!loaded.ok) {
+        return res.status(loaded.status).json({ ok: false, message: loaded.message });
+      }
+
+      return res.json({
+        ok: true,
+        data: deps.mapMeetingPresence(loaded.registration),
+      });
+    } catch (error) {
+      return res.status(500).json({ ok: false, message: 'Failed to fetch meeting presence.', error: error.message });
+    }
+  });
+
+  app.post('/api/tickets/:reference/video/presence', rateLimitTicket, async (req, res) => {
+    try {
+      const loaded = await loadRegistrationByReference(deps.pool, req.params.reference);
+      if (!loaded.ok) {
+        return res.status(loaded.status).json({ ok: false, message: loaded.message });
+      }
+
+      const action = String(req.body?.action || '').trim().toLowerCase();
+      if (!['enter', 'heartbeat', 'leave'].includes(action)) {
+        return res.status(400).json({ ok: false, message: 'action must be enter, heartbeat, or leave.' });
+      }
+
+      const source = String(req.body?.source || 'native_sdk').slice(0, 30);
+      const refreshed = await deps.updateRegistrationMeetingPresence(
+        loaded.registration.id,
+        action,
+        source,
+      );
+
+      return res.json({
+        ok: true,
+        data: deps.mapMeetingPresence(refreshed || loaded.registration),
+      });
+    } catch (error) {
+      return res.status(500).json({ ok: false, message: 'Failed to update meeting presence.', error: error.message });
+    }
+  });
+
   app.post('/api/tickets/:reference/sessions/:sessionId/join', rateLimitTicket, async (req, res) => {
     try {
       const loaded = await loadRegistrationByReference(deps.pool, req.params.reference);

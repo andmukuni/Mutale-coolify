@@ -1380,6 +1380,7 @@ function isAdminProtectedRoute(req) {
   if (/^\/api\/events\/[^/]+\/zoom\/join-auth$/.test(routePath) && method === 'POST') return false;
   if (/^\/api\/events\/[^/]+\/daily\/join-auth$/.test(routePath) && method === 'POST') return false;
   if (/^\/api\/events\/[^/]+\/video\/join-auth$/.test(routePath) && method === 'POST') return false;
+  if (/^\/api\/events\/[^/]+\/video\/presence$/.test(routePath) && ['GET', 'POST'].includes(method)) return false;
   if (/^\/api\/events\/[^/]+\/coupon-preview$/.test(routePath) && method === 'POST') return false;
   if (/^\/api\/events\/[^/]+\/forum\/topics$/.test(routePath) && method === 'POST') return false;
   if (/^\/api\/events\/[^/]+\/forum\/topics\/[^/]+\/replies$/.test(routePath) && method === 'POST') return false;
@@ -2198,11 +2199,23 @@ function mapDbRegistration(row = {}) {
     amount_zmw: toNumber(row.amount_zmw, 0),
     join_count: Number(row.join_count || 0),
     has_attended: Boolean(row.attended_at) || String(row.status || '').toLowerCase() === 'attended',
+    in_meeting: Boolean(Number(row.in_meeting)),
     registered_at: normalizeDateTimeText(row.registered_at),
     created_at: normalizeDateTimeText(row.created_at),
     updated_at: normalizeDateTimeText(row.updated_at),
     attended_at: normalizeDateTimeText(row.attended_at),
     last_joined_at: normalizeDateTimeText(row.last_joined_at),
+    in_meeting_at: normalizeDateTimeText(row.in_meeting_at),
+    left_meeting_at: normalizeDateTimeText(row.left_meeting_at),
+  };
+}
+
+function mapMeetingPresence(row = {}) {
+  return {
+    in_meeting: Boolean(Number(row.in_meeting)),
+    in_meeting_at: normalizeDateTimeText(row.in_meeting_at),
+    left_meeting_at: normalizeDateTimeText(row.left_meeting_at),
+    source: row.join_source || null,
   };
 }
 
@@ -2701,6 +2714,90 @@ async function markEventRegistrationAttendance(registrationId, joinSource = 'zoo
     [registrationId],
   );
   return refreshed || null;
+}
+
+async function updateRegistrationMeetingPresence(registrationId, action, source = 'native_sdk') {
+  const normalized = String(action || '').trim().toLowerCase();
+  if (normalized === 'enter') {
+    await pool.query(
+      `UPDATE event_registrations
+       SET in_meeting = 1,
+           in_meeting_at = COALESCE(in_meeting_at, NOW()),
+           join_source = COALESCE(join_source, ?)
+       WHERE id = ?`,
+      [String(source || 'native_sdk').slice(0, 30), registrationId],
+    );
+  } else if (normalized === 'heartbeat') {
+    await pool.query(
+      'UPDATE event_registrations SET in_meeting = 1 WHERE id = ? AND in_meeting = 1',
+      [registrationId],
+    );
+  } else if (normalized === 'leave') {
+    await pool.query(
+      `UPDATE event_registrations
+       SET in_meeting = 0,
+           left_meeting_at = NOW()
+       WHERE id = ?`,
+      [registrationId],
+    );
+  } else {
+    return null;
+  }
+
+  const [[refreshed]] = await pool.query(
+    'SELECT * FROM event_registrations WHERE id = ?',
+    [registrationId],
+  );
+  return refreshed || null;
+}
+
+async function updateRegistrationPresenceByZoomParticipant({ meetingId, participantEmail, joined }) {
+  const email = String(participantEmail || '').trim().toLowerCase();
+  const normalizedMeetingId = String(meetingId || '').trim();
+  if (!email || !normalizedMeetingId) return 0;
+
+  const [[event]] = await pool.query(
+    'SELECT id FROM events WHERE zoom_meeting_id = ? LIMIT 1',
+    [normalizedMeetingId],
+  );
+  if (!event) return 0;
+
+  const [result] = await pool.query(
+    joined
+      ? `UPDATE event_registrations
+         SET in_meeting = 1,
+             in_meeting_at = COALESCE(in_meeting_at, NOW()),
+             join_source = 'webhook'
+         WHERE event_id = ?
+           AND status <> 'cancelled'
+           AND (LOWER(user_email) = ? OR LOWER(booked_for_email) = ?)`
+      : `UPDATE event_registrations
+         SET in_meeting = 0,
+             left_meeting_at = NOW()
+         WHERE event_id = ?
+           AND status <> 'cancelled'
+           AND (LOWER(user_email) = ? OR LOWER(booked_for_email) = ?)`,
+    [event.id, email, email],
+  );
+  return Number(result?.affectedRows || 0);
+}
+
+async function findSelfRegistrationForUser(eventId, authUser) {
+  const userId = String(authUser?.id || '').trim();
+  const userEmail = String(authUser?.email || '').trim().toLowerCase();
+  if (!eventId || !userId || !userEmail) return null;
+
+  const [rows] = await pool.query(
+    `SELECT * FROM event_registrations
+     WHERE event_id = ? AND user_id = ? AND user_email = ? AND status <> ?
+     ORDER BY CASE WHEN COALESCE(attendee_slot_key, '__self__') = '__self__' THEN 0 ELSE 1 END,
+              registered_at DESC`,
+    [eventId, userId, userEmail, 'cancelled'],
+  );
+  const selfRegistration = (rows || []).find(
+    (row) => String(row.attendee_slot_key || '__self__').trim() === '__self__',
+  );
+  return selfRegistration || null;
 }
 
 const VALID_TICKET_PAYMENT_STATUSES = new Set(['paid', 'not_required', 'waived']);
@@ -4287,6 +4384,9 @@ async function ensureSchema() {
     ['attendee_type', "VARCHAR(20) DEFAULT 'adult'"],
     ['guardian_phone', 'VARCHAR(40) NULL'],
     ['volume_discount_zmw', 'DECIMAL(12,2) NOT NULL DEFAULT 0'],
+    ['in_meeting', 'TINYINT(1) NOT NULL DEFAULT 0'],
+    ['in_meeting_at', 'DATETIME NULL'],
+    ['left_meeting_at', 'DATETIME NULL'],
   ];
   for (const [name, sqlType] of registrationColumnsToAdd) {
     try {
@@ -7399,6 +7499,57 @@ app.post('/api/events/:eventId/video/join-auth', async (req, res) => {
   }
 });
 
+app.get('/api/events/:eventId/video/presence', async (req, res) => {
+  try {
+    const eventId = String(req.params.eventId || '').trim();
+    const auth = getJwtAuth(req);
+    if (!auth.ok) return sendAuthFailure(res, auth);
+
+    const authUser = await getUserByClaims(auth.claims);
+    if (!authUser) {
+      return res.status(401).json({ ok: false, message: 'User account not found. Please log in again.' });
+    }
+
+    const registration = await findSelfRegistrationForUser(eventId, authUser);
+    if (!registration) {
+      return res.status(404).json({ ok: false, message: 'Registration not found for this event.' });
+    }
+
+    return res.json({ ok: true, data: mapMeetingPresence(registration) });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: 'Failed to fetch meeting presence.', error: error.message });
+  }
+});
+
+app.post('/api/events/:eventId/video/presence', async (req, res) => {
+  try {
+    const eventId = String(req.params.eventId || '').trim();
+    const auth = getJwtAuth(req);
+    if (!auth.ok) return sendAuthFailure(res, auth);
+
+    const authUser = await getUserByClaims(auth.claims);
+    if (!authUser) {
+      return res.status(401).json({ ok: false, message: 'User account not found. Please log in again.' });
+    }
+
+    const action = String(req.body?.action || '').trim().toLowerCase();
+    if (!['enter', 'heartbeat', 'leave'].includes(action)) {
+      return res.status(400).json({ ok: false, message: 'action must be enter, heartbeat, or leave.' });
+    }
+
+    const registration = await findSelfRegistrationForUser(eventId, authUser);
+    if (!registration) {
+      return res.status(404).json({ ok: false, message: 'Registration not found for this event.' });
+    }
+
+    const source = String(req.body?.source || 'native_sdk').slice(0, 30);
+    const refreshed = await updateRegistrationMeetingPresence(registration.id, action, source);
+    return res.json({ ok: true, data: mapMeetingPresence(refreshed || registration) });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: 'Failed to update meeting presence.', error: error.message });
+  }
+});
+
 app.post('/api/webhooks/daily', async (req, res) => {
   try {
     const dailyConfig = await getDailyConfig();
@@ -7534,6 +7685,49 @@ app.post('/api/webhooks/zoom', async (req, res) => {
     const objectPayload = req.body?.payload?.object || {};
     const meetingId = String(objectPayload.id || objectPayload.meeting_id || '').trim();
     const meetingUuid = String(objectPayload.uuid || '').trim();
+
+    if (
+      webhookEvent === 'meeting.participant_joined'
+      || webhookEvent === 'meeting.participant_left'
+    ) {
+      const participant = objectPayload.participant || {};
+      const participantEmail = String(
+        participant.user_email || participant.email || participant.participant_email || '',
+      ).trim().toLowerCase();
+      const joined = webhookEvent === 'meeting.participant_joined';
+      const affectedRegistrations = await updateRegistrationPresenceByZoomParticipant({
+        meetingId,
+        participantEmail,
+        joined,
+      });
+
+      await createIntegrationLog({
+        provider: 'zoom',
+        action: 'webhook_receive',
+        relatedType: 'registration',
+        relatedId: meetingId || meetingUuid || 'zoom',
+        status: 'success',
+        requestPayload: {
+          event: webhookEvent,
+          meetingId,
+          meetingUuid,
+          participantEmail: participantEmail || null,
+        },
+        responsePayload: { joined, affectedRegistrations },
+      });
+
+      return res.json({
+        ok: true,
+        message: 'Zoom participant presence processed.',
+        data: {
+          event: webhookEvent,
+          meetingId: meetingId || null,
+          meetingUuid: meetingUuid || null,
+          affectedRegistrations,
+        },
+      });
+    }
+
     const zoomStatus = mapZoomWebhookEventToStatus(webhookEvent);
     const syncedAt = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
@@ -8940,6 +9134,8 @@ registerGuestTicketRoutes(app, {
   isRegistrationTicketEligible,
   markEventRegistrationAttendance,
   mapDbRegistration,
+  mapMeetingPresence,
+  updateRegistrationMeetingPresence,
   resolvePublicAppUrl,
   getVideoSettings,
   resolveEventVideoProvider,
