@@ -228,7 +228,7 @@ Report-Only CSP is fine for first rollout. When moving to enforced CSP, allow Zo
 
 | Issue | Fix |
 |---|---|
-| Build OOM / killed during `vite build` | Dockerfile caps heap at 1.5 GB; ensure VPS has ≥2 GB RAM for build |
+| Build OOM / killed during `vite build` or `npm ci` (exit 255) | Dockerfile uses a **single** build stage (one `npm ci`) and `npm_config_jobs=1`; ensure VPS has ≥2 GB RAM for build |
 | `vite: command not found` | Dockerfile uses `npm ci --include=dev` in build stage — redeploy latest `coolify` branch |
 | CORS errors in browser | `APP_URL` and `CORS_ORIGINS` must exactly match the URL you open |
 | 502 / container unhealthy | Check Coolify logs; verify `DB_*` vars and internal MySQL host |
