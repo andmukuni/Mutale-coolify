@@ -39,6 +39,19 @@ export function resolveAttendeeEmail(registration = {}) {
   return String(registration.user_email || '').trim().toLowerCase();
 }
 
+/** Contact phone for the ticket holder (guest fields when registering for others). */
+export function resolveAttendeePhone(registration = {}) {
+  if (isGuestTicket(registration)) {
+    const direct = String(registration.booked_for_phone || '').trim();
+    if (direct) return direct;
+    if (String(registration.attendee_type || '').trim().toLowerCase() === 'child') {
+      return String(registration.guardian_phone || '').trim();
+    }
+    return '';
+  }
+  return String(registration.booked_for_phone || registration.user_phone || '').trim();
+}
+
 export function resolvePayerName(registration = {}) {
   return String(registration.user_name || '').trim() || '—';
 }
@@ -101,7 +114,7 @@ export async function buildTicketViewModel({
   const attendee = {
     name: resolveAttendeeName(registration),
     email: resolveAttendeeEmail(registration) || String(registration.user_email || '').trim(),
-    phone: String(registration.booked_for_phone || registration.user_phone || '').trim(),
+    phone: resolveAttendeePhone(registration),
   };
   const payerName = resolvePayerName(registration);
   const ticketUrl = buildTicketScanUrl(refCode, appOrigin) || '';

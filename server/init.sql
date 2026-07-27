@@ -147,6 +147,7 @@ CREATE TABLE IF NOT EXISTS event_certificates (
   user_id VARCHAR(90) NOT NULL,
   attendee_name VARCHAR(255) NOT NULL,
   attendee_email VARCHAR(255),
+  attendee_phone VARCHAR(40) NULL,
   event_title VARCHAR(255) NOT NULL,
   event_end_date DATE NULL,
   pdf_path VARCHAR(500) NOT NULL,

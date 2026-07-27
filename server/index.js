@@ -50,8 +50,15 @@ import {
   maybeSendTicketEmailsOnSettlement,
   generateRegistrationTicketBuffer,
 } from './ticketService.js';
+import { registerGuestTicketRoutes } from './guestTicketRoutes.js';
+import {
+  eventHasLiveJoin,
+  isGuestRegistration,
+  maskEmail,
+  validateVirtualGuestEmail,
+} from './guestTicketService.js';
 import { buildTicketFilename, isValidTicketPdfBuffer } from '../shared/ticketPdf.js';
-import { buildTicketViewModel, isTicketPaymentEligible } from '../shared/ticketViewModel.js';
+import { buildTicketViewModel, isGuestTicket, isTicketPaymentEligible, resolveAttendeePhone } from '../shared/ticketViewModel.js';
 import { loadReceiptLogoDataUrl, loadWhiteLogoDataUrl } from '../shared/receiptLogoAsset.js';
 import { mergeReceiptRecords } from '../shared/receiptHelpers.js';
 import { buildCvStrengthSuggestions } from '../shared/cvStrengthSuggestions.js';
@@ -2469,13 +2476,25 @@ async function assertCanJoinEvent({ eventId, authUser, reqBody = {}, providerLab
     `SELECT * FROM event_registrations
      WHERE event_id = ? AND user_id = ? AND user_email = ? AND status <> ?
      ORDER BY CASE WHEN COALESCE(attendee_slot_key, '__self__') = '__self__' THEN 0 ELSE 1 END,
-              registered_at DESC
-     LIMIT 1`,
+              registered_at DESC`,
     [eventId, userId, userEmail, 'cancelled'],
   );
 
-  const registration = rows?.[0] || null;
+  const selfRegistration = (rows || []).find(
+    (row) => String(row.attendee_slot_key || '__self__').trim() === '__self__',
+  );
+  const registration = selfRegistration || null;
   if (!registration) {
+    if (rows?.length > 0) {
+      return {
+        ok: false,
+        status: 403,
+        message: 'You registered guests for this event. Each guest must use their personal ticket link to join.',
+        event,
+        userId,
+        userEmail,
+      };
+    }
     return {
       ok: false,
       status: 403,
@@ -2523,6 +2542,7 @@ function mapDbForumTopic(row) {
     id: row.id,
     event_id: row.event_id,
     user_id: row.user_id,
+    registration_id: row.registration_id || null,
     user_name: row.user_name || '',
     title: row.title || '',
     body: row.body || '',
@@ -2546,6 +2566,7 @@ function mapDbForumReply(row) {
     topic_id: row.topic_id,
     event_id: row.event_id,
     user_id: row.user_id,
+    registration_id: row.registration_id || null,
     user_name: row.user_name || '',
     body: row.body || '',
     hidden: Boolean(row.hidden),
@@ -2694,11 +2715,15 @@ function isRegistrationTicketEligible(row = {}) {
 function mapPublicTicketLookup(registration = {}, event = {}) {
   const attendeeName = String(registration.booked_for_name || '').trim() || String(registration.user_name || '').trim();
   const attendedAt = normalizeDateTimeText(registration.attended_at);
+  const guest = isGuestTicket(registration);
   return {
     valid: isRegistrationTicketEligible(registration),
     reference_code: String(registration.reference_code || '').trim(),
     registration_id: String(registration.id || '').trim(),
     attendee_name: attendeeName,
+    attendee_email: guest ? maskEmail(registration.booked_for_email) : maskEmail(registration.user_email),
+    attendee_phone: resolveAttendeePhone(registration) || null,
+    is_guest: guest,
     payer_name: String(registration.user_name || '').trim(),
     event_id: String(registration.event_id || '').trim(),
     event_title: String(event.title || registration.event_title || '').trim(),
@@ -4338,6 +4363,11 @@ async function ensureSchema() {
         if (error?.code !== 'ER_DUP_FIELDNAME') throw error;
       }
     }
+    try {
+      await pool.query(`ALTER TABLE ${table} ADD COLUMN registration_id VARCHAR(90) NULL`);
+    } catch (error) {
+      if (error?.code !== 'ER_DUP_FIELDNAME') throw error;
+    }
   }
 
   await pool.query(`
@@ -4419,6 +4449,12 @@ async function ensureSchema() {
       INDEX idx_event_certificates_email_status (email_status)
     )
   `);
+
+  try {
+    await pool.query('ALTER TABLE event_certificates ADD COLUMN attendee_phone VARCHAR(40) NULL AFTER attendee_email');
+  } catch (error) {
+    if (error?.code !== 'ER_DUP_FIELDNAME') throw error;
+  }
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS badge_templates (
@@ -8634,6 +8670,11 @@ app.post('/api/registrations/batch', async (req, res) => {
     const [[event]] = await pool.query('SELECT * FROM events WHERE id = ? LIMIT 1', [eventId]);
     if (!event) return res.status(404).json({ ok: false, message: 'Event not found.' });
 
+    const guestEmailCheck = validateVirtualGuestEmail(event, guests);
+    if (!guestEmailCheck.ok) {
+      return res.status(400).json({ ok: false, message: guestEmailCheck.message });
+    }
+
     const eventMode = String(event.event_mode || '').trim().toLowerCase()
       || (String(event.location || '').toLowerCase().includes('virtual') ? 'virtual' : 'in_person');
 
@@ -8858,19 +8899,70 @@ app.get('/api/tickets/:reference', async (req, res) => {
     }
 
     const [[event]] = await pool.query('SELECT * FROM events WHERE id = ? LIMIT 1', [registration.event_id]);
+    const appOrigin = resolvePublicAppUrl(req);
     const logoDataUrl = await loadReceiptLogoDataUrl(__appRoot);
     const viewModel = await buildTicketViewModel({
       registration: mapDbRegistration(registration),
       event: event || {},
-      appOrigin: resolvePublicAppUrl(req),
+      appOrigin,
       logoDataUrl,
     });
     const ticket = mapPublicTicketLookup(registration, event || {});
+    const joinWindow = getJoinWindowForEvent(event || {});
+    const eligible = isRegistrationTicketEligible(registration);
+    const guestUrl = appOrigin
+      ? `${appOrigin.replace(/\/$/, '')}/tickets/${encodeURIComponent(referenceCode)}`
+      : '';
 
-    return res.json({ ok: true, data: { ...ticket, viewModel } });
+    return res.json({
+      ok: true,
+      data: {
+        ...ticket,
+        viewModel,
+        is_guest: isGuestRegistration(registration),
+        booked_for_email: maskEmail(registration.booked_for_email || registration.user_email),
+        guest_portal_url: guestUrl,
+        can_join: eligible && joinWindow.allowed && eventHasLiveJoin(event || {}),
+        can_access_forum: isForumVisibleEvent(event) && eligible,
+      },
+    });
   } catch (error) {
     return res.status(500).json({ ok: false, message: 'Failed to look up ticket', error: error.message });
   }
+});
+
+registerGuestTicketRoutes(app, {
+  pool,
+  signJwtHmacSha256,
+  verifyJwtHmacSha256,
+  AUTH_TOKEN_SECRET,
+  getJoinWindowForEvent,
+  isRegistrationTicketEligible,
+  markEventRegistrationAttendance,
+  mapDbRegistration,
+  resolvePublicAppUrl,
+  getVideoSettings,
+  resolveEventVideoProvider,
+  isVideoProviderEnabled,
+  getDailyConfig,
+  dailyRequest,
+  sanitizeMeetingJoinUrl,
+  getDailyRoomWindowForEvent,
+  getZoomConfig,
+  extractZoomMeetingNumber,
+  isForumVisibleEvent,
+  sanitizeForumText,
+  mapDbForumTopic,
+  mapDbForumReply,
+  mapDbEventSession,
+  generateEntityId,
+  ensureCertificatePdfOnDisk,
+  mapDbCertificate,
+  sendEmailNotification,
+  getSystemSettings,
+  rateLimitByKey,
+  parseBoolean,
+  __appRoot,
 });
 
 app.post('/api/registrations/check-in', async (req, res) => {

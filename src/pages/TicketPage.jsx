@@ -1,17 +1,38 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { CheckCircle2, XCircle } from 'lucide-react';
+import { CheckCircle2, XCircle, Calendar, MapPin } from 'lucide-react';
 import { getApiBase } from '../utils/apiBase';
 import TicketDocument from '../../shared/TicketDocument.jsx';
 import TicketSessionsPanel from '../components/TicketSessionsPanel';
+import GuestTicketJoinPanel from '../components/GuestTicketJoinPanel';
+import GuestTicketForumPanel from '../components/GuestTicketForumPanel';
+import GuestCertificatePanel from '../components/GuestCertificatePanel';
 import { RECEIPT_LIGHT_FILL } from '../../shared/receiptTheme.js';
 
 const API_BASE = getApiBase();
+
+function formatEventSchedule(event = {}) {
+  const parts = [];
+  if (event.start_date) {
+    parts.push(new Date(String(event.start_date).split('T')[0]).toLocaleDateString(undefined, {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    }));
+  }
+  if (event.start_time) {
+    const time = String(event.start_time).slice(0, 5);
+    parts.push(time);
+  }
+  return parts.join(' · ');
+}
 
 export default function TicketPage() {
   const { code } = useParams();
   const [loading, setLoading] = useState(true);
   const [ticket, setTicket] = useState(null);
+  const [portal, setPortal] = useState(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -21,19 +42,27 @@ export default function TicketPage() {
       setLoading(true);
       setError('');
       try {
-        const res = await fetch(`${API_BASE}/tickets/${encodeURIComponent(code || '')}`);
-        const json = await res.json().catch(() => ({}));
+        const ref = encodeURIComponent(code || '');
+        const [ticketRes, portalRes] = await Promise.all([
+          fetch(`${API_BASE}/tickets/${ref}`),
+          fetch(`${API_BASE}/tickets/${ref}/portal`),
+        ]);
+        const ticketJson = await ticketRes.json().catch(() => ({}));
+        const portalJson = await portalRes.json().catch(() => ({}));
         if (cancelled) return;
-        if (!res.ok || !json?.ok) {
-          setError(json?.message || 'Ticket not found.');
+        if (!ticketRes.ok || !ticketJson?.ok) {
+          setError(ticketJson?.message || 'Ticket not found.');
           setTicket(null);
+          setPortal(null);
           return;
         }
-        setTicket(json.data);
+        setTicket(ticketJson.data);
+        setPortal(portalRes.ok && portalJson?.ok ? portalJson.data : null);
       } catch {
         if (!cancelled) {
           setError('Unable to load ticket. Please try again.');
           setTicket(null);
+          setPortal(null);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -48,6 +77,9 @@ export default function TicketPage() {
   const checkedIn = Boolean(ticket?.checked_in);
   const eventPath = ticket?.event_slug ? `/events/${ticket.event_slug}` : null;
   const viewModel = ticket?.viewModel || null;
+  const eventInfo = portal?.event || {};
+  const canJoin = Boolean(portal?.can_join ?? ticket?.can_join);
+  const canForum = Boolean(portal?.can_access_forum ?? ticket?.can_access_forum);
 
   return (
     <div className="min-h-[60vh] py-10 sm:py-14 px-4" style={{ backgroundColor: RECEIPT_LIGHT_FILL }}>
@@ -98,6 +130,11 @@ export default function TicketPage() {
                     Checked in {new Date(ticket.checked_in_at).toLocaleString()}
                   </p>
                 )}
+                {portal?.attendance?.join_count > 0 && (
+                  <p className="mt-1 text-xs opacity-90">
+                    Joined live {portal.attendance.join_count} time(s)
+                  </p>
+                )}
               </div>
             </div>
 
@@ -105,10 +142,49 @@ export default function TicketPage() {
               <TicketDocument viewModel={viewModel} outerPadding />
             )}
 
+            {(eventInfo.title || eventInfo.description) && (
+              <div className="rounded-xl border border-navy-100 bg-white p-4 max-w-md mx-auto space-y-2">
+                <h3 className="text-sm font-semibold text-navy-900">Event details</h3>
+                {eventInfo.title && (
+                  <p className="text-sm font-medium text-navy-800">{eventInfo.title}</p>
+                )}
+                {formatEventSchedule(eventInfo) && (
+                  <p className="text-xs text-navy-600 flex items-center gap-1.5">
+                    <Calendar size={14} />
+                    {formatEventSchedule(eventInfo)}
+                  </p>
+                )}
+                {eventInfo.location && (
+                  <p className="text-xs text-navy-600 flex items-center gap-1.5">
+                    <MapPin size={14} />
+                    {eventInfo.location}
+                  </p>
+                )}
+                {eventInfo.description && (
+                  <p className="text-xs text-navy-600 leading-relaxed">{eventInfo.description}</p>
+                )}
+              </div>
+            )}
+
+            <GuestTicketJoinPanel
+              referenceCode={code}
+              canJoin={canJoin}
+              joinWindow={portal?.join_window}
+            />
+
             <TicketSessionsPanel
               eventId={ticket.event_id}
               registrationId={ticket.registration_id}
+              referenceCode={code}
               valid={valid}
+              sessions={portal?.sessions}
+            />
+
+            <GuestTicketForumPanel referenceCode={code} enabled={canForum} />
+
+            <GuestCertificatePanel
+              referenceCode={code}
+              certificate={portal?.certificate}
             />
 
             {eventPath && (
@@ -117,7 +193,7 @@ export default function TicketPage() {
                   to={eventPath}
                   className="inline-block text-sm font-medium text-navy-600 hover:text-cyan-700 underline underline-offset-2"
                 >
-                  View event details
+                  View full event page
                 </Link>
               </div>
             )}

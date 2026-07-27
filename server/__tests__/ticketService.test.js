@@ -57,7 +57,7 @@ describe('sendTicketEmailsForRegistration', () => {
     vi.clearAllMocks();
   });
 
-  it('skips virtual events', async () => {
+  it('skips virtual events without guest email', async () => {
     const result = await sendTicketEmailsForRegistration({
       registration: { payment_status: 'paid', user_email: 'a@b.com' },
       event: { event_mode: 'virtual' },
@@ -67,6 +67,25 @@ describe('sendTicketEmailsForRegistration', () => {
     });
     expect(result.status).toBe('skipped');
     expect(sendEmailNotification).not.toHaveBeenCalled();
+  });
+
+  it('sends virtual guest ticket link when guest email is set', async () => {
+    const result = await sendTicketEmailsForRegistration({
+      registration: {
+        payment_status: 'paid',
+        booked_for_name: 'Guest',
+        booked_for_email: 'guest@example.com',
+        attendee_slot_key: 'guest',
+        reference_code: 'REG-1',
+      },
+      event: { event_mode: 'virtual', title: 'Webinar' },
+      settings,
+      sendEmailNotification,
+      appRoot,
+      appOrigin: 'https://app.example.com',
+    });
+    expect(result.status).toBe('sent');
+    expect(sendEmailNotification).toHaveBeenCalled();
   });
 
   it('skips unpaid registrations', async () => {

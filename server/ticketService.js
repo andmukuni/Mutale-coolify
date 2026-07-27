@@ -14,10 +14,14 @@ export function buildTicketEmailCopy({
   event = {},
   recipientName = 'there',
   role = 'attendee',
+  appOrigin = '',
 } = {}) {
   const eventTitle = String(event.title || registration.event_title || 'Event').trim();
   const attendeeName = resolveAttendeeName(registration);
   const refCode = String(registration.reference_code || '').trim();
+  const ticketUrl = appOrigin && refCode
+    ? `${String(appOrigin).replace(/\/$/, '')}/tickets/${encodeURIComponent(refCode)}`
+    : '';
 
   if (role === 'buyer_copy') {
     const forLabel = isGuestTicket(registration) ? attendeeName : 'you';
@@ -27,6 +31,7 @@ export function buildTicketEmailCopy({
       greeting: `Hi ${recipientName || 'there'},`,
       introLines: [
         `Here is your copy of the entry ticket for ${forLabel === 'you' ? 'your registration' : forLabel}.`,
+        ticketUrl ? `View ticket online: ${ticketUrl}` : '',
         'Show the QR code at the gate for entry.',
         refCode ? `Reference: ${refCode}` : '',
       ].filter(Boolean),
@@ -39,6 +44,7 @@ export function buildTicketEmailCopy({
     greeting: `Hi ${recipientName || attendeeName || 'there'},`,
     introLines: [
       `Your entry ticket for "${eventTitle}" is ready.`,
+      ticketUrl ? `View your ticket and join live: ${ticketUrl}` : '',
       'Show the QR code at the gate for entry.',
       refCode ? `Reference: ${refCode}` : '',
     ].filter(Boolean),
@@ -104,7 +110,7 @@ export async function sendTicketEmail({
     return { status: 'skipped', reason: 'No valid recipient email.' };
   }
 
-  const copy = buildTicketEmailCopy({ registration, event, recipientName, role });
+  const copy = buildTicketEmailCopy({ registration, event, recipientName, role, appOrigin });
   const logoDataUrl = await loadReceiptLogoDataUrl(appRoot);
   const viewModel = await buildTicketViewModel({
     registration,
@@ -172,11 +178,18 @@ export async function sendTicketEmailsForRegistration({
   pool = null,
   skipIdempotencyCheck = false,
 }) {
-  if (!isInPersonEventRecord(event, registration)) {
-    return { status: 'skipped', reason: 'Not an in-person event.' };
-  }
   if (!isTicketPaymentEligible(registration)) {
     return { status: 'skipped', reason: 'Ticket not eligible (cancelled or unpaid).' };
+  }
+
+  const isVirtual = !isInPersonEventRecord(event, registration);
+  const guestEmail = isGuestTicket(registration)
+    ? normalizeEmail(registration.booked_for_email)
+    : '';
+
+  // In-person: send PDF ticket emails. Virtual: email guest portal link when guest email is set.
+  if (isVirtual && !guestEmail) {
+    return { status: 'skipped', reason: 'Virtual event ticket email requires guest email.' };
   }
 
   const regId = String(registration.id || '').trim();
@@ -187,7 +200,7 @@ export async function sendTicketEmailsForRegistration({
     }
   }
 
-  const guestEmail = isGuestTicket(registration)
+  const guestEmailResolved = isGuestTicket(registration)
     ? normalizeEmail(registration.booked_for_email)
     : '';
   const buyerEmail = normalizeEmail(registration.user_email);
@@ -196,11 +209,11 @@ export async function sendTicketEmailsForRegistration({
 
   const sends = [];
 
-  if (guestEmail) {
+  if (guestEmailResolved) {
     sends.push(sendTicketEmail({
       registration,
       event,
-      to: guestEmail,
+      to: guestEmailResolved,
       recipientName: guestName,
       role: 'attendee',
       settings,
@@ -210,7 +223,7 @@ export async function sendTicketEmailsForRegistration({
     }));
   }
 
-  if (buyerEmail && buyerEmail !== guestEmail) {
+  if (buyerEmail && buyerEmail !== guestEmailResolved) {
     sends.push(sendTicketEmail({
       registration,
       event,
@@ -222,7 +235,7 @@ export async function sendTicketEmailsForRegistration({
       appRoot,
       appOrigin,
     }));
-  } else if (buyerEmail && !guestEmail) {
+  } else if (buyerEmail && !guestEmailResolved) {
     sends.push(sendTicketEmail({
       registration,
       event,
@@ -234,7 +247,7 @@ export async function sendTicketEmailsForRegistration({
       appRoot,
       appOrigin,
     }));
-  } else if (!guestEmail && !buyerEmail) {
+  } else if (!guestEmailResolved && !buyerEmail) {
     return { status: 'skipped', reason: 'No recipient email.' };
   }
 

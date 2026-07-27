@@ -6,14 +6,25 @@ import { useUserAuth } from '../context/UserAuthContext';
 
 const API_BASE = getApiBase();
 
-export default function TicketSessionsPanel({ eventId, registrationId, valid }) {
+export default function TicketSessionsPanel({
+  eventId,
+  registrationId,
+  referenceCode,
+  valid,
+  sessions: sessionsProp,
+}) {
   const { isUserAuthenticated } = useUserAuth();
-  const [sessions, setSessions] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [sessions, setSessions] = useState(sessionsProp || []);
+  const [loading, setLoading] = useState(!sessionsProp?.length);
   const [joiningId, setJoiningId] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (sessionsProp?.length) {
+      setSessions(sessionsProp);
+      setLoading(false);
+      return;
+    }
     if (!eventId) return;
     let cancelled = false;
     (async () => {
@@ -30,25 +41,30 @@ export default function TicketSessionsPanel({ eventId, registrationId, valid }) 
       }
     })();
     return () => { cancelled = true; };
-  }, [eventId]);
+  }, [eventId, sessionsProp]);
+
+  const canJoinSession = valid && (referenceCode || (isUserAuthenticated && registrationId));
 
   const handleJoin = async (sessionId) => {
-    if (!registrationId || !valid) return;
+    if (!canJoinSession) return;
     setJoiningId(sessionId);
     setError('');
     try {
-      const res = await fetch(
-        `${API_BASE}/registrations/${encodeURIComponent(registrationId)}/sessions/${encodeURIComponent(sessionId)}/join`,
-        {
-          method: 'POST',
-          headers: getSessionAuthHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ join_source: 'ticket_page' }),
-        },
-      );
+      const url = referenceCode
+        ? `${API_BASE}/tickets/${encodeURIComponent(referenceCode)}/sessions/${encodeURIComponent(sessionId)}/join`
+        : `${API_BASE}/registrations/${encodeURIComponent(registrationId)}/sessions/${encodeURIComponent(sessionId)}/join`;
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: referenceCode
+          ? { 'Content-Type': 'application/json' }
+          : getSessionAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ join_source: 'ticket_page' }),
+      });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json?.ok) throw new Error(json?.message || 'Could not join session.');
-      const url = String(json?.data?.meeting_url || '').trim();
-      if (url) window.open(url, '_blank', 'noopener,noreferrer');
+      const meetingUrl = String(json?.data?.meeting_url || '').trim();
+      if (meetingUrl) window.open(meetingUrl, '_blank', 'noopener,noreferrer');
     } catch (err) {
       setError(err?.message || 'Could not join session.');
     } finally {
@@ -69,7 +85,7 @@ export default function TicketSessionsPanel({ eventId, registrationId, valid }) 
               <p className="font-medium text-navy-800">{session.title || session.session_date}</p>
               <p className="text-xs text-navy-500">{session.session_date}</p>
             </div>
-            {isUserAuthenticated && valid ? (
+            {canJoinSession ? (
               <button
                 type="button"
                 onClick={() => handleJoin(session.id)}
@@ -80,7 +96,7 @@ export default function TicketSessionsPanel({ eventId, registrationId, valid }) 
                 Join
               </button>
             ) : (
-              <span className="text-xs text-navy-400">Sign in as purchaser to join</span>
+              <span className="text-xs text-navy-400">Ticket not valid</span>
             )}
           </li>
         ))}

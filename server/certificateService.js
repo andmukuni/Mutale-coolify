@@ -14,6 +14,12 @@ import {
 } from './certificateTemplateService.js';
 import { generateCertificatePdfFromTemplate } from '../shared/certificatePdf.js';
 import { formatEventDateRange } from '../shared/certificateDesign.js';
+import {
+  isGuestTicket,
+  resolveAttendeeEmail,
+  resolveAttendeeName,
+  resolveAttendeePhone,
+} from '../shared/ticketViewModel.js';
 
 const NAVY = '#0B1D36';
 const CYAN = '#06B6D4';
@@ -36,6 +42,7 @@ export function mapDbCertificate(row) {
     user_id: row.user_id,
     attendee_name: row.attendee_name,
     attendee_email: row.attendee_email,
+    attendee_phone: row.attendee_phone || null,
     event_title: row.event_title,
     event_end_date: row.event_end_date,
     pdf_path: row.pdf_path,
@@ -245,16 +252,6 @@ export async function ensureCertificatePdfOnDisk(certRow, appRoot, pool = null) 
   return written.absolutePath;
 }
 
-function resolveAttendeeName(reg, user) {
-  const booked = String(reg.booked_for_name || '').trim();
-  if (booked) return booked;
-  return String(reg.user_name || user?.name || 'Attendee').trim();
-}
-
-function resolveAttendeeEmail(reg, user) {
-  return String(reg.booked_for_email || reg.user_email || user?.email || '').trim();
-}
-
 async function registrationMeetsSessionRequirements(pool, reg, event) {
   const requiresAll = event?.certificate_requires_all_sessions === 1
     || event?.certificate_requires_all_sessions === true
@@ -307,15 +304,14 @@ export async function issueCertificateForRegistration(pool, registrationId, appR
     return { status: 'skipped', reason: 'Certificate template not activated for this event.' };
   }
 
-  const [[user]] = await pool.query('SELECT id, name, email FROM users WHERE id = ?', [reg.user_id]);
-
   const certificateCode = buildCertificateCode();
   const issuedAt = new Date();
   const { end } = getEventTimeBounds(event);
   const eventEndDate = end ? end.toISOString().slice(0, 10) : (event.end_date || event.start_date || null);
 
-  const attendeeName = resolveAttendeeName(reg, user);
-  const attendeeEmail = resolveAttendeeEmail(reg, user);
+  const attendeeName = resolveAttendeeName(reg);
+  const attendeeEmail = resolveAttendeeEmail(reg);
+  const attendeePhone = resolveAttendeePhone(reg) || null;
   const eventTitle = String(reg.event_title || event.title || 'Event');
   const eventDates = formatEventDateRange(event);
 
@@ -337,9 +333,9 @@ export async function issueCertificateForRegistration(pool, registrationId, appR
   await pool.query(
     `INSERT INTO event_certificates (
       id, certificate_code, event_id, registration_id, user_id,
-      attendee_name, attendee_email, event_title, event_end_date,
+      attendee_name, attendee_email, attendee_phone, event_title, event_end_date,
       pdf_path, issued_at, email_status, certificate_template_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
     [
       certId,
       certificateCode,
@@ -348,6 +344,7 @@ export async function issueCertificateForRegistration(pool, registrationId, appR
       reg.user_id,
       attendeeName,
       attendeeEmail || null,
+      attendeePhone,
       eventTitle,
       eventEndDate,
       relativePath,
@@ -361,12 +358,36 @@ export async function issueCertificateForRegistration(pool, registrationId, appR
 }
 
 export async function sendCertificateEmailForRow(pool, certRow, appRoot, sendEmailWithAttachments, getSystemSettings) {
-  if (!certRow?.attendee_email) {
+  let registration = null;
+  if (pool && certRow?.registration_id) {
+    const [[row]] = await pool.query(
+      'SELECT * FROM event_registrations WHERE id = ? LIMIT 1',
+      [certRow.registration_id],
+    );
+    registration = row || null;
+  }
+
+  const recipientEmail = registration
+    ? resolveAttendeeEmail(registration)
+    : String(certRow?.attendee_email || '').trim().toLowerCase();
+
+  if (!recipientEmail) {
+    const skipReason = registration && isGuestTicket(registration)
+      ? 'No guest email on registration — certificate not emailed to purchaser.'
+      : 'No recipient email.';
     await pool.query(
       'UPDATE event_certificates SET email_status = ?, email_error = ? WHERE id = ?',
-      ['skipped', 'No recipient email.', certRow.id],
+      ['skipped', skipReason, certRow.id],
     );
-    return { status: 'skipped' };
+    return { status: 'skipped', reason: skipReason };
+  }
+
+  if (registration && recipientEmail !== String(certRow.attendee_email || '').trim().toLowerCase()) {
+    await pool.query(
+      'UPDATE event_certificates SET attendee_email = ? WHERE id = ?',
+      [recipientEmail, certRow.id],
+    );
+    certRow = { ...certRow, attendee_email: recipientEmail };
   }
 
   let absolutePath;
@@ -380,8 +401,21 @@ export async function sendCertificateEmailForRow(pool, certRow, appRoot, sendEma
     return { status: 'failed' };
   }
 
+  const refCode = String(registration?.reference_code || '').trim();
+  const portalUrl = refCode
+    ? `${resolveAppOrigin()}/tickets/${encodeURIComponent(refCode)}`
+    : '';
+
   const settings = await getSystemSettings();
   const subject = `Your certificate: ${certRow.event_title}`;
+  const portalLines = portalUrl
+    ? [
+      '',
+      `View your ticket and download your certificate anytime: ${portalUrl}`,
+      'If download asks for verification, use the email address on your registration.',
+    ]
+    : [];
+
   const text = [
     `Dear ${certRow.attendee_name},`,
     '',
@@ -389,22 +423,28 @@ export async function sendCertificateEmailForRow(pool, certRow, appRoot, sendEma
     'Your certificate of attendance is attached to this email.',
     '',
     `Certificate ID: ${certRow.certificate_code}`,
+    ...portalLines,
     '',
     'Best regards,',
     'Mutale Mubanga',
   ].join('\n');
+
+  const portalHtml = portalUrl
+    ? `<p><a href="${portalUrl}">View your ticket portal</a> to download your certificate anytime.</p>`
+    : '';
 
   const html = `
     <p>Dear ${certRow.attendee_name},</p>
     <p>Thank you for attending <strong>${certRow.event_title}</strong>.</p>
     <p>Your certificate of attendance is attached to this email.</p>
     <p><strong>Certificate ID:</strong> ${certRow.certificate_code}</p>
+    ${portalHtml}
     <p>Best regards,<br/>Mutale Mubanga</p>
   `;
 
   const result = await sendEmailWithAttachments({
     settings,
-    to: certRow.attendee_email,
+    to: recipientEmail,
     subject,
     text,
     html,
