@@ -11155,6 +11155,39 @@ function parseProductJsonFields(row) {
   return out;
 }
 
+/** Event-scoped merch clones use ids like `prod-demo-mug--event-key`. */
+function catalogProductKey(row) {
+  const id = String(row?.id || '').trim().toLowerCase();
+  const suffixAt = id.indexOf('--');
+  if (suffixAt > 0) return id.slice(0, suffixAt);
+  if (id.startsWith('prod-demo-')) return id;
+  const title = String(row?.title || '').trim().toLowerCase();
+  if (title) return `title:${title}`;
+  return String(row?.slug || id).trim().toLowerCase();
+}
+
+function catalogProductRank(row) {
+  let rank = 0;
+  const id = String(row?.id || '');
+  if (!id.includes('--')) rank += 50;
+  if (!row?.event_id) rank += 100;
+  if (Number(row?.featured)) rank += 10;
+  return rank;
+}
+
+function dedupeCatalogProducts(rows) {
+  const bestByKey = new Map();
+  for (const row of rows) {
+    const key = catalogProductKey(row);
+    const prev = bestByKey.get(key);
+    if (!prev || catalogProductRank(row) > catalogProductRank(prev)) {
+      bestByKey.set(key, row);
+    }
+  }
+  const keptIds = new Set([...bestByKey.values()].map((row) => row.id));
+  return rows.filter((row) => keptIds.has(row.id));
+}
+
 app.get('/api/products', async (req, res) => {
   try {
     const { type, event_id: eventId, published } = req.query || {};
@@ -11170,7 +11203,9 @@ app.get('/api/products', async (req, res) => {
       `SELECT * FROM books ${where} ORDER BY featured DESC, created_at DESC`,
       params,
     );
-    return res.json({ ok: true, data: rows.map(parseProductJsonFields) });
+    let data = rows.map(parseProductJsonFields);
+    if (!eventId) data = dedupeCatalogProducts(data);
+    return res.json({ ok: true, data });
   } catch (error) {
     return res.status(500).json({ ok: false, message: 'Failed to fetch products', error: error.message });
   }
