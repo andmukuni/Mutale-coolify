@@ -500,10 +500,10 @@ export default function Navbar() {
   ) : null;
 
   return (
-    <header className="theme-fixed sticky top-0 z-50 shadow-md contain-layout">
+    <header className="theme-fixed sticky top-0 z-50 shadow-md bg-navy-800">
       <div
         ref={topBlockRef}
-        className={`overflow-hidden will-change-[height] motion-reduce:transition-none${collapseTop ? ' pointer-events-none' : ''}`}
+        className={`bg-navy-900 overflow-hidden will-change-[height] motion-reduce:transition-none${collapseTop ? ' pointer-events-none' : ''}`}
         style={{
           ...topSectionStyle,
           transitionProperty: topBlockHeight > 0 ? 'height' : undefined,
@@ -556,7 +556,7 @@ export default function Navbar() {
       </div>
 
       {/* Tier 3 — main navigation (desktop) */}
-      <div className="theme-fixed hidden md:block bg-navy-800 border-b border-navy-700/80 overflow-visible">
+      <div className="theme-fixed hidden md:block bg-navy-800 border-b border-navy-700/80 overflow-visible -mt-px">
         <div className={`${containerClass} flex items-center justify-between gap-4 min-h-12 py-1 overflow-visible`}>
           <div className="flex items-center gap-1 min-w-0 overflow-visible">
             <NavLink

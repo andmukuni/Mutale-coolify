@@ -19,6 +19,7 @@
     "seed:admin-cv-profile": "node server/scripts/seed-admin-cv-profile.js",
     "seed:rbac": "node server/scripts/seed-rbac.js",
     "seed:partner-logos": "node server/scripts/seed-partner-logos.js",
+    "seed:live-today": "node server/scripts/seed-live-events-today.js",
     "start": "NODE_ENV=production node server/index.js",
     "deploy:build": "npm run build && echo 'Build complete — upload dist/, server/, package.json, .env to cPanel'",
     "deploy:zip": "bash scripts/make-cpanel-update-zip.sh",
