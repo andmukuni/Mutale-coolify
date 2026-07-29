@@ -59,7 +59,7 @@ function paidEventForToday(today) {
     timezone: 'Africa/Lusaka',
     capacity: 50,
     booking_type: 'subscription',
-    price: 350,
+    price: 150,
     is_free: false,
     status: 'published',
     registration_deadline: today,
@@ -123,6 +123,32 @@ async function republishPastEventsAsLiveToday(today) {
   return Number(result.affectedRows || 0);
 }
 
+/** After republish, ensure live-today events are paid (first republished = K10, second = K150). */
+async function applyLiveTodayPaidPricing(today) {
+  const [liveRows] = await pool.query(
+    `SELECT id FROM events
+     WHERE status = 'published'
+       AND start_date <= ? AND end_date >= ?
+       AND id <> 'evt-paid-live-today'
+     ORDER BY updated_at ASC, title ASC`,
+    [today, today],
+  );
+
+  const tiers = [10, 150];
+
+  await Promise.all(
+    liveRows.map((row, index) => {
+      const price = tiers[Math.min(index, tiers.length - 1)];
+      return pool.query(
+        `UPDATE events SET price = ?, is_free = 0, updated_at = NOW() WHERE id = ?`,
+        [price, row.id],
+      );
+    }),
+  );
+
+  return liveRows.length;
+}
+
 async function summarize(today) {
   const [rows] = await pool.query(
     `SELECT id, title, start_date, end_date, status, price, is_free
@@ -143,6 +169,9 @@ async function main() {
 
   const republished = await republishPastEventsAsLiveToday(today);
   console.log(`[seed-live-today] Republished ${republished} past event(s) as live today`);
+
+  const priced = await applyLiveTodayPaidPricing(today);
+  console.log(`[seed-live-today] Set paid pricing (K10/K150) on ${priced} republished event(s)`);
 
   const liveToday = await summarize(today);
   console.log(`[seed-live-today] ${liveToday.length} published event(s) live today:`);
