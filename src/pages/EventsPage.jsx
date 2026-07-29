@@ -1,14 +1,12 @@
 import { useState } from 'react';
 import { Search } from 'lucide-react';
-import SectionHeader from '../components/SectionHeader';
 import EventCard from '../components/EventCard';
 import EmptyState from '../components/EmptyState';
 import PageHeaderBackdrop from '../components/PageHeaderBackdrop';
 import { useData } from '../context/DataContext';
 import { filterBySearch, filterByCategory, getUniqueCategories } from '../utils/helpers';
 import { getEventDisplayStatus, isEventPubliclyVisible } from '../utils/eventServices';
-import { formatDate } from '../utils/helpers';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { defaultWebsitePages } from '../data/websitePages';
 
 export default function EventsPage() {
@@ -98,46 +96,18 @@ export default function EventsPage() {
       {/* Events Grid */}
       <section className="py-12 sm:py-16 bg-navy-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid lg:grid-cols-12 gap-6 lg:gap-8 items-start">
-            <div className="lg:col-span-9 xl:col-span-9">
-              {mainEvents.length > 0 ? (
-                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {mainEvents.map(event => (
-                    <EventCard key={event.id} event={event} />
-                  ))}
-                </div>
-              ) : (
-                <EmptyState
-                  title={emptyTitle}
-                  description={emptyDescription}
-                />
-              )}
+          {mainEvents.length > 0 ? (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {mainEvents.map((event) => (
+                <EventCard key={event.id} event={event} />
+              ))}
             </div>
-
-            <aside className="lg:col-span-3 xl:col-span-3">
-              <div className="bg-white rounded-2xl border border-navy-100 shadow-sm p-5 lg:sticky lg:top-24">
-                <h3 className="text-base font-bold text-navy-900 mb-1">Past events</h3>
-                <p className="text-xs text-navy-500 mb-4">Quick access to previously held sessions.</p>
-
-                {pastEvents.length > 0 ? (
-                  <ul className="space-y-3">
-                    {pastEvents.slice(0, 8).map((event) => (
-                      <li key={event.id} className="border border-navy-100 rounded-xl p-3 hover:border-cyan-200 transition-colors">
-                        <Link to={`/events/${event.slug}`} className="block">
-                          <p className="text-sm font-semibold text-navy-800 line-clamp-2 hover:text-cyan-700 transition-colors">
-                            {event.title}
-                          </p>
-                          <p className="text-xs text-navy-500 mt-1">{formatDate(event.start_date || event.date)}</p>
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-navy-500">No past events match this filter yet.</p>
-                )}
-              </div>
-            </aside>
-          </div>
+          ) : (
+            <EmptyState
+              title={emptyTitle}
+              description={emptyDescription}
+            />
+          )}
         </div>
       </section>
     </div>
