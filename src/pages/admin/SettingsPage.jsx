@@ -1,6 +1,23 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Save, RotateCcw, ExternalLink, Info } from 'lucide-react';
+import {
+  Save,
+  RotateCcw,
+  ExternalLink,
+  Info,
+  User,
+  Palette,
+  Mail,
+  CreditCard,
+  FileText,
+  MessageSquare,
+  MessageCircle,
+  IdCard,
+  Bell,
+  Shield,
+  Puzzle,
+  Video,
+} from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 import { PageHeader, Card, FormField, ConfirmDialog, LoadingButton } from '../../components/ui';
@@ -9,20 +26,47 @@ import { getApiBase } from '../../utils/apiBase';
 import { getAdminAuthHeaders } from '../../utils/authHeaders';
 import { formatNrcNumber } from '../../utils/helpers';
 
-const tabs = [
-  { key: 'profile', label: 'Profile' },
-  { key: 'appearance', label: 'Appearance' },
-  { key: 'email', label: 'Email Configuration' },
-  { key: 'payment', label: 'Payment Gateway' },
-  { key: 'cv', label: 'CV Generator' },
-  { key: 'sms', label: 'SMS Configuration' },
-  { key: 'whatsapp', label: 'WhatsApp Configuration' },
-  { key: 'nrc', label: 'NRC Verification' },
-  { key: 'notifications', label: 'Notifications' },
-  { key: 'security', label: 'Security' },
-  { key: 'integrations', label: 'Integrations' },
-  { key: 'video', label: 'Video Meetings' },
+const settingsNav = [
+  {
+    group: 'Site',
+    items: [
+      { key: 'profile', label: 'Profile', icon: User },
+      { key: 'appearance', label: 'Appearance', icon: Palette },
+    ],
+  },
+  {
+    group: 'Communications',
+    items: [
+      { key: 'email', label: 'Email', icon: Mail },
+      { key: 'sms', label: 'SMS', icon: MessageSquare },
+      { key: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
+      { key: 'notifications', label: 'Notifications', icon: Bell },
+    ],
+  },
+  {
+    group: 'Payments & products',
+    items: [
+      { key: 'payment', label: 'Payment gateway', icon: CreditCard },
+      { key: 'cv', label: 'CV generator', icon: FileText },
+    ],
+  },
+  {
+    group: 'Security',
+    items: [
+      { key: 'security', label: 'Security', icon: Shield },
+      { key: 'nrc', label: 'NRC verification', icon: IdCard },
+    ],
+  },
+  {
+    group: 'Integrations',
+    items: [
+      { key: 'integrations', label: 'Integrations', icon: Puzzle },
+      { key: 'video', label: 'Video meetings', icon: Video },
+    ],
+  },
 ];
+
+const tabs = settingsNav.flatMap((section) => section.items);
 
 const API_BASE = getApiBase();
 
@@ -594,11 +638,16 @@ export default function SettingsPage() {
     }
   };
 
+  const activeTabMeta = useMemo(
+    () => tabs.find((tab) => tab.key === activeTab) || tabs[0],
+    [activeTab],
+  );
+
   return (
     <div>
       <PageHeader
         title="Settings"
-        subtitle="Manage your portfolio profile information"
+        subtitle="Site profile, payments, messaging, and integrations"
         breadcrumbs={[
           { label: 'Admin', to: '/admin' },
           { label: 'Settings' },
@@ -614,25 +663,82 @@ export default function SettingsPage() {
         </div>
       )}
 
-      <div className="max-w-5xl mx-auto space-y-6">
-        <Card title="Configuration Center" subtitle="Manage site-wide and integration settings">
-          <div className="flex flex-wrap gap-2">
-            {tabs.map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => setActiveTab(tab.key)}
-                className={`px-3.5 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  activeTab === tab.key
-                    ? 'bg-cyan-600 text-white'
-                    : 'bg-navy-100 text-navy-600 hover:bg-navy-200'
-                }`}
-              >
-                {tab.label}
-              </button>
+      <div className="max-w-6xl mx-auto">
+        {/* Mobile section picker */}
+        <div className="mb-4 lg:hidden">
+          <label className="block text-xs font-semibold uppercase tracking-wide text-navy-500 mb-1.5">
+            Settings section
+          </label>
+          <select
+            value={activeTab}
+            onChange={(e) => setActiveTab(e.target.value)}
+            className="w-full rounded-xl border border-navy-200 bg-white px-3.5 py-2.5 text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+          >
+            {settingsNav.map((section) => (
+              <optgroup key={section.group} label={section.group}>
+                {section.items.map((item) => (
+                  <option key={item.key} value={item.key}>
+                    {item.label}
+                  </option>
+                ))}
+              </optgroup>
             ))}
-          </div>
-        </Card>
+          </select>
+        </div>
+
+        <div className="grid lg:grid-cols-12 gap-6 items-start">
+          <aside className="hidden lg:block lg:col-span-3">
+            <nav
+              aria-label="Settings sections"
+              className="sticky top-24 rounded-2xl border border-navy-100 bg-white p-3 shadow-sm"
+            >
+              <p className="px-2.5 pt-1 pb-3 text-[11px] font-semibold uppercase tracking-wider text-navy-400">
+                Configuration
+              </p>
+              <div className="space-y-4">
+                {settingsNav.map((section) => (
+                  <div key={section.group}>
+                    <p className="px-2.5 mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-navy-400">
+                      {section.group}
+                    </p>
+                    <ul className="space-y-0.5">
+                      {section.items.map((item) => {
+                        const Icon = item.icon;
+                        const selected = activeTab === item.key;
+                        return (
+                          <li key={item.key}>
+                            <button
+                              type="button"
+                              onClick={() => setActiveTab(item.key)}
+                              className={`w-full flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-sm transition-colors ${
+                                selected
+                                  ? 'bg-cyan-50 text-cyan-800 font-semibold'
+                                  : 'text-navy-600 hover:bg-navy-50 hover:text-navy-900'
+                              }`}
+                            >
+                              <span
+                                className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
+                                  selected ? 'bg-cyan-600 text-white' : 'bg-navy-100 text-navy-500'
+                                }`}
+                              >
+                                <Icon size={14} />
+                              </span>
+                              <span className="truncate">{item.label}</span>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </nav>
+          </aside>
+
+          <div className="lg:col-span-9 space-y-6 min-w-0">
+            <div className="hidden sm:flex items-center gap-2 text-sm text-navy-500">
+              <span className="font-medium text-navy-800">{activeTabMeta.label}</span>
+            </div>
 
         {activeTab === 'profile' && (
           <Card
@@ -1529,6 +1635,8 @@ export default function SettingsPage() {
             </button>
           </div>
         </Card>
+          </div>
+        </div>
       </div>
 
       <ConfirmDialog
