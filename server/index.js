@@ -52,6 +52,12 @@ import {
 } from './ticketService.js';
 import { registerGuestTicketRoutes } from './guestTicketRoutes.js';
 import {
+  publishLencoPaymentUpdate,
+  subscribeLencoPaymentUpdates,
+  verifyLencoWebhookSignature,
+  waitForLencoPaymentUpdate,
+} from './lencoPaymentRealtime.js';
+import {
   eventHasLiveJoin,
   isGuestRegistration,
   maskEmail,
@@ -3689,6 +3695,19 @@ async function upsertPaymentCollection(partial = {}) {
   );
 
   const [[row]] = await pool.query('SELECT * FROM payment_collections WHERE reference = ?', [reference]);
+  if (row) {
+    const status = normalizeCollectionStatus(row.status);
+    if (status === 'successful' || status === 'failed') {
+      publishLencoPaymentUpdate(reference, {
+        status,
+        paid: status === 'successful',
+        amount: toNumber(row.amount, 0),
+        currency: row.currency,
+        channel: row.channel,
+        source: 'db',
+      });
+    }
+  }
   return row;
 }
 
@@ -10564,6 +10583,291 @@ app.post('/api/finance/settlements', async (req, res) => {
   }
 });
 
+async function assertPaymentReferenceOwnedByUser(reference, authUser) {
+  const [[existingCollection]] = await pool.query(
+    'SELECT customer_email, status, amount, currency, channel FROM payment_collections WHERE reference = ? LIMIT 1',
+    [reference],
+  );
+  if (existingCollection?.customer_email
+    && String(existingCollection.customer_email).toLowerCase() !== String(authUser.email || '').toLowerCase()) {
+    const err = new Error('This payment reference does not belong to your account.');
+    err.statusCode = 403;
+    throw err;
+  }
+  return existingCollection || null;
+}
+
+async function verifyLencoCollectionFromApi(reference, lencoConfig) {
+  const result = await lencoRequest({
+    method: 'GET',
+    path: `/collections/status/${encodeURIComponent(reference)}`,
+    secretKey: lencoConfig.secretKey,
+    baseUrl: lencoConfig.baseUrl,
+  });
+
+  const status = normalizeCollectionStatus(
+    result?.data?.data?.status
+    || result?.data?.status
+    || result?.status
+    || 'pending',
+  );
+
+  const row = await upsertPaymentCollection({
+    reference,
+    status,
+    amount: toNumber(result?.data?.data?.amount ?? result?.data?.amount ?? result?.amount, 0),
+    currency: String(result?.data?.data?.currency || result?.data?.currency || result?.currency || 'ZMW'),
+    channel: String(result?.data?.data?.channel || result?.data?.channel || result?.channel || 'unknown'),
+    provider: 'lenco',
+    provider_response: result,
+  });
+
+  return { result, status, row };
+}
+
+/**
+ * Lenco → server webhook. Register URL with Lenco support, e.g.
+ * https://your-domain/api/webhooks/lenco
+ */
+app.post('/api/webhooks/lenco', async (req, res) => {
+  try {
+    const settings = await getSystemSettings();
+    const lencoConfig = getLencoConfig(settings);
+    const rawBody = String(req.rawBody || JSON.stringify(req.body || {}));
+    const signature = String(req.headers['x-lenco-signature'] || '').trim();
+
+    if (!lencoConfig.secretKey) {
+      return res.status(503).json({ ok: false, message: 'Lenco secret key is not configured.' });
+    }
+
+    const valid = verifyLencoWebhookSignature({
+      rawBody,
+      signature,
+      apiToken: lencoConfig.secretKey,
+    });
+    if (!valid) {
+      await createIntegrationLog({
+        provider: 'lenco',
+        action: 'webhook_receive',
+        relatedType: 'webhook',
+        relatedId: 'lenco',
+        status: 'failed',
+        requestPayload: { event: req.body?.event || '' },
+        errorMessage: 'Invalid Lenco webhook signature.',
+      });
+      return res.status(401).json({ ok: false, message: 'Invalid Lenco webhook signature.' });
+    }
+
+    // Acknowledge quickly so Lenco does not retry while we process.
+    res.status(200).json({ ok: true });
+
+    const eventName = String(req.body?.event || '').trim().toLowerCase();
+    const data = req.body?.data || {};
+    const reference = String(data?.reference || '').trim();
+    const bodySnapshot = req.body;
+
+    setImmediate(async () => {
+      try {
+        if (!reference) return;
+
+        let status = normalizeCollectionStatus(data?.status || '');
+        if (eventName === 'collection.successful') status = 'successful';
+        if (eventName === 'collection.failed') status = 'failed';
+
+        if (!['successful', 'failed', 'pending'].includes(status) && eventName.startsWith('collection.')) {
+          status = normalizeCollectionStatus(data?.status || 'pending');
+        }
+
+        if (eventName.startsWith('collection.') || reference) {
+          await upsertPaymentCollection({
+            reference,
+            status: status || 'pending',
+            amount: toNumber(data?.amount, 0),
+            currency: String(data?.currency || 'ZMW'),
+            channel: String(data?.type || data?.channel || 'unknown'),
+            provider: 'lenco',
+            provider_response: bodySnapshot,
+            error_message: data?.reasonForFailure || null,
+          });
+        }
+
+        await createIntegrationLog({
+          provider: 'lenco',
+          action: 'webhook_receive',
+          relatedType: 'payment',
+          relatedId: reference || 'lenco',
+          status: status === 'failed' ? 'failed' : 'success',
+          requestPayload: { event: eventName, reference },
+          responsePayload: { status },
+        });
+      } catch (err) {
+        console.error('[lenco webhook] process failed:', err.message);
+      }
+    });
+  } catch (error) {
+    if (!res.headersSent) {
+      return res.status(500).json({ ok: false, message: 'Failed to process Lenco webhook', error: error.message });
+    }
+    console.error('[lenco webhook]', error.message);
+  }
+});
+
+/** SSE: instant payment status when Lenco webhook (or verify) updates the collection. */
+app.get('/api/payments/lenco/stream', async (req, res) => {
+  try {
+    // EventSource cannot set Authorization headers — allow access_token query here only.
+    if (!getBearerToken(req)) {
+      const queryToken = String(req.query?.access_token || req.query?.token || '').trim();
+      if (queryToken) req.headers.authorization = `Bearer ${queryToken}`;
+    }
+    const auth = getJwtAuth(req);
+    if (!auth.ok) return sendAuthFailure(res, auth);
+
+    const authUser = await getUserByClaims(auth.claims);
+    if (!authUser) return res.status(401).json({ ok: false, message: 'User account not found.' });
+
+    const reference = String(req.query?.reference || '').trim();
+    if (!reference) {
+      return res.status(400).json({ ok: false, message: 'reference is required' });
+    }
+
+    const existing = await assertPaymentReferenceOwnedByUser(reference, authUser);
+    const currentStatus = normalizeCollectionStatus(existing?.status || '');
+
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    if (typeof res.flushHeaders === 'function') res.flushHeaders();
+
+    const send = (event, payload) => {
+      res.write(`event: ${event}\n`);
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    };
+
+    send('ready', { reference, status: currentStatus || 'pending' });
+
+    if (currentStatus === 'successful' || currentStatus === 'failed') {
+      send('payment', {
+        reference,
+        status: currentStatus,
+        paid: currentStatus === 'successful',
+        amount: toNumber(existing?.amount, 0),
+        currency: existing?.currency,
+        channel: existing?.channel,
+        source: 'db',
+      });
+      return res.end();
+    }
+
+    const unsubscribe = subscribeLencoPaymentUpdates(reference, (update) => {
+      send('payment', update);
+      const status = String(update?.status || '').toLowerCase();
+      if (status === 'successful' || status === 'failed' || update?.paid) {
+        unsubscribe();
+        res.end();
+      }
+    });
+
+    const heartbeat = setInterval(() => {
+      res.write(': ping\n\n');
+    }, 15000);
+
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      unsubscribe();
+    });
+  } catch (error) {
+    const code = error.statusCode || 500;
+    if (!res.headersSent) {
+      return res.status(code).json({ ok: false, message: error.message || 'Failed to open payment stream.' });
+    }
+    res.end();
+  }
+});
+
+/**
+ * Long-poll await (best for mobile): blocks until webhook/verify publishes a terminal status.
+ * Falls back to one Lenco API verify if the wait times out.
+ */
+app.post('/api/payments/lenco/await', async (req, res) => {
+  try {
+    const auth = getJwtAuth(req);
+    if (!auth.ok) return sendAuthFailure(res, auth);
+
+    const authUser = await getUserByClaims(auth.claims);
+    if (!authUser) return res.status(401).json({ ok: false, message: 'User account not found.' });
+
+    const reference = String(req.body?.reference || '').trim();
+    if (!reference) {
+      return res.status(400).json({ ok: false, message: 'reference is required' });
+    }
+
+    const existing = await assertPaymentReferenceOwnedByUser(reference, authUser);
+    const existingStatus = normalizeCollectionStatus(existing?.status || '');
+    if (existingStatus === 'successful' || existingStatus === 'failed') {
+      return res.json({
+        ok: true,
+        data: {
+          reference,
+          status: existingStatus,
+          paid: existingStatus === 'successful',
+          source: 'db',
+          timedOut: false,
+        },
+      });
+    }
+
+    const timeoutMs = Math.min(Math.max(Number(req.body?.timeoutMs) || 90000, 5000), 120000);
+    const waited = await waitForLencoPaymentUpdate(reference, { timeoutMs });
+
+    if (!waited.timedOut && waited.update) {
+      const status = normalizeCollectionStatus(waited.update.status);
+      return res.json({
+        ok: true,
+        data: {
+          reference,
+          status,
+          paid: status === 'successful' || waited.update.paid === true,
+          amount: waited.update.amount,
+          currency: waited.update.currency,
+          channel: waited.update.channel,
+          source: waited.update.source || 'realtime',
+          timedOut: false,
+        },
+      });
+    }
+
+    const settings = await getSystemSettings();
+    const lencoConfig = getLencoConfig(settings);
+    if (lencoConfig.provider !== 'lenco' || !lencoConfig.secretKey) {
+      return res.json({
+        ok: true,
+        data: { reference, status: 'pending', paid: false, source: 'timeout', timedOut: true },
+      });
+    }
+
+    const { status } = await verifyLencoCollectionFromApi(reference, lencoConfig);
+    return res.json({
+      ok: true,
+      data: {
+        reference,
+        status,
+        paid: status === 'successful',
+        source: 'verify',
+        timedOut: status !== 'successful' && status !== 'failed',
+      },
+    });
+  } catch (error) {
+    const code = error.statusCode || 502;
+    return res.status(code).json({
+      ok: false,
+      message: error.message || 'Failed to await Lenco payment',
+      error: error.message,
+    });
+  }
+});
+
 app.post('/api/payments/lenco/verify', async (req, res) => {
   try {
     const auth = getJwtAuth(req);
@@ -10577,14 +10881,7 @@ app.post('/api/payments/lenco/verify', async (req, res) => {
       return res.status(400).json({ ok: false, message: 'reference is required' });
     }
 
-    const [[existingCollection]] = await pool.query(
-      'SELECT customer_email FROM payment_collections WHERE reference = ? LIMIT 1',
-      [reference],
-    );
-    if (existingCollection?.customer_email
-      && String(existingCollection.customer_email).toLowerCase() !== String(authUser.email || '').toLowerCase()) {
-      return res.status(403).json({ ok: false, message: 'This payment reference does not belong to your account.' });
-    }
+    await assertPaymentReferenceOwnedByUser(reference, authUser);
 
     const settings = await getSystemSettings();
     const lencoConfig = getLencoConfig(settings);
@@ -10597,33 +10894,16 @@ app.post('/api/payments/lenco/verify', async (req, res) => {
       return res.status(400).json({ ok: false, message: 'Lenco secret key is missing in settings.' });
     }
 
-    const result = await lencoRequest({
-      method: 'GET',
-      path: `/collections/status/${encodeURIComponent(reference)}`,
-      secretKey: lencoConfig.secretKey,
-      baseUrl: lencoConfig.baseUrl,
-    });
-
-    const status = normalizeCollectionStatus(
-      result?.data?.data?.status
-      || result?.data?.status
-      || result?.status
-      || 'pending',
-    );
-
-    await upsertPaymentCollection({
-      reference,
-      status,
-      amount: toNumber(result?.data?.data?.amount ?? result?.data?.amount ?? result?.amount, 0),
-      currency: String(result?.data?.data?.currency || result?.data?.currency || result?.currency || 'ZMW'),
-      channel: String(result?.data?.data?.channel || result?.data?.channel || result?.channel || 'unknown'),
-      provider: 'lenco',
-      provider_response: result,
-    });
+    const { result } = await verifyLencoCollectionFromApi(reference, lencoConfig);
 
     return res.json({ ok: true, data: result });
   } catch (error) {
-    return res.status(502).json({ ok: false, message: 'Failed to verify Lenco payment', error: error.message });
+    const code = error.statusCode || 502;
+    return res.status(code).json({
+      ok: false,
+      message: error.statusCode ? error.message : 'Failed to verify Lenco payment',
+      error: error.message,
+    });
   }
 });
 
