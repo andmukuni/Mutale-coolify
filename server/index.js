@@ -10636,13 +10636,17 @@ app.post('/api/webhooks/lenco', async (req, res) => {
     const rawBody = String(req.rawBody || JSON.stringify(req.body || {}));
     const signature = String(req.headers['x-lenco-signature'] || '').trim();
 
-    if (!lencoConfig.secretKey) {
-      return res.status(503).json({ ok: false, message: 'Lenco secret key is not configured.' });
+    if (!lencoConfig.secretKey && !lencoConfig.webhookSecret) {
+      return res.status(503).json({
+        ok: false,
+        message: 'Configure Lenco Secret Key or Signature Key in Admin → Settings → Payment.',
+      });
     }
 
     const valid = verifyLencoWebhookSignature({
       rawBody,
       signature,
+      signatureKey: lencoConfig.webhookSecret,
       apiToken: lencoConfig.secretKey,
     });
     if (!valid) {

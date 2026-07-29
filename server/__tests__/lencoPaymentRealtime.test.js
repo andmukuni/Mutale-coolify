@@ -7,7 +7,7 @@ import {
 } from '../lencoPaymentRealtime.js';
 
 describe('verifyLencoWebhookSignature', () => {
-  it('accepts a valid Lenco HMAC signature', () => {
+  it('accepts a valid Lenco HMAC signature derived from API token', () => {
     const apiToken = 'test-secret-token';
     const body = JSON.stringify({ event: 'collection.successful', data: { reference: 'ref-1' } });
     const webhookHashKey = crypto.createHash('sha256').update(apiToken).digest('hex');
@@ -17,6 +17,18 @@ describe('verifyLencoWebhookSignature', () => {
       rawBody: body,
       signature,
       apiToken,
+    })).toBe(true);
+  });
+
+  it('accepts the dashboard signature key directly', () => {
+    const signatureKey = '0144e34b8a0035d2c79c697b7a151f1a4d04da3abc';
+    const body = JSON.stringify({ event: 'collection.failed', data: { reference: 'ref-2' } });
+    const signature = crypto.createHmac('sha512', signatureKey).update(body, 'utf8').digest('hex');
+
+    expect(verifyLencoWebhookSignature({
+      rawBody: body,
+      signature,
+      signatureKey,
     })).toBe(true);
   });
 

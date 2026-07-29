@@ -706,8 +706,26 @@ export default function SettingsPage() {
               </div>
               <div className="grid sm:grid-cols-2 gap-4">
                 <FormField label="Lenco Account ID" name="accountId" value={systemForm.payment.accountId} onChange={(e) => handleSystemChange('payment', e)} helpText="Optional but recommended for transfer/balance operations" />
-                <FormField label="Webhook Secret" name="webhookSecret" value={systemForm.payment.webhookSecret} onChange={(e) => handleSystemChange('payment', e)} />
+                <FormField
+                  label="Lenco Signature Key"
+                  name="webhookSecret"
+                  type="password"
+                  value={systemForm.payment.webhookSecret}
+                  onChange={(e) => handleSystemChange('payment', e)}
+                  helpText="Copy from Lenco → APIs → Webhook → Signature key. Used to verify payment webhooks."
+                />
               </div>
+              {systemForm.payment.provider === 'lenco' && (
+                <div className="rounded-xl border border-navy-200 bg-navy-50 p-3 text-sm text-navy-700 space-y-2">
+                  <p className="font-medium text-navy-900">Webhook URL (paste in Lenco)</p>
+                  <code className="block break-all rounded-lg bg-white border border-navy-200 px-3 py-2 text-xs text-navy-800">
+                    {`${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/lenco`}
+                  </code>
+                  <p className="text-navy-600">
+                    In Lenco → APIs → Webhook, set this URL and paste the Signature key above, then Save.
+                  </p>
+                </div>
+              )}
               <BooleanField label="Enable Sandbox/Test Mode" name="sandboxMode" checked={systemForm.payment.sandboxMode} onChange={(e) => handleSystemChange('payment', e)} />
               {systemForm.payment.provider === 'lenco' && (
                 <>
