@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Ticket, X, Download } from 'lucide-react';
 import { buildTicketViewModel } from '../../../shared/ticketViewModel.js';
 import TicketDocument from '../../../shared/TicketDocument.jsx';
-import { downloadTicketPdf } from '../../../shared/ticketDocument.js';
+import { downloadTicketPdfFromServer } from '../../utils/ticketPdfDownload.js';
 import receiptLogo from '../../../Logo-Website-Mutale-08.png';
 import { getAppOrigin } from '../../utils/apiBase.js';
 import { useToast } from '../../context/ToastContext';
@@ -45,11 +45,7 @@ export default function TicketPreviewModal({ registration, event, onClose }) {
   const handleDownload = async () => {
     setDownloading(true);
     try {
-      await downloadTicketPdf({
-        registration,
-        event: event || {},
-        appOrigin: getAppOrigin(),
-      });
+      await downloadTicketPdfFromServer(registration);
       toast.success('Ticket downloaded.');
     } catch (err) {
       console.error('[ticket] PDF download failed:', err);

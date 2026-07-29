@@ -8,9 +8,8 @@ import {
 export { buildTicketFilename, isValidTicketPdfBuffer } from './ticketPdf.js';
 
 function shouldUseLegacyPdf() {
-  return String(process.env.TICKET_PDF_LEGACY || '').trim() === '1'
-    || (process.env.NODE_ENV === 'production'
-      && String(process.env.TICKET_PDF_HTML || '').trim() !== '1');
+  // Prefer branded HTML PDF (Puppeteer). Force legacy only with TICKET_PDF_LEGACY=1.
+  return String(process.env.TICKET_PDF_LEGACY || '').trim() === '1';
 }
 
 /**

@@ -1,4 +1,4 @@
-/** Brand colours for receipts only (PDF + preview). */
+/** Brand colours for tickets and receipts (PDF + preview + email). */
 export const RECEIPT_PALETTE = {
   navy: '#141d45',
   teal: '#00a79d',

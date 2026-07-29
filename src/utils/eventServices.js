@@ -49,6 +49,7 @@ export function allowsMultiAttendeeRegistration(event) {
 
 const VALID_ATTENDEE_TYPES = new Set(['adult', 'child']);
 const VALID_CHILD_RELATIONS = new Set(['parent', 'guardian', 'teacher', 'other']);
+const VALID_ATTENDEE_SEX = new Set(['male', 'female']);
 
 export function normalizeAttendeeType(raw = 'adult') {
   const t = String(raw || 'adult').trim().toLowerCase();
@@ -58,6 +59,20 @@ export function normalizeAttendeeType(raw = 'adult') {
 export function normalizeAttendeeRelation(raw = '') {
   const r = String(raw || '').trim().toLowerCase();
   return VALID_CHILD_RELATIONS.has(r) ? r : '';
+}
+
+export function normalizeAttendeeSex(raw = '') {
+  const sex = String(raw || '').trim().toLowerCase();
+  if (sex === 'm') return 'male';
+  if (sex === 'f') return 'female';
+  return VALID_ATTENDEE_SEX.has(sex) ? sex : '';
+}
+
+export function normalizeAttendeeAge(raw) {
+  if (raw == null || raw === '') return null;
+  const age = Math.floor(Number(raw));
+  if (!Number.isFinite(age) || age < 0 || age > 120) return null;
+  return age;
 }
 
 export function deriveGuestAttendeeSlotKey(name, index) {
@@ -82,6 +97,14 @@ export function validateGuestAttendees(attendees = []) {
       const relation = normalizeAttendeeRelation(row.relation || row.booked_for_relation);
       if (!relation) {
         return { ok: false, error: `Attendee ${i + 1} (${name}): select your relationship (parent, guardian, etc.).` };
+      }
+      const sex = normalizeAttendeeSex(row.sex || row.attendee_sex || row.gender);
+      if (!sex) {
+        return { ok: false, error: `Attendee ${i + 1} (${name}): select sex (male or female).` };
+      }
+      const age = normalizeAttendeeAge(row.age ?? row.attendee_age);
+      if (age == null) {
+        return { ok: false, error: `Attendee ${i + 1} (${name}): enter age.` };
       }
     }
     const key = name.toLowerCase();

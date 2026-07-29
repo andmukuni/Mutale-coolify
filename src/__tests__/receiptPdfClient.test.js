@@ -65,16 +65,23 @@ describe('receiptPdfClient', () => {
     expect(downloadReceiptPdfMock).toHaveBeenCalledWith(registration);
   });
 
-  it('downloadReceiptFromViewModel uses client preview path when viewModel is populated', async () => {
+  it('downloadReceiptFromViewModel prefers server HTML PDF when available', async () => {
     await downloadReceiptFromViewModel(viewModel, registration);
-    expect(downloadReceiptPdfMock).not.toHaveBeenCalled();
+    expect(downloadReceiptPdfMock).toHaveBeenCalledWith(registration, {});
+    expect(downloadBlob).not.toHaveBeenCalled();
+  });
+
+  it('downloadReceiptFromViewModel falls back to client when server fails', async () => {
+    downloadReceiptPdfMock.mockRejectedValueOnce(new Error('offline'));
+    await downloadReceiptFromViewModel(viewModel, registration);
+    expect(downloadReceiptPdfMock).toHaveBeenCalledWith(registration, {});
     expect(downloadBlob).toHaveBeenCalledWith(
       expect.any(Blob),
       'Receipt-MM-DEMO-CERT-001.pdf',
     );
   });
 
-  it('downloadReceiptFromViewModel falls back to server when viewModel is empty', async () => {
+  it('downloadReceiptFromViewModel uses server when viewModel is empty', async () => {
     await downloadReceiptFromViewModel({}, registration);
     expect(downloadReceiptPdfMock).toHaveBeenCalledWith(registration, {});
   });

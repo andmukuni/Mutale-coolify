@@ -388,6 +388,8 @@ const EVENT_REGISTRATION_FIELDS = [
   'booked_for_phone',
   'attendee_type',
   'guardian_phone',
+  'attendee_sex',
+  'attendee_age',
   'attendee_slot_key',
   'coupon_id',
   'coupon_code',
@@ -411,6 +413,20 @@ function deriveGuestAttendeeSlotKey(name, index) {
   return deriveAttendeeSlotKey(name, index);
 }
 
+function normalizeAttendeeSex(raw = '') {
+  const sex = String(raw || '').trim().toLowerCase();
+  if (sex === 'male' || sex === 'm') return 'male';
+  if (sex === 'female' || sex === 'f') return 'female';
+  return '';
+}
+
+function normalizeAttendeeAge(raw) {
+  if (raw == null || raw === '') return null;
+  const age = Math.floor(Number(raw));
+  if (!Number.isFinite(age) || age < 0 || age > 120) return null;
+  return age;
+}
+
 function normalizeGuestAttendeeInput(raw = {}) {
   const booked_for_name = String(raw.booked_for_name || raw.name || '').trim();
   const booked_for_email = String(raw.booked_for_email || raw.email || '').trim().toLowerCase() || null;
@@ -422,6 +438,10 @@ function normalizeGuestAttendeeInput(raw = {}) {
   const guardian_phone = normalizedType === 'child'
     ? (guardianRaw || booked_for_phone || null)
     : (guardianRaw || null);
+  const sexRaw = raw.attendee_sex ?? raw.sex ?? raw.gender ?? '';
+  const ageRaw = raw.attendee_age ?? raw.age;
+  const attendee_sex = normalizedType === 'child' ? (normalizeAttendeeSex(sexRaw) || null) : null;
+  const attendee_age = normalizedType === 'child' ? normalizeAttendeeAge(ageRaw) : null;
   return {
     booked_for_name,
     booked_for_email,
@@ -429,6 +449,8 @@ function normalizeGuestAttendeeInput(raw = {}) {
     attendee_type: normalizedType,
     booked_for_relation,
     guardian_phone,
+    attendee_sex,
+    attendee_age,
   };
 }
 
@@ -2261,6 +2283,12 @@ function normalizeRegistrationPayload(payload = {}, idOverride) {
     booked_for_phone: String(payload.booked_for_phone || '').trim() || null,
     attendee_type: String(payload.attendee_type || 'adult').trim().toLowerCase() === 'child' ? 'child' : 'adult',
     guardian_phone: String(payload.guardian_phone || '').trim() || null,
+    attendee_sex: String(payload.attendee_type || 'adult').trim().toLowerCase() === 'child'
+      ? (normalizeAttendeeSex(payload.attendee_sex || payload.sex || payload.gender) || null)
+      : null,
+    attendee_age: String(payload.attendee_type || 'adult').trim().toLowerCase() === 'child'
+      ? normalizeAttendeeAge(payload.attendee_age ?? payload.age)
+      : null,
     attendee_slot_key: payload.attendee_slot_key
       ? String(payload.attendee_slot_key).trim().slice(0, 160)
       : deriveAttendeeSlotKey(payload.booked_for_name, payload.attendee_slot_index),
@@ -4383,6 +4411,8 @@ async function ensureSchema() {
     ['ticket_email_sent_at', 'DATETIME NULL'],
     ['attendee_type', "VARCHAR(20) DEFAULT 'adult'"],
     ['guardian_phone', 'VARCHAR(40) NULL'],
+    ['attendee_sex', 'VARCHAR(20) NULL'],
+    ['attendee_age', 'TINYINT UNSIGNED NULL'],
     ['volume_discount_zmw', 'DECIMAL(12,2) NOT NULL DEFAULT 0'],
     ['in_meeting', 'TINYINT(1) NOT NULL DEFAULT 0'],
     ['in_meeting_at', 'DATETIME NULL'],
@@ -8850,6 +8880,12 @@ app.post('/api/registrations/batch', async (req, res) => {
       if (guest.attendee_type === 'child' && !guest.booked_for_relation) {
         return res.status(400).json({ ok: false, message: 'Each child attendee must include your relationship (parent, guardian, etc.).' });
       }
+      if (guest.attendee_type === 'child' && !guest.attendee_sex) {
+        return res.status(400).json({ ok: false, message: 'Each child attendee must include sex (male or female).' });
+      }
+      if (guest.attendee_type === 'child' && guest.attendee_age == null) {
+        return res.status(400).json({ ok: false, message: 'Each child attendee must include age.' });
+      }
     }
 
     const slotKeys = new Set();
@@ -8952,6 +8988,8 @@ app.post('/api/registrations/batch', async (req, res) => {
           booked_for_relation: null,
           attendee_type: 'adult',
           guardian_phone: null,
+          attendee_sex: null,
+          attendee_age: null,
           attendee_slot_key: '__self__',
         });
       }
@@ -8963,6 +9001,8 @@ app.post('/api/registrations/batch', async (req, res) => {
           booked_for_relation: guest.booked_for_relation,
           attendee_type: guest.attendee_type,
           guardian_phone: guest.guardian_phone,
+          attendee_sex: guest.attendee_sex,
+          attendee_age: guest.attendee_age,
           attendee_slot_key: guest.attendee_slot_key,
         });
       }
@@ -8999,6 +9039,8 @@ app.post('/api/registrations/batch', async (req, res) => {
           booked_for_relation: ticket.booked_for_relation,
           attendee_type: ticket.attendee_type,
           guardian_phone: ticket.guardian_phone,
+          attendee_sex: ticket.attendee_sex,
+          attendee_age: ticket.attendee_age,
           attendee_slot_key: ticket.attendee_slot_key,
           coupon_id: pricing.coupon?.id || null,
           coupon_code: couponCodeNorm,

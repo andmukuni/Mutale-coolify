@@ -33,14 +33,15 @@ describe('renderTicketDocumentHtml', () => {
   it('includes gate QR image when provided', () => {
     const html = renderTicketDocumentHtml(baseViewModel);
     expect(html).toContain('data:image/png;base64,qr');
-    expect(html).toContain('Scan at gate for entry');
+    expect(html).toContain('Present this QR code at the event gate for entry.');
   });
 
-  it('includes detail rows and ticket link', () => {
+  it('includes event title and venue meta', () => {
     const html = renderTicketDocumentHtml(baseViewModel);
     expect(html).toContain('Digital Summit');
     expect(html).toContain('Lusaka Convention Centre');
-    expect(html).toContain('https://example.com/tickets/MM-TKT-TEST');
+    expect(html).toContain('ENTRY TICKET');
+    expect(html).toContain('www.mutalemubanga.org');
   });
 
   it('escapes HTML in attendee name', () => {

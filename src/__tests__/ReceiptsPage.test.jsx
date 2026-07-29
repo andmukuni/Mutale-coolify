@@ -2,6 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
+vi.mock('../utils/receiptPdfDownload.js', () => ({
+  downloadReceiptPdf: vi.fn(),
+  resolveReceiptSource: vi.fn(() => 'registration'),
+}));
+
 vi.mock('../utils/receiptPdfClient.js', () => ({
   downloadReceiptPreviewPdf: vi.fn(),
 }));

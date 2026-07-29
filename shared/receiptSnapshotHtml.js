@@ -1,6 +1,4 @@
-import { promises as fs } from 'fs';
-import os from 'os';
-import path from 'path';
+import { buildPuppeteerLaunchOptions } from './puppeteerLaunch.js';
 import { renderReceiptMarkup } from './receiptRender.js';
 
 let browserPromise = null;
@@ -21,12 +19,7 @@ async function getBrowser() {
   if (!browserPromise) {
     browserPromise = (async () => {
       const { default: puppeteer } = await import('puppeteer');
-      const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mutale-receipt-pdf-'));
-      return puppeteer.launch({
-        headless: true,
-        userDataDir,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-      });
+      return puppeteer.launch(await buildPuppeteerLaunchOptions('mutale-receipt-pdf-'));
     })();
 
     browserPromise.catch(() => {
@@ -60,7 +53,7 @@ export async function captureViewModelToPdfBuffer(viewModel) {
   const page = await browser.newPage();
 
   try {
-    await page.setViewport({ width: 672, height: 1200, deviceScaleFactor: 1 });
+    await page.setViewport({ width: 468, height: 1400, deviceScaleFactor: 2 });
     await page.setContent(html, { waitUntil });
 
     await page.evaluate(async () => {
@@ -81,8 +74,8 @@ export async function captureViewModelToPdfBuffer(viewModel) {
 
     const pdfBytes = await page.pdf({
       printBackground: true,
-      width: '672px',
-      height: `${heightPx}px`,
+      width: '468px',
+      height: `${Math.max(heightPx, 420)}px`,
       margin: { top: 0, right: 0, bottom: 0, left: 0 },
     });
 

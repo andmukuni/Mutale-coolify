@@ -15,7 +15,8 @@ import { LoadingButton } from '../../ui';
 import { formatDate, formatTime } from '../../../utils/helpers';
 import { getAppOrigin } from '../../../utils/apiBase';
 import { useToast } from '../../../context/ToastContext';
-import { downloadTicketPdf, downloadTicketQrPng } from '../../../../shared/ticketDocument.js';
+import { downloadTicketPdfFromServer } from '../../../utils/ticketPdfDownload.js';
+import { downloadTicketQrPng } from '../../../../shared/ticketDocument.js';
 import TicketPreviewModal from '../TicketPreviewModal.jsx';
 
 function hasCheckedIn(reg) {
@@ -75,11 +76,7 @@ export default function EventTicketsPanel({ event, registrations = [] }) {
     if (!ref) return;
     setBusyRef(`${ref}-pdf`);
     try {
-      await downloadTicketPdf({
-        registration: reg,
-        event,
-        appOrigin: getAppOrigin(),
-      });
+      await downloadTicketPdfFromServer(reg);
       toast.success('Ticket PDF downloaded.');
     } catch (error) {
       toast.error(error?.message || 'Could not download ticket.');

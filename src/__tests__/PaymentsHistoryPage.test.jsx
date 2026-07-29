@@ -18,10 +18,15 @@ vi.mock('../utils/authHeaders', () => ({
   getAdminAuthHeaders: () => ({ Authorization: 'Bearer fake-admin-token' }),
 }));
 
-const downloadReceiptPreviewPdfMock = vi.fn().mockResolvedValue(undefined);
+const downloadReceiptPdfMock = vi.fn().mockResolvedValue(undefined);
+
+vi.mock('../utils/receiptPdfDownload.js', () => ({
+  downloadReceiptPdf: (...args) => downloadReceiptPdfMock(...args),
+  resolveReceiptSource: vi.fn(() => 'registration'),
+}));
 
 vi.mock('../utils/receiptPdfClient.js', () => ({
-  downloadReceiptPreviewPdf: (...args) => downloadReceiptPreviewPdfMock(...args),
+  downloadReceiptPreviewPdf: vi.fn(),
 }));
 
 import PaymentsHistoryPage from '../pages/admin/PaymentsHistoryPage';
@@ -99,7 +104,7 @@ function renderPage() {
 }
 
 beforeEach(() => {
-  downloadReceiptPreviewPdfMock.mockClear();
+  downloadReceiptPdfMock.mockClear();
   global.fetch = vi.fn().mockResolvedValue({
     ok: true,
     json: async () => ({ ok: true, data: REGS }),
@@ -257,10 +262,9 @@ describe('PaymentsHistoryPage — admin', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: /download pdf/i }));
 
     await waitFor(() => {
-      expect(downloadReceiptPreviewPdfMock).toHaveBeenCalledTimes(1);
+      expect(downloadReceiptPdfMock).toHaveBeenCalledTimes(1);
     });
-    const [vm, reg] = downloadReceiptPreviewPdfMock.mock.calls[0];
-    expect(vm?.refCode || vm?.receiptNo).toBeTruthy();
+    const [reg] = downloadReceiptPdfMock.mock.calls[0];
     expect(reg.id).toBe('r1');
   });
 

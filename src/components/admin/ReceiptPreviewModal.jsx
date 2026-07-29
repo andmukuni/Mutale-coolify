@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Receipt, X, Download } from 'lucide-react';
 import { buildReceiptViewModel } from '../../../shared/receiptViewModel.js';
 import ReceiptDocument from '../../../shared/ReceiptDocument.jsx';
-import { downloadReceiptPreviewPdf } from '../../utils/receiptPdfClient.js';
+import { downloadReceiptPdf } from '../../utils/receiptPdfDownload.js';
 import receiptLogo from '../../../Logo-Website-Mutale-08.png';
 import { getAppOrigin } from '../../utils/apiBase.js';
 import { useToast } from '../../context/ToastContext';
@@ -47,11 +47,9 @@ export default function ReceiptPreviewModal({ registration, onClose }) {
   }, [registration]);
 
   const handleDownload = async () => {
-    if (!viewModel) return;
-
     setDownloading(true);
     try {
-      await downloadReceiptPreviewPdf(viewModel, registration);
+      await downloadReceiptPdf(registration);
       toast.success('Receipt downloaded.');
     } catch (err) {
       if (err?.name === 'AbortError') return;

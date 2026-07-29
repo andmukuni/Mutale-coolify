@@ -102,7 +102,7 @@ Copy values from [`.env.coolify.example`](.env.coolify.example) into Coolify →
 | `DEFAULT_ADMIN_EMAIL` | e.g. `admin@staging.mutalemubanga.org` |
 | `DEFAULT_ADMIN_PASSWORD` | Strong password (required on first boot) |
 | `DEFAULT_ADMIN_NAME` | `Mutale Mubanga` |
-| `RECEIPT_PDF_LEGACY` | `1` (safe default — jsPDF receipts, no Chromium) |
+| `TICKET_PDF_LEGACY` / `RECEIPT_PDF_LEGACY` | leave empty (branded HTML PDFs; image includes Chromium) |
 | `LENCO_SANDBOX` | `true` (for staging payments testing) |
 
 Generate secrets:
@@ -234,7 +234,7 @@ Report-Only CSP is fine for first rollout. When moving to enforced CSP, allow Zo
 | 502 / container unhealthy | Check Coolify logs; verify `DB_*` vars and internal MySQL host |
 | `AUTH_TOKEN_SECRET must be set` | Add `AUTH_TOKEN_SECRET` in Coolify env vars and redeploy |
 | Uploads disappear after redeploy | Confirm `mutale_uploads` volume is attached at `/app/uploads` |
-| Receipt PDF errors | Set `RECEIPT_PDF_LEGACY=1` (default) — skips Puppeteer/Chromium |
+| Ticket/Receipt PDF errors | Confirm Chromium in image (`PUPPETEER_EXECUTABLE_PATH`); only then set `*_PDF_LEGACY=1` as fallback |
 
 ---
 

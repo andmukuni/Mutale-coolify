@@ -16,9 +16,8 @@ export { buildReceiptPdfDocLegacy as buildReceiptPdfDoc } from './receiptPdfLega
 const MIN_PDF_BYTES = 500;
 
 function shouldUseLegacyPdf() {
-  return String(process.env.RECEIPT_PDF_LEGACY || '').trim() === '1'
-    || (process.env.NODE_ENV === 'production'
-      && String(process.env.RECEIPT_PDF_HTML || '').trim() !== '1');
+  // Prefer branded HTML PDF (Puppeteer). Force legacy only with RECEIPT_PDF_LEGACY=1.
+  return String(process.env.RECEIPT_PDF_LEGACY || '').trim() === '1';
 }
 
 export function isValidPdfBuffer(buf) {

@@ -108,27 +108,15 @@ describe('generateReceiptPdfBuffer', () => {
     expect(buf.slice(0, 11).toString()).toBe('%PDF-legacy');
   });
 
-  it('uses legacy by default when NODE_ENV=production', async () => {
+  it('uses HTML by default when NODE_ENV=production', async () => {
     process.env.NODE_ENV = 'production';
-    const buf = await generateReceiptPdfBuffer({
-      registration: baseRegistration,
-      logoDataUrl: 'data:image/png;base64,logo',
-      appOrigin: 'https://mutalemubanga.org',
-    });
-    expect(generateReceiptPdfBufferLegacy).toHaveBeenCalled();
-    expect(captureViewModelToPdfBuffer).not.toHaveBeenCalled();
-    expect(buf.slice(0, 11).toString()).toBe('%PDF-legacy');
-  });
-
-  it('uses HTML on production when RECEIPT_PDF_HTML=1', async () => {
-    process.env.NODE_ENV = 'production';
-    process.env.RECEIPT_PDF_HTML = '1';
     const buf = await generateReceiptPdfBuffer({
       registration: baseRegistration,
       logoDataUrl: 'data:image/png;base64,logo',
       appOrigin: 'https://mutalemubanga.org',
     });
     expect(captureViewModelToPdfBuffer).toHaveBeenCalled();
+    expect(generateReceiptPdfBufferLegacy).not.toHaveBeenCalled();
     expect(buf.slice(0, 14).toString()).toBe('%PDF-mock-html');
   });
 

@@ -147,6 +147,8 @@ function createEmptyGuest() {
     phone: '',
     attendee_type: 'adult',
     relation: '',
+    sex: '',
+    age: '',
     lookupHint: '',
   };
 }
@@ -521,13 +523,18 @@ export default function EventRegistrationFlow({
   const buildBatchPayload = () => ({
     includeSelf: allowsMultiAttendee ? includeSelf : false,
     attendees: allowsMultiAttendee
-      ? guestAttendees.map((guest) => ({
-        name: guest.name.trim(),
-        email: guest.email.trim(),
-        phone: guest.phone.trim(),
-        attendee_type: normalizeAttendeeType(guest.attendee_type),
-        relation: String(guest.relation || '').trim(),
-      }))
+      ? guestAttendees.map((guest) => {
+        const attendeeType = normalizeAttendeeType(guest.attendee_type);
+        return {
+          name: guest.name.trim(),
+          email: guest.email.trim(),
+          phone: guest.phone.trim(),
+          attendee_type: attendeeType,
+          relation: String(guest.relation || '').trim(),
+          sex: attendeeType === 'child' ? String(guest.sex || '').trim() : '',
+          age: attendeeType === 'child' ? guest.age : '',
+        };
+      })
       : [],
   });
 
@@ -1280,7 +1287,13 @@ export default function EventRegistrationFlow({
                       <select
                         value={guest.attendee_type || 'adult'}
                         onChange={(e) => setGuestAttendees((prev) => prev.map((row, i) => (
-                          i === index ? { ...row, attendee_type: e.target.value } : row
+                          i === index
+                            ? {
+                              ...row,
+                              attendee_type: e.target.value,
+                              ...(e.target.value === 'adult' ? { relation: '', sex: '', age: '' } : {}),
+                            }
+                            : row
                         )))}
                         className="w-full px-3 py-2.5 rounded-xl border border-navy-200 bg-white text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                       >
@@ -1307,6 +1320,39 @@ export default function EventRegistrationFlow({
                       </div>
                     )}
                   </div>
+                  {normalizeAttendeeType(guest.attendee_type) === 'child' && (
+                    <div className="grid sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs font-medium text-navy-600 mb-1">Sex <span className="text-red-500">*</span></label>
+                        <select
+                          value={guest.sex || ''}
+                          onChange={(e) => setGuestAttendees((prev) => prev.map((row, i) => (
+                            i === index ? { ...row, sex: e.target.value } : row
+                          )))}
+                          className="w-full px-3 py-2.5 rounded-xl border border-navy-200 bg-white text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                        >
+                          <option value="">Select…</option>
+                          <option value="male">Male</option>
+                          <option value="female">Female</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-navy-600 mb-1">Age <span className="text-red-500">*</span></label>
+                        <input
+                          type="number"
+                          min={0}
+                          max={120}
+                          inputMode="numeric"
+                          value={guest.age === 0 || guest.age ? guest.age : ''}
+                          onChange={(e) => setGuestAttendees((prev) => prev.map((row, i) => (
+                            i === index ? { ...row, age: e.target.value } : row
+                          )))}
+                          placeholder="e.g. 10"
+                          className="w-full px-3 py-2.5 rounded-xl border border-navy-200 bg-white text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                        />
+                      </div>
+                    </div>
+                  )}
                   <div>
                     <label className="block text-xs font-medium text-navy-600 mb-1">Full name <span className="text-red-500">*</span></label>
                     <input

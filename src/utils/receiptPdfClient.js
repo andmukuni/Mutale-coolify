@@ -130,14 +130,17 @@ export async function generateReceipt(registration, _user) {
  * @param {{ filename?: string, user?: object }} [opts]
  */
 export async function downloadReceiptFromViewModel(viewModel, registration, opts = {}) {
+  // Prefer server HTML PDF so downloads match email attachments / preview card.
+  try {
+    await downloadReceiptPdf(registration, opts);
+    return;
+  } catch (error) {
+    console.warn('[receipt] Server download failed, using client fallback:', error?.message || error);
+  }
+
   if (viewModel && Object.keys(viewModel).length > 0) {
     return downloadReceiptPreviewPdf(viewModel, registration, opts);
   }
 
-  try {
-    await downloadReceiptPdf(registration, opts);
-  } catch (error) {
-    console.warn('[receipt] Server download failed, using client fallback:', error?.message || error);
-    await downloadReceiptLegacyFallback(registration, opts.user || {}, viewModel);
-  }
+  await downloadReceiptLegacyFallback(registration, opts.user || {}, viewModel);
 }

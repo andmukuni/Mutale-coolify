@@ -79,10 +79,9 @@ if (domainOpt) {
     else origins.add(`${u.protocol}//${host.replace(/^www\./, '')}`);
     raw = setOrReplace(raw, 'APP_URL', origin);
     raw = setOrReplace(raw, 'CORS_ORIGINS', [...origins].join(','));
-    raw = setOrReplace(raw, 'RECEIPT_PDF_LEGACY', '1');
     console.log(`[fix-deployment] APP_URL=${origin}`);
     console.log(`[fix-deployment] CORS_ORIGINS=${[...origins].join(',')}`);
-    console.log('[fix-deployment] RECEIPT_PDF_LEGACY=1 (jsPDF receipts for cPanel)');
+    console.log('[fix-deployment] Tip: on cPanel without Chromium, set RECEIPT_PDF_LEGACY=1 and TICKET_PDF_LEGACY=1');
   } catch {
     console.error('[fix-deployment] Invalid --domain=', domainOpt);
     process.exit(1);

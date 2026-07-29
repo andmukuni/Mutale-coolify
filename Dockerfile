@@ -38,10 +38,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libpixman-1-0 \
       fontconfig \
       fonts-dejavu-core \
+      chromium \
+      ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+# System Chromium for branded ticket/receipt HTML PDFs (Puppeteer skip-download in build).
 ENV NODE_ENV=production \
-    PORT=4000
+    PORT=4000 \
+    PUPPETEER_SKIP_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist

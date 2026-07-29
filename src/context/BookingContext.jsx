@@ -232,14 +232,20 @@ export function BookingProvider({ children }) {
       return { success: false, error: 'Your session has expired. Please sign in again to register.' };
     }
 
-    const guestRows = (Array.isArray(attendees) ? attendees : []).map((row) => ({
-      booked_for_name: String(row.name || row.booked_for_name || '').trim(),
-      booked_for_email: String(row.email || row.booked_for_email || '').trim(),
-      booked_for_phone: String(row.phone || row.booked_for_phone || '').trim(),
-      booked_for_relation: String(row.relation || row.booked_for_relation || '').trim(),
-      attendee_type: String(row.attendee_type || row.attendeeType || 'adult').trim().toLowerCase(),
-      guardian_phone: String(row.guardian_phone || row.guardianPhone || '').trim(),
-    }));
+    const guestRows = (Array.isArray(attendees) ? attendees : []).map((row) => {
+      const attendeeType = String(row.attendee_type || row.attendeeType || 'adult').trim().toLowerCase();
+      const isChild = attendeeType === 'child';
+      return {
+        booked_for_name: String(row.name || row.booked_for_name || '').trim(),
+        booked_for_email: String(row.email || row.booked_for_email || '').trim(),
+        booked_for_phone: String(row.phone || row.booked_for_phone || '').trim(),
+        booked_for_relation: String(row.relation || row.booked_for_relation || '').trim(),
+        attendee_type: attendeeType,
+        guardian_phone: String(row.guardian_phone || row.guardianPhone || '').trim(),
+        attendee_sex: isChild ? String(row.sex || row.attendee_sex || row.gender || '').trim() : '',
+        attendee_age: isChild ? (row.age ?? row.attendee_age ?? '') : '',
+      };
+    });
 
     const ccRaw = String(couponCode ?? '').trim();
     const coupon_code = ccRaw ? ccRaw : undefined;
