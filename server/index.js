@@ -9860,19 +9860,61 @@ app.post('/api/settings/payment/lenco/test', async (_req, res) => {
     const lencoConfig = getLencoConfig(settings);
 
     if (!lencoConfig.secretKey) {
-      return res.status(400).json({ ok: false, message: 'Lenco secret key is missing in settings.' });
+      return res.status(400).json({
+        ok: false,
+        message: 'Lenco secret key is missing. Paste your API secret from Lenco → APIs → API Keys, then Save Configuration.',
+      });
     }
 
-    const response = await lencoRequest({
-      method: 'GET',
-      path: '/accounts',
-      secretKey: lencoConfig.secretKey,
-      baseUrl: lencoConfig.baseUrl,
-    });
+    if (String(lencoConfig.secretKey).startsWith('pk_') || String(lencoConfig.publicKey) === String(lencoConfig.secretKey)) {
+      return res.status(400).json({
+        ok: false,
+        message: 'Secret Key looks like a public key. Put the Lenco secret/API token in Secret Key and the public key in Public Key.',
+      });
+    }
 
-    return res.json({ ok: true, message: 'Lenco credentials are valid.', data: response });
+    let result;
+    try {
+      result = await lencoRequestAny({
+        secretKey: lencoConfig.secretKey,
+        baseUrl: lencoConfig.baseUrl,
+        candidates: [
+          { method: 'GET', path: '/accounts' },
+          { method: 'GET', path: '/banks' },
+        ],
+      });
+    } catch (error) {
+      const details = String(error?.message || 'Unknown Lenco error');
+      const envLabel = lencoConfig.sandboxMode ? 'Sandbox' : 'Production';
+      const hint = /unauthorized|invalid|denied|401|403|09/i.test(details)
+        ? ` Check that this is the ${envLabel} secret key (not public key), and that Sandbox/Test Mode matches the key environment.`
+        : '';
+      return res.status(502).json({
+        ok: false,
+        message: `Lenco ${envLabel} connection failed: ${details}.${hint}`,
+        error: details,
+        data: {
+          sandboxMode: lencoConfig.sandboxMode,
+          baseUrl: lencoConfig.baseUrl,
+        },
+      });
+    }
+
+    return res.json({
+      ok: true,
+      message: `Lenco ${lencoConfig.sandboxMode ? 'sandbox' : 'production'} credentials are valid.`,
+      data: {
+        path: result.path,
+        sandboxMode: lencoConfig.sandboxMode,
+        baseUrl: lencoConfig.baseUrl,
+      },
+    });
   } catch (error) {
-    return res.status(502).json({ ok: false, message: 'Lenco credential test failed', error: error.message });
+    return res.status(502).json({
+      ok: false,
+      message: `Lenco credential test failed: ${error.message || 'unexpected error'}`,
+      error: error.message,
+    });
   }
 });
 

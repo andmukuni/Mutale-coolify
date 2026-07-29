@@ -393,7 +393,8 @@ export default function SettingsPage() {
       const json = await response.json().catch(() => ({}));
 
       if (!response.ok || !json?.ok) {
-        throw new Error(json?.error || json?.message || `Connection test failed (${response.status})`);
+        const detail = [json?.message, json?.error].filter(Boolean).join(' — ');
+        throw new Error(detail || `Connection test failed (${response.status}). Save keys first, then retry.`);
       }
 
       setConnectionStatus({
@@ -736,8 +737,9 @@ export default function SettingsPage() {
                     <p className="font-medium text-navy-900">Card checkout checklist (production)</p>
                     <ul className="list-disc pl-5 space-y-1 text-navy-600">
                       <li>Turn off Sandbox/Test Mode for live card payments.</li>
-                      <li>Use the Lenco <strong>public</strong> key in Public Key (not the secret key).</li>
-                      <li>Public and secret keys must both be from the same environment (production pair or sandbox pair).</li>
+                      <li>Use the Lenco <strong>public</strong> key in Public Key and the <strong>secret/API token</strong> in Secret Key.</li>
+                      <li>Public and secret keys must both be from the same environment (production pair or sandbox pair). A sandbox key with Sandbox off (or the reverse) causes Test Connection 502.</li>
+                      <li>Click <strong>Save Configuration</strong> before Test Connection if you just pasted new keys.</li>
                       <li>Test Connection only validates API access (mobile money). Card uses the public key and must be enabled on your Lenco account.</li>
                       <li>If card shows &ldquo;not authorized&rdquo;, email <a href="mailto:support@lenco.co" className="text-cyan-700 underline">support@lenco.co</a> with the error reference and your site domain.</li>
                     </ul>
