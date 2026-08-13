@@ -449,7 +449,7 @@ function normalizeAttendeeSex(raw = '') {
   return '';
 }
 
-const MAX_CHILD_AGE = 18;
+const MAX_CHILD_AGE = 17;
 
 function normalizeAttendeeAge(raw) {
   if (raw == null || raw === '') return null;

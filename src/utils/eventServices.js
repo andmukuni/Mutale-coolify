@@ -50,7 +50,7 @@ export function allowsMultiAttendeeRegistration(event) {
 const VALID_ATTENDEE_TYPES = new Set(['adult', 'child']);
 const VALID_CHILD_RELATIONS = new Set(['parent', 'guardian', 'teacher', 'other']);
 const VALID_ATTENDEE_SEX = new Set(['male', 'female']);
-export const MAX_CHILD_AGE = 18;
+export const MAX_CHILD_AGE = 17;
 
 export function normalizeAttendeeType(raw = 'adult') {
   const t = String(raw || 'adult').trim().toLowerCase();
