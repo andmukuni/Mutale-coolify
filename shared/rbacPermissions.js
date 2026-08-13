@@ -131,7 +131,10 @@ export function permissionMatches(have = [], need = '') {
   const set = new Set((have || []).map((p) => String(p).trim()));
   if (set.has(RBAC_SUPER_ADMIN_SLUG)) return true;
   if (set.has('*')) return true;
-  return set.has(required);
+  if (set.has(required)) return true;
+  // Settings admins can also manage notification templates.
+  if (required === 'templates.manage' && set.has('settings.manage')) return true;
+  return false;
 }
 
 export function hasAnyPermission(have = [], needs = []) {

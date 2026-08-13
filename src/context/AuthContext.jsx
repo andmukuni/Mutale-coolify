@@ -184,7 +184,7 @@ export function AuthProvider({ children }) {
 
   const hasPermission = useCallback((key) => {
     if (!user) return false;
-    if (user.role === 'admin' && permissions.length === 0) return true;
+    if (String(user.role || '').toLowerCase() === 'admin') return true;
     return permissionMatches(permissions, key);
   }, [user, permissions]);
 

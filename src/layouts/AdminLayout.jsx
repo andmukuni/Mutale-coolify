@@ -291,7 +291,7 @@ const GROUP_ACTIVE_CHECKS = {
 
 export default function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { user, hasPermission } = useAuth();
+  const { user, hasPermission, refreshPermissions } = useAuth();
   const location = useLocation();
 
   const [videoStatus, setVideoStatus] = useState(null);
@@ -299,6 +299,13 @@ export default function AdminLayout() {
   const contentNavigation = filterContentNav(CONTENT_NAVIGATION, hasPermission);
   const systemNavigation = SYSTEM_NAVIGATION.filter((item) => navItemAllowed(item.key, hasPermission));
   const canManageSettings = navItemAllowed('settings', hasPermission);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    void refreshPermissions();
+    // Refresh once per login so newly seeded permissions (e.g. templates) appear.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   useEffect(() => {
     let cancelled = false;
