@@ -1252,7 +1252,7 @@ export default function SettingsPage() {
                   value={systemForm.integrations.openaiApiKey}
                   onChange={(e) => handleSystemChange('integrations', e)}
                   placeholder="sk-..."
-                  helpText="Used by the event creation chatbot on Admin → Events. The saved key stays hidden."
+                  helpText="Used by the event creation chatbot on Admin → Events. The assistant can search the web and follows the same create-event form rules. The saved key stays hidden."
                 />
                 <FormField
                   label="OpenAI Model"
@@ -1260,7 +1260,7 @@ export default function SettingsPage() {
                   value={systemForm.integrations.openaiModel}
                   onChange={(e) => handleSystemChange('integrations', e)}
                   placeholder="gpt-4o-mini"
-                  helpText="Default gpt-4o-mini. The chatbot uses OpenAI web search for event best practice."
+                  helpText="Default gpt-4o-mini. The chatbot uses OpenAI web search plus a fallback web lookup for current best practice."
                 />
               </div>
 

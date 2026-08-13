@@ -15,7 +15,51 @@ function newSessionId() {
   return `evt-chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+const THINKING_LABELS = [
+  'Thinking…',
+  'Searching the web…',
+  'Checking event-form rules…',
+  'Drafting a reply…',
+];
+
+function ThinkingBubble({ creating = false }) {
+  const labels = creating ? ['Creating the draft…'] : THINKING_LABELS;
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    if (labels.length < 2) return undefined;
+    const timer = window.setInterval(() => {
+      setIndex((prev) => (prev + 1) % labels.length);
+    }, 1800);
+    return () => window.clearInterval(timer);
+  }, [labels.length]);
+
+  const label = labels[index] || labels[0];
+
+  return (
+    <div
+      className="max-w-[90%] rounded-2xl bg-navy-50 px-3.5 py-2.5 text-sm text-navy-600"
+      role="status"
+      aria-live="polite"
+      aria-label={label}
+    >
+      <div className="flex items-center gap-2.5">
+        <span className="inline-flex items-center gap-1" aria-hidden="true">
+          <span className="h-1.5 w-1.5 rounded-full bg-cyan-600 animate-bounce [animation-delay:-0.3s]" />
+          <span className="h-1.5 w-1.5 rounded-full bg-cyan-600 animate-bounce [animation-delay:-0.15s]" />
+          <span className="h-1.5 w-1.5 rounded-full bg-cyan-600 animate-bounce" />
+        </span>
+        <span className="animate-pulse">{label}</span>
+      </div>
+    </div>
+  );
+}
+
 function draftRows(draft = {}) {
+  const priceLabel = draft.is_free === true
+    ? 'Free'
+    : (draft.is_free === false && draft.price ? `ZMW ${draft.price}` : '');
+
   return [
     ['Title', draft.title],
     ['Category', draft.category],
@@ -25,7 +69,9 @@ function draftRows(draft = {}) {
     ['Dates', [draft.start_date, draft.end_date].filter(Boolean).join(' → ')],
     ['Time', [draft.start_time, draft.end_time].filter(Boolean).join(' – ')],
     ['Deadline', [draft.registration_deadline, draft.registration_deadline_time].filter(Boolean).join(' ')],
-    ['Price', draft.is_free ? 'Free' : (draft.price ? `ZMW ${draft.price}` : '')],
+    ['Price', priceLabel],
+    ['Capacity', draft.capacity],
+    ['Organizer', draft.organizer_name],
   ].filter(([, value]) => String(value || '').trim());
 }
 
@@ -42,7 +88,7 @@ export default function EventCreateChatPanel({ onClose, onCreated }) {
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: 'Describe the event you want to create. I will look up best practice and ask for the details needed to save it as a draft.',
+      content: 'Tell me about the event in your own words — topic, who it is for, in person or online, and any date you have in mind. I will fill in as much as I can and only ask what is still missing.',
     },
   ]);
 
@@ -51,7 +97,7 @@ export default function EventCreateChatPanel({ onClose, onCreated }) {
   useEffect(() => {
     const node = listRef.current;
     if (node) node.scrollTop = node.scrollHeight;
-  }, [messages, created]);
+  }, [messages, created, sending, creating]);
 
   const applyResult = (data) => {
     if (data?.reply) {
@@ -214,6 +260,10 @@ export default function EventCreateChatPanel({ onClose, onCreated }) {
             </div>
           ))}
 
+          {(sending || creating) && !created && (
+            <ThinkingBubble creating={creating} />
+          )}
+
           {created && (
             <div className="rounded-2xl border border-cyan-100 bg-cyan-50/70 p-4 text-sm text-cyan-950 space-y-3">
               <p className="font-semibold">Draft event created</p>
@@ -272,7 +322,7 @@ export default function EventCreateChatPanel({ onClose, onCreated }) {
                 sendMessage(input);
               }}
               rows={2}
-              placeholder="Type a reply… Enter to send"
+              placeholder="Describe the event, or just say hello… Enter to send"
               className="min-h-[44px] flex-1 resize-none rounded-xl border border-navy-200 bg-navy-50 px-3 py-2 text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500"
             />
             <LoadingButton

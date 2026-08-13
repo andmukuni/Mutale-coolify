@@ -6720,12 +6720,38 @@ function getOpenAIChatConfig(settings = {}) {
 async function loadEventChatExamples() {
   try {
     const [rows] = await pool.query(
-      'SELECT title, category, location, event_mode, is_free, price FROM events ORDER BY created_at DESC LIMIT 5',
+      'SELECT title, category, location, venue, event_mode, is_free, price, start_date, short_description FROM events ORDER BY created_at DESC LIMIT 12',
     );
     return Array.isArray(rows) ? rows : [];
   } catch {
     return [];
   }
+}
+
+async function loadEventChatSiteContext() {
+  const events = await loadEventChatExamples();
+  let profile = {};
+  try {
+    const [[row]] = await pool.query('SELECT data FROM site_profile WHERE id = 1');
+    profile = parseJsonColumn(row?.data, {}) || {};
+  } catch {
+    profile = {};
+  }
+  return {
+    today: new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Africa/Lusaka',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date()),
+    organizer: {
+      name: String(profile.name || 'Mutale Mubanga').trim(),
+      email: String(profile.email || '').trim(),
+      phone: String(profile.phone || '').trim(),
+      location: String(profile.location || 'Lusaka, Zambia').trim(),
+    },
+    events,
+  };
 }
 
 app.post('/api/events/chat', rateLimitEventChat, async (req, res) => {
@@ -6746,13 +6772,14 @@ app.post('/api/events/chat', rateLimitEventChat, async (req, res) => {
 
     const adminId = req.adminUser?.sub || req.adminUser?.email || 'admin';
     const session = getOrCreateChatSession(adminId, sessionId);
-    const exampleEvents = await loadEventChatExamples();
+    const siteContext = await loadEventChatSiteContext();
     const result = await processEventChatTurn({
       session,
       userMessage: message,
       apiKey: openai.apiKey,
       model: openai.model,
-      exampleEvents,
+      exampleEvents: siteContext.events,
+      siteContext,
     });
 
     return res.json({ ok: true, data: result });

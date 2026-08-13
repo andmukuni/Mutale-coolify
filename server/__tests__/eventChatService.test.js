@@ -2,15 +2,24 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   applyDraftDefaults,
   assertDraftReadyToCreate,
+  buildSystemPrompt,
+  callOpenAIEventChat,
   createEmptyDraft,
+  EVENT_CREATE_PLAYBOOK,
+  executeEventChatTool,
+  extractAssistantReply,
+  extractFunctionCalls,
   generateEventSlug,
   isConfirmIntent,
   isDeclineIntent,
+  isPublicHttpUrl,
+  isSmallTalk,
   listMissingEventFields,
   mergeEventDraft,
   parseModelJson,
   processEventChatTurn,
   resetAllChatSessionsForTests,
+  shouldResearchWeb,
 } from '../eventChatService.js';
 
 afterEach(() => {
@@ -35,6 +44,15 @@ describe('event chat draft helpers', () => {
     expect(merged.location).toBe('Lusaka, Zambia');
     expect(merged.start_date).toBe('2026-03-15');
     expect(merged.is_free).toBe(true);
+  });
+
+  it('leaves conversation drafts empty until the admin or model fills them', () => {
+    const empty = createEmptyDraft();
+    expect(empty.category).toBe('');
+    expect(empty.event_mode).toBe('');
+    expect(empty.is_free).toBeNull();
+    expect(empty.timezone).toBe('');
+    expect(empty.meeting_platform).toBe('');
   });
 
   it('lists missing required fields until the draft is complete', () => {
@@ -121,6 +139,21 @@ describe('model JSON parsing', () => {
     expect(parsed.reply).toBe('When is it?');
     expect(parsed.draft.title).toBe('QA Clinic');
   });
+
+  it('uses the model prose when JSON is missing or incomplete', () => {
+    expect(extractAssistantReply('Welcome — tell me about the event.', null)).toBe(
+      'Welcome — tell me about the event.',
+    );
+    expect(extractAssistantReply('```json\n{"draft":{"title":"X"}}\n```', { draft: { title: 'X' } })).toMatch(/tell me about the event/i);
+  });
+});
+
+describe('small talk', () => {
+  it('treats greetings as small talk and richer text as event input', () => {
+    expect(isSmallTalk('hello')).toBe(true);
+    expect(isSmallTalk('Good morning!')).toBe(true);
+    expect(isSmallTalk('hello, ISO workshop in Lusaka next month')).toBe(false);
+  });
 });
 
 describe('processEventChatTurn', () => {
@@ -201,5 +234,177 @@ describe('processEventChatTurn', () => {
     expect(result.draft.title).toBe('ISO 15189 Workshop');
     expect(result.draft.slug).toBe('iso-15189-workshop');
     expect(result.missing).toContain('start_date');
+    expect(result.draft.category).toBe('Workshop');
+    expect(result.draft.event_mode).toBe('');
+    expect(result.draft.is_free).toBeNull();
+  });
+
+  it('does not invent draft fields from a greeting', async () => {
+    const session = {
+      messages: [],
+      draft: createEmptyDraft(),
+      awaitingConfirm: false,
+      confirmed: false,
+    };
+
+    const result = await processEventChatTurn({
+      session,
+      userMessage: 'hello',
+      apiKey: 'test',
+      openaiCall: async () => JSON.stringify({
+        reply: 'Hello — what event are you planning?',
+        draft: {
+          category: 'Workshop',
+          event_mode: 'virtual',
+          is_free: true,
+        },
+      }),
+    });
+
+    expect(result.reply).toBe('Hello — what event are you planning?');
+    expect(result.draft.category).toBe('');
+    expect(result.draft.event_mode).toBe('');
+    expect(result.draft.is_free).toBeNull();
+    expect(result.readyToCreate).toBe(false);
+  });
+
+  it('keeps a conversational reply when the model returns prose instead of JSON', async () => {
+    const session = {
+      messages: [],
+      draft: createEmptyDraft(),
+      awaitingConfirm: false,
+      confirmed: false,
+    };
+
+    const result = await processEventChatTurn({
+      session,
+      userMessage: 'hello',
+      apiKey: 'test',
+      openaiCall: async () => 'Hi! Tell me about the event you have in mind.',
+    });
+
+    expect(result.reply).toBe('Hi! Tell me about the event you have in mind.');
+    expect(result.draft.category).toBe('');
+    expect(result.draft.is_free).toBeNull();
+  });
+
+  it('asks the model to research when the admin describes an event', async () => {
+    const session = {
+      messages: [],
+      draft: createEmptyDraft(),
+      awaitingConfirm: false,
+      confirmed: false,
+    };
+    let received;
+
+    await processEventChatTurn({
+      session,
+      userMessage: 'ISO 15189 workshop in Lusaka next month',
+      apiKey: 'test',
+      siteContext: {
+        today: '2026-08-13',
+        organizer: { name: 'Mutale Mubanga', location: 'Lusaka, Zambia' },
+        events: [{ title: 'QA Clinic', category: 'Workshop', location: 'Lusaka', event_mode: 'in_person' }],
+      },
+      openaiCall: async (payload) => {
+        received = payload;
+        return JSON.stringify({
+          reply: 'A one-day ISO 15189 readiness workshop is typical.',
+          draft: { title: 'ISO 15189 Readiness Workshop', location: 'Lusaka, Zambia' },
+        });
+      },
+    });
+
+    expect(received.forceWebSearch).toBe(true);
+    expect(received.messages[0].content).toMatch(/live research/i);
+    expect(received.messages[0].content).toMatch(/ISO 15189/);
+    expect(received.siteContext.organizer.name).toBe('Mutale Mubanga');
+  });
+});
+
+describe('event chat research tools', () => {
+  it('researches event descriptions but not greetings', () => {
+    expect(shouldResearchWeb('hello')).toBe(false);
+    expect(shouldResearchWeb('ISO 15189 workshop in Lusaka')).toBe(true);
+  });
+
+  it('embeds the create-event playbook in the system prompt', () => {
+    const prompt = buildSystemPrompt({
+      draft: createEmptyDraft(),
+      missing: ['title'],
+      research: true,
+      siteContext: { today: '2026-08-13', organizer: { name: 'Mutale Mubanga' } },
+    });
+    expect(prompt).toContain(EVENT_CREATE_PLAYBOOK.slice(0, 40));
+    expect(prompt).toMatch(/web_search|search_web/);
+    expect(prompt).toMatch(/2026-08-13/);
+  });
+
+  it('blocks private browse URLs and serves form rules from the codebase', async () => {
+    expect(isPublicHttpUrl('http://localhost/admin')).toBe(false);
+    expect(isPublicHttpUrl('https://iso.org/standard/76677.html')).toBe(true);
+    await expect(executeEventChatTool('get_event_create_rules')).resolves.toMatch(/registration_deadline/);
+    await expect(executeEventChatTool('browse_url', { url: 'http://127.0.0.1/secret' })).resolves.toMatch(/not a public/i);
+  });
+
+  it('extracts function calls from a Responses payload', () => {
+    const calls = extractFunctionCalls({
+      output: [{
+        type: 'function_call',
+        name: 'search_web',
+        call_id: 'call_1',
+        arguments: '{"query":"ISO 15189 workshop agenda"}',
+      }],
+    });
+    expect(calls).toEqual([{
+      name: 'search_web',
+      call_id: 'call_1',
+      arguments: { query: 'ISO 15189 workshop agenda' },
+    }]);
+  });
+
+  it('runs a function tool then returns the model reply', async () => {
+    let round = 0;
+    const fetchImpl = async (url, options = {}) => {
+      if (!String(url).includes('/responses')) {
+        throw new Error(`unexpected url ${url}`);
+      }
+      round += 1;
+      if (round === 1) {
+        return {
+          ok: true,
+          json: async () => ({
+            id: 'resp_1',
+            output: [{
+              type: 'function_call',
+              name: 'get_event_create_rules',
+              call_id: 'call_1',
+              arguments: '{}',
+            }],
+          }),
+        };
+      }
+      const body = JSON.parse(options.body || '{}');
+      expect(body.previous_response_id).toBe('resp_1');
+      expect(body.input[0].output).toMatch(/ISO 15189/);
+      return {
+        ok: true,
+        json: async () => ({
+          output_text: '{"reply":"I checked the form rules.","draft":{"title":"ISO Workshop"}}',
+        }),
+      };
+    };
+
+    const text = await callOpenAIEventChat({
+      apiKey: 'sk-test',
+      messages: [
+        { role: 'system', content: 'sys' },
+        { role: 'user', content: 'ISO workshop' },
+      ],
+      fetchImpl,
+    });
+
+    expect(text).toContain('I checked the form rules.');
+    expect(round).toBe(2);
   });
 });
