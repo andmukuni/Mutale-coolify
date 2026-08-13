@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ExternalLink, Loader2, Video } from 'lucide-react';
 import DailyIframe from '@daily-co/daily-js';
 import { useData } from '../context/DataContext';
@@ -21,10 +21,13 @@ function resolveEventVideoProvider(event = {}) {
 
 export default function EventJoinPage() {
   const { slug } = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { events } = useData();
   const { currentUser, isUserAuthenticated } = useUserAuth();
   const { isUserRegistered } = useBooking();
+  const autoJoin = searchParams.get('autoJoin') === '1';
+  const autoJoinStarted = useRef(false);
 
   const event = useMemo(() => events.find((item) => item.slug === slug), [events, slug]);
   const [loading, setLoading] = useState(false);
@@ -86,6 +89,12 @@ export default function EventJoinPage() {
       if (dailyFrameRef.current === frame) dailyFrameRef.current = null;
     };
   }, [joinSession]);
+
+  useEffect(() => {
+    if (!autoJoin || autoJoinStarted.current || !event || !isUserAuthenticated || joinSession) return;
+    autoJoinStarted.current = true;
+    void handleJoin();
+  }, [autoJoin, event, isUserAuthenticated, joinSession]);
 
   if (!event) {
     return (
@@ -206,7 +215,7 @@ export default function EventJoinPage() {
           </div>
         )}
 
-        {isUserAuthenticated && !isRegistered && (
+        {isUserAuthenticated && !isRegistered && !autoJoin && !loading && (
           <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
             You are not registered for this event yet. Please register first from the event page.
           </div>

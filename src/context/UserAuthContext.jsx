@@ -228,10 +228,11 @@ export function UserAuthProvider({ children }) {
     };
   }, [currentUser, idleTimerRef, recordUserActivity, resetIdleTimer]);
 
-  const applySessionUser = useCallback((user) => {
-    const session = saveSessionWithToken(user);
+  const applySessionUser = useCallback((user, token) => {
+    const session = saveSessionWithToken(user, token);
     if (!session) return null;
     setCurrentUser(session);
+    dispatchUserSessionSync(session);
     return session;
   }, []);
 

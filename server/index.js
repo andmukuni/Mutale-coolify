@@ -16,14 +16,20 @@ import {
 } from './certificateService.js';
 import { processEventLifecycleNotifications } from './eventLifecycleNotifications.js';
 import {
+  buildSiteChatUi,
   cvDraftHasContent,
   cvDraftToProfileUpdates,
   exportSiteChatSession,
   getOrCreateSiteChatSession,
   importSiteChatSession,
+  listMissingSignupFields,
   mergeCvDraft,
+  mergeEventIntent,
+  mergeSignupDraft,
   processSiteChatTurn,
   resetSiteChatSession,
+  sanitizePendingAction,
+  siteChatTurnResult,
 } from './siteChatService.js';
 import {
   getTemplateForEvent,
@@ -7112,28 +7118,35 @@ app.post('/api/events/chat/create', rateLimitEventChat, async (req, res) => {
 async function loadSiteChatEvents() {
   try {
     const [rows] = await pool.query(
-      `SELECT title, slug, category, location, venue, event_mode, is_free, price,
-              start_date, end_date, start_time, short_description, status, visibility
+      `SELECT id, title, slug, category, location, venue, event_mode, is_free, price,
+              start_date, end_date, start_time, end_time, timezone, short_description, status, visibility
        FROM events
        ORDER BY start_date ASC`,
     );
     return (Array.isArray(rows) ? rows : [])
       .filter((row) => isEventPubliclyVisible(row))
       .slice(0, 24)
-      .map((row) => ({
-        title: row.title,
-        slug: row.slug,
-        category: row.category || '',
-        location: row.location || '',
-        venue: row.venue || '',
-        event_mode: row.event_mode || '',
-        is_free: Boolean(row.is_free),
-        price: row.price,
-        start_date: row.start_date,
-        end_date: row.end_date,
-        start_time: row.start_time,
-        short_description: String(row.short_description || '').slice(0, 280),
-      }));
+      .map((row) => {
+        const joinWindow = getJoinWindowForEvent(row);
+        return {
+          id: row.id,
+          title: row.title,
+          slug: row.slug,
+          category: row.category || '',
+          location: row.location || '',
+          venue: row.venue || '',
+          event_mode: row.event_mode || '',
+          is_free: Boolean(row.is_free),
+          price: row.price,
+          start_date: row.start_date,
+          end_date: row.end_date,
+          start_time: row.start_time,
+          timezone: row.timezone || 'Africa/Lusaka',
+          short_description: String(row.short_description || '').slice(0, 280),
+          joinWindow,
+          live: Boolean(joinWindow?.allowed),
+        };
+      });
   } catch {
     return [];
   }
@@ -7168,7 +7181,7 @@ async function loadSiteChatUserContext(userId) {
     const [[user]] = await pool.query('SELECT * FROM users WHERE id = ? LIMIT 1', [id]);
     if (!user) return null;
     const [regs] = await pool.query(
-      `SELECT reference_code, status, payment_status, registered_at, event_title, event_slug
+      `SELECT event_id, reference_code, status, payment_status, registered_at, event_title, event_slug
        FROM event_registrations
        WHERE user_id = ? AND status <> 'cancelled'
        ORDER BY registered_at DESC
@@ -7179,6 +7192,7 @@ async function loadSiteChatUserContext(userId) {
     return {
       name: user.name || '',
       email: user.email || '',
+      email_verified: Boolean(user.email_verified),
       profession: user.profession || '',
       organization: user.organization || '',
       about: String(user.about || '').slice(0, 600),
@@ -7192,6 +7206,7 @@ async function loadSiteChatUserContext(userId) {
       cv_unlocked: Boolean(user.cv_unlocked_at),
       cv_sections: parseCvSectionsFromDb(user.cv_sections),
       registrations: (Array.isArray(regs) ? regs : []).map((row) => ({
+        event_id: row.event_id || '',
         event: row.event_title || '',
         slug: row.event_slug || '',
         ticket: row.reference_code || '',
@@ -7248,6 +7263,627 @@ function resolveSiteChatVisitor(req) {
   return { signedIn: false, visitorId: 'guest', userId: '' };
 }
 
+function generateEmailVerifyCode() {
+  return String(crypto.randomInt(100000, 1000000));
+}
+
+async function siteChatEmailExists(email) {
+  const normalized = String(email || '').trim().toLowerCase();
+  if (!normalized) return false;
+  const [[row]] = await pool.query('SELECT id FROM users WHERE email = ? LIMIT 1', [normalized]);
+  return Boolean(row);
+}
+
+async function issueSiteChatAuth(user, req) {
+  const adminPermissions = await loadUserAdminPermissions(pool, user.id, { legacyRole: user.role });
+  const canAccessAdmin = userCanAccessAdmin(user.role, adminPermissions);
+  const sessionUser = {
+    ...mapAuthSessionUser(user, req),
+    admin_permissions: canAccessAdmin ? adminPermissions : [],
+    admin_access: canAccessAdmin,
+  };
+  const iat = Math.floor(Date.now() / 1000);
+  const exp = iat + 7 * 24 * 60 * 60;
+  const tokenPayload = { sub: user.id, role: user.role || 'user', iat, exp };
+  if (canAccessAdmin) {
+    tokenPayload.admin = true;
+    tokenPayload.permissions = adminPermissions;
+  }
+  return { user: sessionUser, token: signJwtHmacSha256(tokenPayload, AUTH_TOKEN_SECRET) };
+}
+
+async function sendSiteChatVerifyCode({ user, code, req }) {
+  const settings = await getSystemSettings();
+  const displayName = String(user.name || '').trim() || 'there';
+  const email = String(user.email || '').trim().toLowerCase();
+  await sendEmailNotification({
+    settings,
+    to: email,
+    subject: 'Your Mutale confirmation code',
+    text: `Hi ${displayName},\n\nYour confirmation code is ${code}. It expires in 24 hours.\n\nIf you did not create an account, ignore this message.\n\nBest regards,\nMutale Mubanga`,
+    html: buildBrandedEmailHtml({
+      title: 'Your confirmation code',
+      previewText: `Your confirmation code is ${code}.`,
+      greeting: `Hi ${displayName},`,
+      bodyLines: [
+        `Your confirmation code is ${code}.`,
+        'Enter this code in the Ask Mutale chat to finish creating your account.',
+        'This code expires in 24 hours.',
+      ],
+      footerLines: ['Best regards,', 'Mutale Mubanga'],
+    }),
+    smsTo: String(user.phone || user.whatsapp || '').trim(),
+    smsMessage: `Hi ${displayName}, your Mutale confirmation code is ${code} (expires in 24 hours)`,
+    kind: 'auth',
+    templateSlug: 'verify_email',
+    templateVars: {
+      ...buildPersonTemplateVars(displayName),
+      verify_url: `${resolvePublicAppUrl(req)}/verify-email?token=${code}`,
+    },
+  });
+}
+
+async function storeSiteChatVerifyCode(userId, code) {
+  const tokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  await pool.query(
+    'UPDATE users SET verification_token = ?, verification_token_expires = ? WHERE id = ?',
+    [sha256Hex(code), tokenExpires, userId],
+  );
+}
+
+async function loadSiteChatEventRecord(session, extras = {}) {
+  const slug = String(extras.eventSlug || session.pendingAction?.eventSlug || session.eventIntent?.slug || '').trim();
+  const id = String(extras.eventId || session.pendingAction?.eventId || session.eventIntent?.id || '').trim();
+  if (id) {
+    const [[row]] = await pool.query('SELECT * FROM events WHERE id = ? LIMIT 1', [id]);
+    if (row) return row;
+  }
+  if (slug) {
+    const [[row]] = await pool.query('SELECT * FROM events WHERE slug = ? LIMIT 1', [slug]);
+    if (row) return row;
+  }
+  return null;
+}
+
+function nextActionAfterAccess(session, event, registration) {
+  const joinWindow = event ? getJoinWindowForEvent(event) : { allowed: false };
+  const paid = !registration || ['paid', 'not_required', 'waived'].includes(String(registration.payment_status || '').toLowerCase());
+  if (registration && paid && joinWindow.allowed) {
+    return sanitizePendingAction({
+      type: 'join',
+      eventSlug: event.slug,
+      eventId: event.id,
+      eventTitle: event.title,
+    });
+  }
+  if (registration && !paid) {
+    return sanitizePendingAction({
+      type: 'start_payment',
+      eventSlug: event.slug,
+      eventId: event.id,
+      eventTitle: event.title,
+      amount: toNumber(event.price, 0),
+      currency: 'ZMW',
+    });
+  }
+  if (event && !registration) {
+    return sanitizePendingAction({
+      type: 'register',
+      eventSlug: event.slug,
+      eventId: event.id,
+      eventTitle: event.title,
+    });
+  }
+  return null;
+}
+
+async function createSiteChatSelfRegistration(req, authUser, event, extras = {}) {
+  const payload = normalizeRegistrationPayload({
+    event_id: event.id,
+    user_id: authUser.id,
+    user_name: authUser.name,
+    user_email: authUser.email,
+    registration_type: 'subscription',
+    payment_reference: extras.payment_reference || '',
+    payment_method: extras.payment_method || '',
+  });
+
+  const gateReason = getEventRegistrationGateReason(event);
+  if (gateReason) throw Object.assign(new Error(gateReason), { status: 400 });
+
+  const [[existingActive]] = await pool.query(
+    'SELECT * FROM event_registrations WHERE event_id = ? AND user_id = ? AND registration_type = ? AND attendee_slot_key = ? AND status <> ? LIMIT 1',
+    [payload.event_id, payload.user_id, payload.registration_type, payload.attendee_slot_key, 'cancelled'],
+  );
+  if (existingActive) {
+    if (extras.payment_reference) {
+      await pool.query(
+        'UPDATE event_registrations SET payment_reference = ?, payment_method = ? WHERE id = ?',
+        [extras.payment_reference, extras.payment_method || existingActive.payment_method || '', existingActive.id],
+      );
+      const [[row]] = await pool.query('SELECT * FROM event_registrations WHERE id = ?', [existingActive.id]);
+      return mapDbRegistration(row);
+    }
+    return mapDbRegistration(existingActive);
+  }
+
+  const pricing = await resolveEventBookingPricing(pool, event, '', payload.user_id, 1, { lockRow: false });
+  if (!pricing.ok) throw Object.assign(new Error(pricing.error || 'Unable to price this event.'), { status: 400 });
+
+  const merged = normalizeRegistrationPayload({
+    ...payload,
+    event_title: event.title,
+    event_slug: event.slug,
+    event_price: event.price,
+    is_free_event: parseBoolean(event.is_free, false),
+    currency: 'ZMW',
+    amount: pricing.final_zmw,
+    amount_zmw: pricing.final_zmw,
+    list_price_zmw: pricing.list_zmw,
+    discount_zmw: pricing.coupon_discount_zmw,
+    volume_discount_zmw: pricing.volume_discount_zmw,
+  }, payload.id);
+
+  const enriched = await applyTrustedRegistrationPaymentState(merged, event);
+  await insertEventRegistrationRow(pool, enriched);
+  const [[row]] = await pool.query('SELECT * FROM event_registrations WHERE id = ?', [enriched.id]);
+  const mapped = mapDbRegistration(row);
+  try {
+    const settings = await getSystemSettings();
+    await sendTicketEmailsForRegistration({
+      registration: mapped,
+      event,
+      settings,
+      sendEmailNotification,
+      appRoot: __appRoot,
+      appOrigin: resolvePublicAppUrl(req),
+      pool,
+    });
+  } catch (error) {
+    console.warn('[site-chat] ticket email failed:', error.message);
+  }
+  return mapped;
+}
+
+async function executeSiteChatPendingAction({
+  req,
+  session,
+  extras = {},
+} = {}) {
+  const action = sanitizePendingAction(extras.action || session.pendingAction);
+  if (!action) {
+    return { reply: 'There is nothing to confirm right now. How can I help?', ui: null };
+  }
+
+  if (extras.signupDraft) session.signupDraft = mergeSignupDraft(session.signupDraft, extras.signupDraft);
+  if (extras.eventIntent) session.eventIntent = mergeEventIntent(session.eventIntent, extras.eventIntent);
+  if (extras.phone) action.phone = String(extras.phone).trim();
+  if (extras.method) action.method = String(extras.method).trim();
+  if (extras.paymentReference) action.paymentReference = String(extras.paymentReference).trim();
+
+  const respond = (reply, extra = {}) => {
+    if (reply) session.messages.push({ role: 'assistant', content: reply });
+    session.pendingAction = extra.pendingAction !== undefined ? extra.pendingAction : session.pendingAction;
+    return {
+      ...siteChatTurnResult(session, { reply, ui: extra.ui !== undefined ? extra.ui : buildSiteChatUi(session) }),
+      user: extra.user || null,
+      token: extra.token || '',
+      paymentSession: extra.paymentSession || null,
+      joinPath: extra.joinPath || '',
+      registration: extra.registration || null,
+    };
+  };
+
+  if (action.type === 'signup') {
+    const missing = listMissingSignupFields(session.signupDraft);
+    if (missing.length) {
+      return respond(`I still need your ${missing[0].replace(/_/g, ' ')} before I can create the account.`);
+    }
+    const draft = session.signupDraft;
+    if (await siteChatEmailExists(draft.email)) {
+      session.pendingAction = sanitizePendingAction({
+        type: 'login',
+        email: draft.email,
+        eventSlug: action.eventSlug,
+        eventId: action.eventId,
+        eventTitle: action.eventTitle,
+      });
+      return respond('That email already has an account. What is your password so I can sign you in?');
+    }
+
+    const userId = generateEntityId('user');
+    const code = generateEmailVerifyCode();
+    await pool.query(
+      `INSERT INTO users (id, name, email, phone, whatsapp, user_type, nrc_id, password_hash, email_verified, verification_token, verification_token_expires)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+      [
+        userId,
+        draft.name,
+        draft.email,
+        draft.whatsapp,
+        draft.whatsapp,
+        draft.user_type === 'international' ? 'international' : 'local',
+        draft.nrc_id || '',
+        hashPassword(draft.password),
+        sha256Hex(code),
+        new Date(Date.now() + 24 * 60 * 60 * 1000),
+      ],
+    );
+    session.signupDraft.password = '';
+    const [[user]] = await pool.query('SELECT * FROM users WHERE id = ? LIMIT 1', [userId]);
+    try {
+      await sendSiteChatVerifyCode({ user, code, req });
+    } catch (error) {
+      console.warn('[site-chat/signup] verify code failed:', error.message);
+    }
+    session.pendingAction = sanitizePendingAction({
+      type: 'verify_email',
+      email: draft.email,
+      eventSlug: action.eventSlug,
+      eventId: action.eventId,
+      eventTitle: action.eventTitle,
+    });
+    return respond('Account created. I sent a 6-digit code to your email and phone. Enter it here to continue.');
+  }
+
+  if (action.type === 'login') {
+    const email = String(extras.email || session.signupDraft?.email || action.email || '').trim().toLowerCase();
+    const password = String(extras.password || session.signupDraft?.password || '');
+    if (!email || !password) {
+      return respond('I need your email and password to sign you in.');
+    }
+    const [[user]] = await pool.query('SELECT * FROM users WHERE email = ? LIMIT 1', [email]);
+    const verification = user ? verifyPassword(password, user.password_hash) : { valid: false };
+    session.signupDraft.password = '';
+    if (!user || !verification.valid) {
+      return respond('That email or password did not match. Try again, or I can help you reset it.');
+    }
+    if (!user.email_verified) {
+      const code = generateEmailVerifyCode();
+      await storeSiteChatVerifyCode(user.id, code);
+      try {
+        await sendSiteChatVerifyCode({ user, code, req });
+      } catch (error) {
+        console.warn('[site-chat/login] verify code failed:', error.message);
+      }
+      session.pendingAction = sanitizePendingAction({
+        type: 'verify_email',
+        email,
+        eventSlug: action.eventSlug,
+        eventId: action.eventId,
+        eventTitle: action.eventTitle,
+      });
+      return respond('Please verify your email first. I sent a 6-digit code — enter it here.');
+    }
+    const auth = await issueSiteChatAuth(user, req);
+    const event = await loadSiteChatEventRecord(session, action);
+    let registration = null;
+    if (event) {
+      const [[row]] = await pool.query(
+        'SELECT * FROM event_registrations WHERE event_id = ? AND user_id = ? AND attendee_slot_key = ? AND status <> ? LIMIT 1',
+        [event.id, user.id, '__self__', 'cancelled'],
+      );
+      registration = row ? mapDbRegistration(row) : null;
+    }
+    session.pendingAction = nextActionAfterAccess(session, event, registration);
+    const next = session.pendingAction;
+    const followUp = next?.type === 'register'
+      ? ` Would you like me to register you for ${event.title} now?`
+      : next?.type === 'join'
+        ? ` You’re already registered for ${event.title}. Shall I take you into the session now?`
+        : next?.type === 'start_payment'
+          ? ` You’re registered for ${event.title}, but payment is still pending. Shall I take payment now?`
+          : '';
+    return respond(`You’re signed in, ${user.name || 'there'}.${followUp}`, {
+      user: auth.user,
+      token: auth.token,
+    });
+  }
+
+  if (action.type === 'verify_email') {
+    const code = String(extras.verifyCode || extras.code || '').trim();
+    if (!/^\d{6}$/.test(code)) {
+      return respond('Please enter the 6-digit code I sent you.');
+    }
+    const email = String(session.signupDraft?.email || action.email || '').trim().toLowerCase();
+    const tokenHash = sha256Hex(code);
+    let [[user]] = await pool.query(
+      'SELECT * FROM users WHERE verification_token = ? LIMIT 1',
+      [tokenHash],
+    );
+    if (!user && email) {
+      [[user]] = await pool.query('SELECT * FROM users WHERE email = ? LIMIT 1', [email]);
+      if (user && String(user.verification_token || '') !== tokenHash) user = null;
+    }
+    if (!user) return respond('That code is not valid. Ask me to send a new one.');
+    const expires = user.verification_token_expires ? new Date(user.verification_token_expires) : null;
+    if (expires && Date.now() > expires.getTime()) {
+      return respond('That code has expired. Ask me to send a new one.');
+    }
+    await pool.query(
+      'UPDATE users SET email_verified = 1, verification_token = NULL, verification_token_expires = NULL WHERE id = ?',
+      [user.id],
+    );
+    const [[fresh]] = await pool.query('SELECT * FROM users WHERE id = ? LIMIT 1', [user.id]);
+    const auth = await issueSiteChatAuth(fresh, req);
+    const event = await loadSiteChatEventRecord(session, action);
+    session.pendingAction = event
+      ? sanitizePendingAction({
+        type: 'register',
+        eventSlug: event.slug,
+        eventId: event.id,
+        eventTitle: event.title,
+      })
+      : null;
+    const followUp = event ? ` Would you like me to register you for ${event.title} now?` : '';
+    return respond(`Your email is confirmed and you are signed in.${followUp}`, {
+      user: auth.user,
+      token: auth.token,
+    });
+  }
+
+  const auth = getJwtAuth(req);
+  if (!auth.ok) {
+    session.pendingAction = sanitizePendingAction({
+      type: 'signup',
+      eventSlug: action.eventSlug,
+      eventId: action.eventId,
+      eventTitle: action.eventTitle,
+    });
+    return respond('I need you signed in first. Are you new here, or do you already have an account?');
+  }
+  const authUser = await getUserByClaims(auth.claims);
+  if (!authUser) return respond('I could not find your account. Please try signing in again.');
+  if (!authUser.email_verified && action.type !== 'verify_email') {
+    session.pendingAction = sanitizePendingAction({ type: 'verify_email', email: authUser.email });
+    return respond('Please verify your email first. I can send a 6-digit code.');
+  }
+
+  if (action.type === 'register') {
+    const event = await loadSiteChatEventRecord(session, action);
+    if (!event) return respond('I could not find that event. Which event should I register you for?');
+    const registration = await createSiteChatSelfRegistration(req, authUser, event);
+    session.eventIntent = mergeEventIntent(session.eventIntent, { slug: event.slug, id: event.id, title: event.title });
+    const paid = ['paid', 'not_required', 'waived'].includes(String(registration.payment_status || '').toLowerCase());
+    if (!paid) {
+      session.pendingAction = sanitizePendingAction({
+        type: 'start_payment',
+        eventSlug: event.slug,
+        eventId: event.id,
+        eventTitle: event.title,
+        amount: toNumber(registration.amount_zmw ?? event.price, 0),
+        currency: 'ZMW',
+        registrationId: registration.id,
+      });
+      return respond(`You’re registered for ${event.title}, but payment of ZMW ${session.pendingAction.amount} is still needed. Pay by mobile money or card?`, {
+        registration,
+      });
+    }
+    const joinWindow = getJoinWindowForEvent(event);
+    if (joinWindow.allowed) {
+      session.pendingAction = sanitizePendingAction({
+        type: 'join',
+        eventSlug: event.slug,
+        eventId: event.id,
+        eventTitle: event.title,
+      });
+      return respond(`You’re registered for ${event.title}. Shall I take you into the session now?`, { registration });
+    }
+    session.pendingAction = null;
+    return respond(
+      joinWindow.reason
+        ? `You’re registered for ${event.title}. ${joinWindow.reason}`
+        : `You’re registered for ${event.title}. I’ll help you join when the session opens.`,
+      { registration },
+    );
+  }
+
+  if (action.type === 'start_payment') {
+    const event = await loadSiteChatEventRecord(session, action);
+    if (!event) return respond('I could not find that event to take payment.');
+    const method = String(extras.method || action.method || '').trim().toLowerCase();
+    const pricing = await resolveEventBookingPricing(pool, event, '', authUser.id, 1, { lockRow: false });
+    if (!pricing.ok) return respond(pricing.error || 'I could not price this event.');
+    const amount = pricing.total_final_zmw;
+    if (amount <= 0) {
+      const registration = await createSiteChatSelfRegistration(req, authUser, event);
+      session.pendingAction = sanitizePendingAction({
+        type: 'join',
+        eventSlug: event.slug,
+        eventId: event.id,
+        eventTitle: event.title,
+      });
+      return respond(`No payment is due. You’re registered for ${event.title}. Shall I take you in now?`, { registration });
+    }
+
+    if (method === 'card') {
+      const settings = await getSystemSettings();
+      const lencoConfig = getLencoConfig(settings);
+      if (lencoConfig.provider !== 'lenco' || !lencoConfig.publicKey) {
+        return respond('Card payments are not configured yet. We can use mobile money instead.');
+      }
+      const reference = generatePaymentReference('CARD-EVT');
+      await upsertPaymentCollection({
+        reference,
+        event_id: event.id,
+        event_title: event.title,
+        customer_name: authUser.name,
+        customer_email: authUser.email,
+        customer_phone: normalizePhone(authUser.phone || authUser.whatsapp || ''),
+        amount,
+        currency: 'ZMW',
+        status: 'pending',
+        channel: 'card',
+        provider: 'lenco',
+        provider_response: { source: 'site-chat' },
+      });
+      session.pendingAction = sanitizePendingAction({
+        type: 'await_payment',
+        eventSlug: event.slug,
+        eventId: event.id,
+        eventTitle: event.title,
+        amount,
+        currency: 'ZMW',
+        method: 'card',
+        paymentReference: reference,
+        registrationId: action.registrationId,
+      });
+      return respond(`I’m opening the card checkout for ${event.title} (ZMW ${amount}). Complete payment in the window that appears.`, {
+        paymentSession: {
+          provider: 'lenco',
+          channel: 'card',
+          reference,
+          amount,
+          currency: 'ZMW',
+          publicKey: lencoConfig.publicKey,
+          widgetUrl: lencoConfig.widgetUrl,
+          customer: {
+            email: authUser.email,
+            name: authUser.name,
+            phone: authUser.phone || authUser.whatsapp || '',
+          },
+        },
+      });
+    }
+
+    const phone = String(extras.phone || action.phone || authUser.phone || authUser.whatsapp || '').trim();
+    if (!phone) {
+      session.pendingAction = sanitizePendingAction({
+        ...action,
+        type: 'start_payment',
+        amount,
+        eventSlug: event.slug,
+        eventId: event.id,
+        eventTitle: event.title,
+      });
+      return respond(`To pay ZMW ${amount} by mobile money for ${event.title}, what phone number should I send the prompt to?`);
+    }
+
+    const settings = await getSystemSettings();
+    const lencoConfig = getLencoConfig(settings);
+    if (lencoConfig.provider !== 'lenco' || !lencoConfig.secretKey) {
+      return respond('Mobile money payments are not configured yet.');
+    }
+    const reference = generatePaymentReference('MM-EVT');
+    const normalizedPhone = normalizePhone(phone);
+    const operator = detectMobileOperator(phone);
+    const payload = {
+      amount,
+      phone: normalizedPhone,
+      reference,
+      currency: 'ZMW',
+      metadata: {
+        eventId: event.id,
+        eventTitle: event.title,
+        customerEmail: authUser.email,
+        customerName: authUser.name,
+      },
+    };
+    if (operator) payload.operator = operator;
+    const result = await lencoRequest({
+      method: 'POST',
+      path: '/collections/mobile-money',
+      secretKey: lencoConfig.secretKey,
+      baseUrl: lencoConfig.baseUrl,
+      body: payload,
+    });
+    await upsertPaymentCollection({
+      reference,
+      event_id: event.id,
+      event_title: event.title,
+      customer_name: authUser.name,
+      customer_email: authUser.email,
+      customer_phone: normalizedPhone,
+      amount,
+      currency: 'ZMW',
+      status: normalizeCollectionStatus(result?.status || result?.data?.status || 'pending'),
+      channel: 'mobile_money',
+      provider: 'lenco',
+      provider_response: result,
+    });
+    const registration = await createSiteChatSelfRegistration(req, authUser, event, {
+      payment_reference: reference,
+      payment_method: 'mobile_money',
+    });
+    session.pendingAction = sanitizePendingAction({
+      type: 'await_payment',
+      eventSlug: event.slug,
+      eventId: event.id,
+      eventTitle: event.title,
+      amount,
+      currency: 'ZMW',
+      method: 'mobile_money',
+      paymentReference: reference,
+      registrationId: registration.id,
+    });
+    return respond(`I sent a mobile money prompt to ${phone} for ZMW ${amount}. Approve it on your phone, then I’ll confirm the payment.`, {
+      registration,
+      paymentSession: { reference, channel: 'mobile_money', amount, currency: 'ZMW' },
+    });
+  }
+
+  if (action.type === 'await_payment' || action.type === 'confirm_payment') {
+    const reference = String(extras.paymentReference || action.paymentReference || '').trim();
+    if (!reference) return respond('I do not have a payment reference yet. Shall I start payment again?');
+    const settings = await getSystemSettings();
+    const lencoConfig = getLencoConfig(settings);
+    const { result } = await verifyLencoCollectionFromApi(reference, lencoConfig);
+    const status = normalizeCollectionStatus(result?.status || result?.data?.status || '');
+    if (status !== 'successful') {
+      session.pendingAction = sanitizePendingAction({ ...action, type: 'await_payment', paymentReference: reference });
+      return respond(status === 'failed'
+        ? 'Payment failed. Would you like me to try again with mobile money or card?'
+        : 'Payment is still pending. Approve the prompt on your phone, then tell me when you have paid.');
+    }
+    const event = await loadSiteChatEventRecord(session, action);
+    let registration = null;
+    if (action.registrationId) {
+      const [[existing]] = await pool.query('SELECT * FROM event_registrations WHERE id = ? LIMIT 1', [action.registrationId]);
+      if (existing) {
+        await pool.query(
+          'UPDATE event_registrations SET payment_status = ?, status = ?, payment_reference = ? WHERE id = ?',
+          ['paid', 'confirmed', reference, existing.id],
+        );
+        const [[row]] = await pool.query('SELECT * FROM event_registrations WHERE id = ?', [existing.id]);
+        registration = mapDbRegistration(row);
+      }
+    }
+    if (!registration && event) {
+      registration = await createSiteChatSelfRegistration(req, authUser, event, {
+        payment_reference: reference,
+        payment_method: action.method || 'mobile_money',
+      });
+    }
+    const joinWindow = event ? getJoinWindowForEvent(event) : { allowed: false };
+    if (event && joinWindow.allowed) {
+      session.pendingAction = sanitizePendingAction({
+        type: 'join',
+        eventSlug: event.slug,
+        eventId: event.id,
+        eventTitle: event.title,
+      });
+      return respond(`Payment confirmed for ${event.title}. Shall I take you into the session now?`, { registration });
+    }
+    session.pendingAction = null;
+    return respond(`Payment confirmed${event ? ` for ${event.title}` : ''}. You’re registered.`, { registration });
+  }
+
+  if (action.type === 'join') {
+    const event = await loadSiteChatEventRecord(session, action);
+    if (!event) return respond('I could not find that event to join.');
+    const joinWindow = getJoinWindowForEvent(event);
+    if (!joinWindow.allowed) {
+      session.pendingAction = null;
+      return respond(joinWindow.reason || 'The join window is not open yet.');
+    }
+    const joinPath = `/events/${encodeURIComponent(event.slug)}/join?autoJoin=1`;
+    session.pendingAction = null;
+    return respond(`Taking you into ${event.title} now.`, { joinPath });
+  }
+
+  return respond('I could not complete that step. What would you like to do next?');
+}
+
 app.get('/api/site-chat/session', rateLimitSiteChat, async (req, res) => {
   try {
     const sessionId = String(req.query?.sessionId || '').trim();
@@ -7269,12 +7905,6 @@ app.post('/api/site-chat', rateLimitSiteChat, async (req, res) => {
 
     const settings = await getSystemSettings();
     const openai = getOpenAIChatConfig(settings);
-    if (!openai.apiKey) {
-      return res.status(400).json({
-        ok: false,
-        message: 'The site assistant is not configured yet. Please try again later.',
-      });
-    }
 
     const { signedIn, visitorId, userId } = resolveSiteChatVisitor(req);
     const session = await loadPersistedSiteChatSession(visitorId, sessionId);
@@ -7301,13 +7931,33 @@ app.post('/api/site-chat', rateLimitSiteChat, async (req, res) => {
       sessionId,
       message,
       cvDraft: req.body?.cvDraft,
+      signupDraft: req.body?.signupDraft,
+      eventIntent: req.body?.eventIntent,
       signedIn,
       openai,
-      toolContext: { events, books, user },
+      toolContext: {
+        events,
+        books,
+        user,
+        emailExists: siteChatEmailExists,
+      },
     });
+
+    let payload = result;
+    if (result.executeAction) {
+      payload = await executeSiteChatPendingAction({
+        req,
+        session,
+        extras: {
+          verifyCode: result.verifyCode || req.body?.verifyCode,
+          signupDraft: req.body?.signupDraft,
+          eventIntent: req.body?.eventIntent,
+        },
+      });
+    }
     await savePersistedSiteChatSession(visitorId, sessionId, session);
 
-    return res.json({ ok: true, data: result });
+    return res.json({ ok: true, data: payload });
   } catch (error) {
     return res.status(400).json({
       ok: false,
@@ -7388,6 +8038,123 @@ app.post('/api/site-chat/save-cv', rateLimitSiteChat, async (req, res) => {
   } catch (error) {
     console.error('[site-chat/save-cv]', error.message);
     return res.status(500).json({ ok: false, message: 'Failed to save the CV.' });
+  }
+});
+
+app.post('/api/site-chat/signup', rateLimitSiteChat, async (req, res) => {
+  try {
+    const sessionId = String(req.body?.sessionId || '').trim();
+    if (!sessionId) return res.status(400).json({ ok: false, message: 'sessionId is required.' });
+    const { visitorId } = resolveSiteChatVisitor(req);
+    const session = await loadPersistedSiteChatSession(visitorId, sessionId);
+    session.pendingAction = sanitizePendingAction({
+      type: 'signup',
+      ...(session.pendingAction || {}),
+      ...(req.body?.pendingAction || {}),
+    }) || { type: 'signup' };
+    const data = await executeSiteChatPendingAction({
+      req,
+      session,
+      extras: { signupDraft: req.body?.signupDraft || req.body, eventIntent: req.body?.eventIntent },
+    });
+    await savePersistedSiteChatSession(visitorId, sessionId, session);
+    return res.json({ ok: true, data });
+  } catch (error) {
+    return res.status(400).json({ ok: false, message: error.message || 'Could not create the account.' });
+  }
+});
+
+app.post('/api/site-chat/login', rateLimitSiteChat, async (req, res) => {
+  try {
+    const sessionId = String(req.body?.sessionId || '').trim();
+    if (!sessionId) return res.status(400).json({ ok: false, message: 'sessionId is required.' });
+    const { visitorId } = resolveSiteChatVisitor(req);
+    const session = await loadPersistedSiteChatSession(visitorId, sessionId);
+    session.pendingAction = sanitizePendingAction({
+      type: 'login',
+      ...(session.pendingAction || {}),
+    }) || { type: 'login' };
+    const data = await executeSiteChatPendingAction({
+      req,
+      session,
+      extras: {
+        email: req.body?.email,
+        password: req.body?.password,
+        signupDraft: { email: req.body?.email, password: req.body?.password },
+        eventIntent: req.body?.eventIntent,
+      },
+    });
+    await savePersistedSiteChatSession(visitorId, sessionId, session);
+    return res.json({ ok: true, data });
+  } catch (error) {
+    return res.status(400).json({ ok: false, message: error.message || 'Could not sign you in.' });
+  }
+});
+
+app.post('/api/site-chat/verify-code', rateLimitSiteChat, async (req, res) => {
+  try {
+    const sessionId = String(req.body?.sessionId || '').trim();
+    if (!sessionId) return res.status(400).json({ ok: false, message: 'sessionId is required.' });
+    const { visitorId } = resolveSiteChatVisitor(req);
+    const session = await loadPersistedSiteChatSession(visitorId, sessionId);
+    session.pendingAction = sanitizePendingAction({
+      type: 'verify_email',
+      ...(session.pendingAction || {}),
+    }) || { type: 'verify_email' };
+    const data = await executeSiteChatPendingAction({
+      req,
+      session,
+      extras: { verifyCode: req.body?.code || req.body?.verifyCode },
+    });
+    await savePersistedSiteChatSession(visitorId, sessionId, session);
+    return res.json({ ok: true, data });
+  } catch (error) {
+    return res.status(400).json({ ok: false, message: error.message || 'Could not verify that code.' });
+  }
+});
+
+app.post('/api/site-chat/action', rateLimitSiteChat, async (req, res) => {
+  try {
+    const sessionId = String(req.body?.sessionId || '').trim();
+    if (!sessionId) return res.status(400).json({ ok: false, message: 'sessionId is required.' });
+    const { visitorId } = resolveSiteChatVisitor(req);
+    const session = await loadPersistedSiteChatSession(visitorId, sessionId);
+
+    if (req.body?.confirm === false || req.body?.decline) {
+      session.pendingAction = null;
+      const reply = 'No problem. What would you like to do instead?';
+      session.messages.push({ role: 'assistant', content: reply });
+      await savePersistedSiteChatSession(visitorId, sessionId, session);
+      return res.json({ ok: true, data: siteChatTurnResult(session, { reply }) });
+    }
+
+    if (req.body?.action) {
+      session.pendingAction = sanitizePendingAction({
+        ...(session.pendingAction || {}),
+        ...req.body.action,
+        type: req.body.action.type || session.pendingAction?.type,
+      });
+    }
+
+    const data = await executeSiteChatPendingAction({
+      req,
+      session,
+      extras: {
+        method: req.body?.method,
+        phone: req.body?.phone,
+        verifyCode: req.body?.verifyCode || req.body?.code,
+        paymentReference: req.body?.paymentReference || req.body?.reference,
+        signupDraft: req.body?.signupDraft,
+        eventIntent: req.body?.eventIntent,
+        email: req.body?.email,
+        password: req.body?.password,
+      },
+    });
+    await savePersistedSiteChatSession(visitorId, sessionId, session);
+    return res.json({ ok: true, data });
+  } catch (error) {
+    console.error('[site-chat/action]', error.message);
+    return res.status(400).json({ ok: false, message: error.message || 'Could not complete that step.' });
   }
 });
 

@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import DOMPurify from 'dompurify';
 import { RotateCcw, Send, Sparkles, X } from 'lucide-react';
 import { getApiBase } from '../utils/apiBase';
 import { getSessionAuthHeaders } from '../utils/authHeaders';
 import { useUserAuth } from '../context/UserAuthContext';
 import { chatMarkdownToHtml, CHAT_MARKDOWN_SANITIZE } from '../utils/chatMarkdown';
+import { runLencoCardWidget } from '../utils/lencoCardPayment';
 import { LoadingButton } from './ui';
 
 const API_BASE = getApiBase();
@@ -69,18 +70,38 @@ function cvRows(draft = {}) {
   ].filter(([, value]) => String(value || '').trim());
 }
 
+function shouldRedactUserText(text, ui) {
+  const raw = String(text || '').trim();
+  if (!raw || raw.includes('@') || /\s/.test(raw)) return false;
+  if (ui?.kind === 'signup' && ui.nextField === 'password') return true;
+  if (ui?.action === 'login' || ui?.action === 'signup') return raw.length >= 6;
+  return false;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function paymentSucceeded(payload = {}) {
+  const status = String(payload.status || payload.data?.status || '').toLowerCase();
+  return payload.paid === true || status === 'successful' || status === 'success' || status === 'paid';
+}
+
 export default function SiteAssistantPanel({ open = true, onClose }) {
+  const navigate = useNavigate();
   const { isUserAuthenticated, currentUser, applySessionUser } = useUserAuth();
   const listRef = useRef(null);
   const storedRef = useRef(typeof window === 'undefined' ? null : readStored());
   const stored = storedRef.current;
   const [sessionId, setSessionId] = useState(() => stored?.sessionId || newSessionId());
   const [input, setInput] = useState('');
+  const [phone, setPhone] = useState('');
   const [sending, setSending] = useState(false);
   const [saving, setSaving] = useState(false);
   const [cvDraft, setCvDraft] = useState(stored?.cvDraft || {});
   const [readyToSaveCv, setReadyToSaveCv] = useState(Boolean(stored?.readyToSaveCv));
   const [savedCv, setSavedCv] = useState(false);
+  const [ui, setUi] = useState(null);
   const [messages, setMessages] = useState(
     Array.isArray(stored?.messages) && stored.messages.length ? stored.messages : [WELCOME_MESSAGE],
   );
@@ -94,19 +115,105 @@ export default function SiteAssistantPanel({ open = true, onClose }) {
   useEffect(() => {
     const node = listRef.current;
     if (node) node.scrollTop = node.scrollHeight;
-  }, [messages, sending, saving]);
+  }, [messages, sending, saving, ui]);
+
+  const applyAuth = (data) => {
+    if (data?.user) applySessionUser?.(data.user, data.token);
+  };
 
   const applyResult = (data) => {
     if (data?.reply) setMessages((prev) => [...prev, { role: 'assistant', content: data.reply }]);
     if (data?.cvDraft) setCvDraft(data.cvDraft);
     setReadyToSaveCv(Boolean(data?.readyToSaveCv));
+    setUi(data?.ui || null);
+    applyAuth(data);
+    if (data?.joinPath) {
+      onClose?.();
+      navigate(data.joinPath);
+    }
+  };
+
+  const pollMobileMoney = async (reference) => {
+    for (let attempt = 0; attempt < 36; attempt += 1) {
+      await sleep(5000);
+      const response = await fetch(`${API_BASE}/payments/lenco/verify`, {
+        method: 'POST',
+        headers: getSessionAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ reference }),
+      });
+      const json = await response.json().catch(() => ({}));
+      if (paymentSucceeded(json.data || {})) {
+        await runAction({
+          action: { type: 'confirm_payment', paymentReference: reference },
+          paymentReference: reference,
+        });
+        return;
+      }
+      const status = String(json.data?.status || json.data?.data?.status || '').toLowerCase();
+      if (status === 'failed') {
+        setMessages((prev) => [...prev, {
+          role: 'assistant',
+          content: 'Payment failed. Would you like me to try again with mobile money or card?',
+        }]);
+        return;
+      }
+    }
+    setMessages((prev) => [...prev, {
+      role: 'assistant',
+      content: 'I am still waiting for the mobile money approval. Tell me when you have paid.',
+    }]);
+  };
+
+  const handlePaymentSession = async (session) => {
+    if (!session) return;
+    if (session.channel === 'card') {
+      try {
+        const reference = await runLencoCardWidget(session);
+        await runAction({
+          action: { type: 'confirm_payment', paymentReference: reference || session.reference },
+          paymentReference: reference || session.reference,
+        });
+      } catch (error) {
+        setMessages((prev) => [...prev, {
+          role: 'assistant',
+          content: error.message || 'Card checkout was not completed.',
+        }]);
+      }
+      return;
+    }
+    if (session.reference) {
+      void pollMobileMoney(session.reference);
+    }
+  };
+
+  const runAction = async (body = {}) => {
+    setSending(true);
+    try {
+      const response = await fetch(`${API_BASE}/site-chat/action`, {
+        method: 'POST',
+        headers: getSessionAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ sessionId, ...body }),
+      });
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok || !json?.ok) throw new Error(json?.message || 'Could not complete that step.');
+      applyResult(json.data || {});
+      if (json.data?.paymentSession) await handlePaymentSession(json.data.paymentSession);
+    } catch (error) {
+      setMessages((prev) => [...prev, {
+        role: 'assistant',
+        content: error.message || 'I could not complete that step. Please try again.',
+      }]);
+    } finally {
+      setSending(false);
+    }
   };
 
   const sendMessage = async (text) => {
     const message = String(text || '').trim();
     if (!message || sending || saving) return;
     setSending(true);
-    setMessages((prev) => [...prev, { role: 'user', content: message }]);
+    const visible = shouldRedactUserText(message, ui) ? '••••••••' : message;
+    setMessages((prev) => [...prev, { role: 'user', content: visible }]);
     setInput('');
     try {
       const response = await fetch(`${API_BASE}/site-chat`, {
@@ -120,6 +227,7 @@ export default function SiteAssistantPanel({ open = true, onClose }) {
       if (json.data?.saveCv && isUserAuthenticated) {
         await saveCv(json.data.cvDraft);
       }
+      if (json.data?.paymentSession) await handlePaymentSession(json.data.paymentSession);
     } catch (error) {
       setMessages((prev) => [...prev, {
         role: 'assistant',
@@ -134,7 +242,7 @@ export default function SiteAssistantPanel({ open = true, onClose }) {
     if (!isUserAuthenticated) {
       setMessages((prev) => [...prev, {
         role: 'assistant',
-        content: 'Sign in at /account/login so I can save this CV to your profile.',
+        content: 'I can save this CV after we create your account in this chat.',
       }]);
       return;
     }
@@ -169,6 +277,8 @@ export default function SiteAssistantPanel({ open = true, onClose }) {
     setSavedCv(false);
     setReadyToSaveCv(false);
     setCvDraft({});
+    setUi(null);
+    setPhone('');
     setSessionId(nextId);
     clearStored();
     try {
@@ -181,6 +291,15 @@ export default function SiteAssistantPanel({ open = true, onClose }) {
       // local reset still happens
     }
     setMessages([{ role: 'assistant', content: 'Fresh start. How can I help?' }]);
+  };
+
+  const confirmAction = async () => {
+    setMessages((prev) => [...prev, { role: 'user', content: ui?.confirmLabel || 'Yes' }]);
+    if (ui?.kind === 'join' && ui.path) {
+      await runAction({ action: { type: 'join' } });
+      return;
+    }
+    await runAction({ confirm: true });
   };
 
   if (!open) return null;
@@ -238,18 +357,83 @@ export default function SiteAssistantPanel({ open = true, onClose }) {
           ))}
           {(sending || saving) && (
             <div className="max-w-[90%] rounded-2xl bg-navy-50 px-3.5 py-2.5 text-sm text-navy-600" role="status">
-              {saving ? 'Saving your CV…' : 'Thinking…'}
+              {saving ? 'Saving your CV…' : 'Working on that…'}
             </div>
           )}
         </div>
 
         <div className="border-t border-navy-100 p-3 space-y-2">
-          {!isUserAuthenticated && (
-            <p className="text-[11px] text-navy-500">
-              <Link to="/account/login" className="font-medium text-cyan-700 hover:underline">Sign in</Link>
-              {' '}to save a CV or look up your tickets.
-            </p>
+          {(ui?.kind === 'confirm' || ui?.kind === 'join') && (
+            <div className="grid grid-cols-2 gap-2">
+              <LoadingButton
+                type="button"
+                onClick={confirmAction}
+                loading={sending}
+                className="rounded-xl bg-[#00A79D] py-2.5 text-sm font-semibold text-white"
+              >
+                {ui.confirmLabel || 'Yes'}
+              </LoadingButton>
+              <button
+                type="button"
+                disabled={sending}
+                onClick={() => {
+                  setMessages((prev) => [...prev, { role: 'user', content: ui.declineLabel || 'Not yet' }]);
+                  void runAction({ decline: true });
+                }}
+                className="rounded-xl border border-navy-200 py-2.5 text-sm font-semibold text-navy-700 hover:bg-navy-50"
+              >
+                {ui.declineLabel || 'Not yet'}
+              </button>
+            </div>
           )}
+
+          {ui?.kind === 'payment' && (
+            <div className="space-y-2 rounded-xl bg-navy-50 p-3">
+              <p className="text-xs text-navy-600">
+                {ui.eventTitle ? `${ui.eventTitle} — ` : ''}
+                {ui.currency || 'ZMW'} {ui.amount ?? ''}
+              </p>
+              <input
+                type="tel"
+                value={phone}
+                onChange={(event) => setPhone(event.target.value)}
+                placeholder="Mobile money number"
+                className="w-full rounded-xl border border-navy-200 px-3 py-2 text-sm text-navy-900 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <LoadingButton
+                  type="button"
+                  loading={sending}
+                  onClick={() => {
+                    setMessages((prev) => [...prev, { role: 'user', content: 'Pay by mobile money' }]);
+                    void runAction({
+                      action: { type: 'start_payment', method: 'mobile_money' },
+                      method: 'mobile_money',
+                      phone,
+                    });
+                  }}
+                  className="rounded-xl bg-[#141D45] py-2.5 text-sm font-semibold text-white"
+                >
+                  Mobile money
+                </LoadingButton>
+                <LoadingButton
+                  type="button"
+                  loading={sending}
+                  onClick={() => {
+                    setMessages((prev) => [...prev, { role: 'user', content: 'Pay by card' }]);
+                    void runAction({
+                      action: { type: 'start_payment', method: 'card' },
+                      method: 'card',
+                    });
+                  }}
+                  className="rounded-xl bg-[#00A79D] py-2.5 text-sm font-semibold text-white"
+                >
+                  Pay by card
+                </LoadingButton>
+              </div>
+            </div>
+          )}
+
           {readyToSaveCv && isUserAuthenticated && !savedCv && (
             <LoadingButton
               type="button"

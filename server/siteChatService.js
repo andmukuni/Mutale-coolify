@@ -14,28 +14,38 @@ const sessions = new Map();
 export const SITE_GUIDE = [
   'You are the Mutale Mubanga website assistant for mutalemubanga.org.',
   'Help with the public site and the client portal. Be concise, warm, and specific. Use Markdown.',
-  'Always reply as JSON: { "reply": "markdown", "cvDraft": {}, "saveCv": false }.',
+  'Always reply as JSON: { "reply": "markdown", "cvDraft": {}, "saveCv": false, "signupDraft": {}, "eventIntent": {}, "pendingAction": null }.',
   'Only set saveCv=true when the user clearly confirms saving their CV and they are signed in.',
   '',
-  'Public pages:',
-  '- / events listing, /events/:slug details, /events/:slug/register to buy a ticket',
-  '- Virtual events: join at /events/:slug/join on the event day after registering',
-  '- Tickets: /tickets/:code. Certificates verify at /certificates/verify/:code',
-  '- Shop /books, blog /blog, publications /publications, about /about, experience /experience, contact /contact',
-  '- Account: /account/login, /account/register, /account/profile, /account/my-events, /account/cv',
+  'You complete signup, event registration, payment, and join in this chat. Do not send people to /account/register, /account/login, or /events/:slug/register.',
+  'Never dump a Join or Register markdown link as the only help. Ask the next confirm question and set pendingAction.',
+  'Ask one or two questions at a time. After each completed step, ask before doing the next one.',
   '',
-  'Events: one registration can cover a session series. Status is upcoming / in progress / passed in Africa/Lusaka.',
-  'Paid events use Lenco (mobile money or card). Free events still need registration.',
-  'After an event ends, eligible attendees may get a certificate by email if the event has certificates enabled.',
+  'Event join workflow:',
+  '1. Use get_event_access (or list_upcoming_events) to find the event and the user\'s real access.',
+  '2. If not signed in: collect signup fields into signupDraft (user_type local|international, name, email, whatsapp, nrc_id if local, password min 8).',
+  '   If lookup_account_email says the email exists, switch to login: collect password and set pendingAction { "type": "login" }.',
+  '   When signup fields are complete, ask "Shall I create your account now?" and set pendingAction { "type": "signup" }.',
+  '3. After signup they must enter a 6-digit email/SMS code. Set pendingAction { "type": "verify_email" }.',
+  '4. If signed in and not registered: ask "Would you like me to register you for [event] now?" and set pendingAction { "type": "register", "eventSlug": "...", "eventId": "...", "eventTitle": "..." }.',
+  '5. If the event is paid: after they confirm register, set pendingAction { "type": "start_payment", "eventSlug": "...", "eventId": "...", "amount": 0, "currency": "ZMW" } and ask mobile money or card.',
+  '6. If already registered and paid/free, and join is open: ask "Shall I take you into the session now?" and set pendingAction { "type": "join", "eventSlug": "..." }.',
+  '7. If join is not open yet, say when it opens. Do not invent meeting URLs.',
   '',
-  'CV help: you can build a CV in this chat.',
-  'Collect: name, profession, organization, about, specialties, LinkedIn/portfolio, education, experience, references.',
-  'Ask one or two questions at a time. Put structured fields in cvDraft.',
-  'Signed-in users can save to their profile, then open /account/cv to pick a template and download (download may require a one-time fee).',
-  'If they are not signed in, collect the draft and ask them to sign in at /account/login so you can save it.',
-  'Never invent certificates or event attendance. Use get_user_context for their real records.',
-  'Never invent payment, meeting links, or admin actions. Link to the right page instead.',
+  'CV help: collect name, profession, organization, about, specialties, LinkedIn/portfolio, education, experience, references in cvDraft.',
+  'Never invent certificates, attendance, payment status, or meeting links. Use tools for real records.',
 ].join('\n');
+
+export const SITE_CHAT_ACTION_TYPES = [
+  'signup',
+  'login',
+  'verify_email',
+  'register',
+  'start_payment',
+  'await_payment',
+  'confirm_payment',
+  'join',
+];
 
 export function createEmptyCvDraft() {
   return {
@@ -98,6 +108,238 @@ export function listMissingCvFields(draft = {}) {
   return missing;
 }
 
+export function createEmptySignupDraft() {
+  return {
+    user_type: '',
+    name: '',
+    email: '',
+    whatsapp: '',
+    nrc_id: '',
+    password: '',
+  };
+}
+
+export function mergeSignupDraft(current = {}, patch = {}) {
+  const next = { ...createEmptySignupDraft(), ...(current || {}) };
+  const incoming = patch && typeof patch === 'object' && !Array.isArray(patch) ? patch : {};
+  if (incoming.user_type != null) {
+    const type = String(incoming.user_type).trim().toLowerCase();
+    if (type === 'local' || type === 'international') next.user_type = type;
+  }
+  if (incoming.name != null) {
+    const value = String(incoming.name).trim();
+    if (value) next.name = value;
+  }
+  if (incoming.email != null) {
+    const value = String(incoming.email).trim().toLowerCase();
+    if (value) next.email = value;
+  }
+  if (incoming.whatsapp != null || incoming.phone != null) {
+    const value = String(incoming.whatsapp || incoming.phone || '').trim();
+    if (value) next.whatsapp = value;
+  }
+  if (incoming.nrc_id != null || incoming.nrc != null) {
+    const value = String(incoming.nrc_id || incoming.nrc || '').trim();
+    if (value) next.nrc_id = value;
+  }
+  if (incoming.password != null) {
+    const value = String(incoming.password);
+    if (value) next.password = value;
+  }
+  return next;
+}
+
+export function listMissingSignupFields(draft = {}) {
+  const missing = [];
+  if (!['local', 'international'].includes(String(draft.user_type || ''))) missing.push('user_type');
+  if (!String(draft.name || '').trim()) missing.push('name');
+  if (!/^\S+@\S+\.\S+$/.test(String(draft.email || '').trim())) missing.push('email');
+  if (!String(draft.whatsapp || '').trim()) missing.push('whatsapp');
+  if (draft.user_type === 'local' && !String(draft.nrc_id || '').trim()) missing.push('nrc_id');
+  if (String(draft.password || '').length < 8) missing.push('password');
+  return missing;
+}
+
+export function sanitizeSignupDraft(draft = {}) {
+  const next = mergeSignupDraft(createEmptySignupDraft(), draft);
+  delete next.password;
+  return next;
+}
+
+export function createEmptyEventIntent() {
+  return { slug: '', title: '', id: '', query: '' };
+}
+
+export function mergeEventIntent(current = {}, patch = {}) {
+  const next = { ...createEmptyEventIntent(), ...(current || {}) };
+  const incoming = patch && typeof patch === 'object' && !Array.isArray(patch) ? patch : {};
+  for (const key of ['slug', 'title', 'id', 'query']) {
+    if (incoming[key] == null) continue;
+    const value = String(incoming[key]).trim();
+    if (value) next[key] = value;
+  }
+  return next;
+}
+
+export function sanitizePendingAction(action) {
+  if (!action || typeof action !== 'object' || Array.isArray(action)) return null;
+  const type = String(action.type || '').trim();
+  if (!SITE_CHAT_ACTION_TYPES.includes(type)) return null;
+  const amount = action.amount == null || action.amount === '' ? null : Number(action.amount);
+  return {
+    type,
+    eventSlug: String(action.eventSlug || action.slug || '').trim(),
+    eventId: String(action.eventId || action.id || '').trim(),
+    eventTitle: String(action.eventTitle || action.title || '').trim(),
+    label: String(action.label || '').trim(),
+    confirmLabel: String(action.confirmLabel || '').trim(),
+    method: String(action.method || '').trim(),
+    amount: Number.isFinite(amount) ? amount : null,
+    currency: String(action.currency || 'ZMW').trim() || 'ZMW',
+    phone: String(action.phone || '').trim(),
+    email: String(action.email || '').trim().toLowerCase(),
+    paymentReference: String(action.paymentReference || action.reference || '').trim(),
+    registrationId: String(action.registrationId || '').trim(),
+  };
+}
+
+export function isCollectingPassword(session = {}) {
+  const pending = session.pendingAction?.type;
+  const missing = listMissingSignupFields(session.signupDraft || {});
+  return pending === 'login' || pending === 'signup' || missing[0] === 'password';
+}
+
+export function redactSensitiveUserText(text, session = {}) {
+  const raw = String(text || '');
+  if (!raw) return raw;
+  if (/^\d{6}$/.test(raw.trim()) && session.pendingAction?.type === 'verify_email') return raw.trim();
+  if (isCollectingPassword(session) && !raw.includes('@') && !/\s/.test(raw) && raw.length >= 6) {
+    return '••••••••';
+  }
+  return raw;
+}
+
+export function isPaidEligibleStatus(status) {
+  return ['paid', 'not_required', 'waived'].includes(String(status || '').toLowerCase());
+}
+
+export function findSiteChatEvent(query, events = []) {
+  const list = Array.isArray(events) ? events : [];
+  const q = String(query || '').trim().toLowerCase();
+  if (q) {
+    return list.find((event) => (
+      String(event.slug || '').toLowerCase() === q
+      || String(event.id || '').toLowerCase() === q
+      || String(event.title || '').toLowerCase().includes(q)
+    )) || null;
+  }
+  return list.find((event) => event.joinWindow?.allowed || event.live) || list[0] || null;
+}
+
+export function resolveEventAccess({ query, events = [], user = null, signedIn = false } = {}) {
+  const event = findSiteChatEvent(query, events);
+  if (!event) {
+    return { event: null, signedIn: Boolean(signedIn), registered: false, nextAction: null };
+  }
+  const registration = Array.isArray(user?.registrations)
+    ? user.registrations.find((row) => (
+      String(row.slug || '').toLowerCase() === String(event.slug || '').toLowerCase()
+      || String(row.event_id || '').toLowerCase() === String(event.id || '').toLowerCase()
+    ))
+    : null;
+  const registered = Boolean(registration);
+  const paid = !registered || isPaidEligibleStatus(registration.payment_status);
+  const canJoin = Boolean(registered && paid && event.joinWindow?.allowed);
+  let nextAction = null;
+  if (!signedIn) nextAction = 'signup';
+  else if (user && user.email_verified === false) nextAction = 'verify_email';
+  else if (registered && paid && canJoin) nextAction = 'join';
+  else if (registered && !paid) nextAction = 'start_payment';
+  else if (!registered) nextAction = 'register';
+  return {
+    event,
+    signedIn: Boolean(signedIn),
+    registered,
+    paymentStatus: registration?.payment_status || '',
+    canJoin,
+    joinReason: event.joinWindow?.reason || '',
+    joinFrom: event.joinWindow?.joinFrom || '',
+    nextAction,
+    registration: registration || null,
+  };
+}
+
+export function buildSiteChatUi(session = {}) {
+  const action = sanitizePendingAction(session.pendingAction);
+  if (!action) {
+    const missing = listMissingSignupFields(session.signupDraft || {});
+    if (session.eventIntent?.slug && missing.length) {
+      return { kind: 'signup', missing, nextField: missing[0] };
+    }
+    return null;
+  }
+
+  if (action.type === 'start_payment' || action.type === 'await_payment') {
+    return {
+      kind: 'payment',
+      action: action.type,
+      eventTitle: action.eventTitle,
+      eventSlug: action.eventSlug,
+      eventId: action.eventId,
+      amount: action.amount,
+      currency: action.currency || 'ZMW',
+      paymentReference: action.paymentReference,
+      confirmLabel: action.confirmLabel || 'Pay now',
+    };
+  }
+
+  if (action.type === 'join') {
+    return {
+      kind: 'join',
+      action: 'join',
+      path: action.eventSlug ? `/events/${encodeURIComponent(action.eventSlug)}/join?autoJoin=1` : '',
+      eventTitle: action.eventTitle,
+      label: action.label || `You’re registered for ${action.eventTitle || 'this event'}. Shall I take you into the session now?`,
+      confirmLabel: action.confirmLabel || 'Take me in now',
+      declineLabel: 'Not yet',
+    };
+  }
+
+  const defaults = {
+    signup: {
+      label: 'Shall I create your account now?',
+      confirmLabel: 'Yes, create my account',
+    },
+    login: {
+      label: 'Shall I sign you in now?',
+      confirmLabel: 'Yes, sign me in',
+    },
+    verify_email: {
+      label: 'Enter the 6-digit code I sent to your email or phone.',
+      confirmLabel: 'Verify code',
+    },
+    register: {
+      label: `Would you like me to register you for ${action.eventTitle || 'this event'} now?`,
+      confirmLabel: 'Yes, register me',
+    },
+    confirm_payment: {
+      label: 'Confirm that you have completed payment?',
+      confirmLabel: 'Yes, I have paid',
+    },
+  };
+  const copy = defaults[action.type] || {
+    label: action.label || 'Shall I continue?',
+    confirmLabel: action.confirmLabel || 'Yes',
+  };
+  return {
+    kind: 'confirm',
+    action: action.type,
+    label: action.label || copy.label,
+    confirmLabel: action.confirmLabel || copy.confirmLabel,
+    declineLabel: 'Not yet',
+  };
+}
+
 export function extractSiteAssistantReply(raw, parsed) {
   const fromJson = String(parsed?.reply || '').trim();
   if (fromJson) return fromJson;
@@ -137,6 +379,27 @@ export const SITE_CHAT_FUNCTION_TOOLS = [
     name: 'get_user_context',
     description: 'Get the signed-in user profile, registrations, and CV status.',
     parameters: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    type: 'function',
+    name: 'get_event_access',
+    description: 'Get one event plus whether the visitor can register, pay, or join it.',
+    parameters: {
+      type: 'object',
+      properties: { query: { type: 'string' } },
+      additionalProperties: false,
+    },
+  },
+  {
+    type: 'function',
+    name: 'lookup_account_email',
+    description: 'Check whether an email already has an account so you can switch to login.',
+    parameters: {
+      type: 'object',
+      properties: { email: { type: 'string' } },
+      required: ['email'],
+      additionalProperties: false,
+    },
   },
   {
     type: 'function',
@@ -198,8 +461,23 @@ export async function executeSiteChatTool(name, args = {}, context = {}) {
     return match ? JSON.stringify(match) : `No event matched "${args.query}".`;
   }
   if (name === 'get_user_context') {
-    if (!context.user) return 'The visitor is not signed in. Ask them to sign in at /account/login for account or CV save help.';
+    if (!context.user) return 'The visitor is not signed in. Collect signup fields in chat, or log them in if the email already exists.';
     return JSON.stringify(context.user);
+  }
+  if (name === 'get_event_access') {
+    return JSON.stringify(resolveEventAccess({
+      query: args.query || context.eventQuery || '',
+      events: context.events,
+      user: context.user,
+      signedIn: Boolean(context.user),
+    }));
+  }
+  if (name === 'lookup_account_email') {
+    if (typeof context.emailExists !== 'function') return 'Unable to check that email right now.';
+    const exists = await context.emailExists(args.email);
+    return exists
+      ? 'An account already exists for this email. Ask for their password and set pendingAction to login.'
+      : 'No account exists for this email. Continue collecting signup fields.';
   }
   if (name === 'list_shop_items') {
     const books = Array.isArray(context.books) ? context.books : [];
@@ -321,15 +599,23 @@ export function exportSiteChatSession(session = {}) {
     messages: Array.isArray(session.messages) ? session.messages : [],
     cvDraft: session.cvDraft || createEmptyCvDraft(),
     readyToSaveCv: Boolean(session.readyToSaveCv),
+    signupDraft: sanitizeSignupDraft(session.signupDraft || {}),
+    eventIntent: session.eventIntent || createEmptyEventIntent(),
+    pendingAction: sanitizePendingAction(session.pendingAction),
   };
 }
 
 export function importSiteChatSession(visitorId, sessionId, data = {}) {
+  const existing = sessions.get(siteSessionKey(visitorId, sessionId));
   const session = {
     messages: Array.isArray(data.messages) ? data.messages : [],
     cvDraft: mergeCvDraft(createEmptyCvDraft(), data.cvDraft || {}),
     readyToSaveCv: Boolean(data.readyToSaveCv),
+    signupDraft: mergeSignupDraft(existing?.signupDraft || createEmptySignupDraft(), data.signupDraft || {}),
+    eventIntent: mergeEventIntent(createEmptyEventIntent(), data.eventIntent || {}),
+    pendingAction: sanitizePendingAction(data.pendingAction),
   };
+  if (existing?.signupDraft?.password) session.signupDraft.password = existing.signupDraft.password;
   sessions.set(siteSessionKey(visitorId, sessionId), session);
   return session;
 }
@@ -341,6 +627,9 @@ export function getOrCreateSiteChatSession(visitorId, sessionId) {
       messages: [],
       cvDraft: createEmptyCvDraft(),
       readyToSaveCv: false,
+      signupDraft: createEmptySignupDraft(),
+      eventIntent: createEmptyEventIntent(),
+      pendingAction: null,
     });
   }
   return sessions.get(key);
@@ -350,34 +639,158 @@ export function resetSiteChatSession(visitorId, sessionId) {
   sessions.delete(siteSessionKey(visitorId, sessionId));
 }
 
+function absorbSignupHints(session, userText) {
+  const text = String(userText || '').trim();
+  if (!text) return;
+  const missing = listMissingSignupFields(session.signupDraft);
+  const nextField = missing[0];
+  if (/^local$/i.test(text) || /zambia|zambian|nrc/i.test(text)) {
+    session.signupDraft = mergeSignupDraft(session.signupDraft, { user_type: 'local' });
+  } else if (/^international$/i.test(text) || /outside zambia|not zambian/i.test(text)) {
+    session.signupDraft = mergeSignupDraft(session.signupDraft, { user_type: 'international' });
+  }
+  if (/^\S+@\S+\.\S+$/.test(text)) {
+    session.signupDraft = mergeSignupDraft(session.signupDraft, { email: text });
+  } else if (nextField === 'name' && !text.includes('@') && text.length < 80) {
+    session.signupDraft = mergeSignupDraft(session.signupDraft, { name: text });
+  } else if (nextField === 'whatsapp') {
+    session.signupDraft = mergeSignupDraft(session.signupDraft, { whatsapp: text });
+  } else if (nextField === 'nrc_id') {
+    session.signupDraft = mergeSignupDraft(session.signupDraft, { nrc_id: text });
+  } else if (nextField === 'password' && text.length >= 8 && !text.includes('@')) {
+    session.signupDraft = mergeSignupDraft(session.signupDraft, { password: text });
+  } else if (session.pendingAction?.type === 'login' && !session.signupDraft.password && text.length >= 6 && !text.includes('@')) {
+    session.signupDraft = mergeSignupDraft(session.signupDraft, { password: text });
+  }
+}
+
+function fillPendingActionFromSession(session, incoming) {
+  const action = sanitizePendingAction(incoming);
+  if (!action) return null;
+  if (!action.eventSlug) action.eventSlug = session.eventIntent?.slug || '';
+  if (!action.eventId) action.eventId = session.eventIntent?.id || '';
+  if (!action.eventTitle) action.eventTitle = session.eventIntent?.title || '';
+  if (!action.email) action.email = session.signupDraft?.email || '';
+  return action;
+}
+
+export function siteChatTurnResult(session, extra = {}) {
+  return {
+    reply: extra.reply || '',
+    cvDraft: session.cvDraft,
+    readyToSaveCv: Boolean(extra.readyToSaveCv),
+    saveCv: Boolean(extra.saveCv),
+    missingCvFields: extra.missingCvFields || listMissingCvFields(session.cvDraft),
+    pendingAction: sanitizePendingAction(session.pendingAction),
+    ui: extra.ui !== undefined ? extra.ui : buildSiteChatUi(session),
+    executeAction: Boolean(extra.executeAction),
+    verifyCode: extra.verifyCode || '',
+    signupDraft: sanitizeSignupDraft(session.signupDraft || {}),
+    eventIntent: session.eventIntent || createEmptyEventIntent(),
+  };
+}
+
 export async function processSiteChatTurn({
   visitorId,
   sessionId,
   message,
   cvDraft,
+  signupDraft,
+  eventIntent,
   signedIn = false,
   openai,
   toolContext = {},
 } = {}) {
   const session = getOrCreateSiteChatSession(visitorId, sessionId);
   if (cvDraft) session.cvDraft = mergeCvDraft(session.cvDraft, cvDraft);
+  if (signupDraft) session.signupDraft = mergeSignupDraft(session.signupDraft, signupDraft);
+  if (eventIntent) session.eventIntent = mergeEventIntent(session.eventIntent, eventIntent);
+  if (!session.signupDraft) session.signupDraft = createEmptySignupDraft();
+  if (!session.eventIntent) session.eventIntent = createEmptyEventIntent();
 
   const userText = String(message || '').trim();
-  session.messages.push({ role: 'user', content: userText });
+  absorbSignupHints(session, userText);
+  session.messages.push({ role: 'user', content: redactSensitiveUserText(userText, session) });
 
   if (session.readyToSaveCv && isDeclineIntent(userText)) {
     session.readyToSaveCv = false;
     const reply = 'No problem — we can keep editing your CV. What should we change?';
     session.messages.push({ role: 'assistant', content: reply });
-    return { reply, cvDraft: session.cvDraft, readyToSaveCv: false, saveCv: false };
+    return siteChatTurnResult(session, { reply, readyToSaveCv: false });
   }
+
+  if (session.pendingAction && isDeclineIntent(userText)) {
+    session.pendingAction = null;
+    const reply = 'No problem. What would you like to do instead?';
+    session.messages.push({ role: 'assistant', content: reply });
+    return siteChatTurnResult(session, { reply });
+  }
+
+  const verifyCode = /^\d{6}$/.test(userText) ? userText : '';
+  if (session.pendingAction && (isConfirmIntent(userText) || (session.pendingAction.type === 'verify_email' && verifyCode))) {
+    return siteChatTurnResult(session, {
+      reply: '',
+      executeAction: true,
+      verifyCode,
+    });
+  }
+
+  if (typeof toolContext.emailExists === 'function' && session.signupDraft.email && !signedIn) {
+    try {
+      const exists = await toolContext.emailExists(session.signupDraft.email);
+      if (exists) {
+        const alreadyLogin = session.pendingAction?.type === 'login';
+        session.pendingAction = sanitizePendingAction({
+          type: 'login',
+          email: session.signupDraft.email,
+          eventSlug: session.eventIntent?.slug,
+          eventId: session.eventIntent?.id,
+          eventTitle: session.eventIntent?.title,
+        });
+        if (!alreadyLogin) {
+          const reply = 'That email already has an account. What is your password so I can sign you in?';
+          session.messages.push({ role: 'assistant', content: reply });
+          return siteChatTurnResult(session, { reply });
+        }
+      }
+    } catch {
+      // continue into the model
+    }
+  }
+
+  if (!signedIn && session.pendingAction?.type === 'login' && session.signupDraft.email && session.signupDraft.password && !isConfirmIntent(userText)) {
+    const reply = 'Shall I sign you in now?';
+    session.messages.push({ role: 'assistant', content: reply });
+    return siteChatTurnResult(session, { reply });
+  }
+
+  if (!signedIn && listMissingSignupFields(session.signupDraft).length === 0 && session.pendingAction?.type !== 'signup') {
+    session.pendingAction = sanitizePendingAction({
+      type: 'signup',
+      eventSlug: session.eventIntent?.slug,
+      eventId: session.eventIntent?.id,
+      eventTitle: session.eventIntent?.title,
+    });
+    const reply = 'I have everything I need. Shall I create your account now?';
+    session.messages.push({ role: 'assistant', content: reply });
+    return siteChatTurnResult(session, { reply });
+  }
+
+  const signupForModel = sanitizeSignupDraft(session.signupDraft);
+  if (session.signupDraft.password) signupForModel.password = 'collected';
 
   const history = [
     { role: 'system', content: SITE_GUIDE },
     ...session.messages.slice(-16),
     {
       role: 'system',
-      content: `Signed in: ${signedIn ? 'yes' : 'no'}. Current CV draft: ${JSON.stringify(session.cvDraft)}`,
+      content: [
+        `Signed in: ${signedIn ? 'yes' : 'no'}.`,
+        `CV draft: ${JSON.stringify(session.cvDraft)}`,
+        `Signup draft: ${JSON.stringify(signupForModel)}`,
+        `Event intent: ${JSON.stringify(session.eventIntent)}`,
+        `Pending action: ${JSON.stringify(sanitizePendingAction(session.pendingAction))}`,
+      ].join(' '),
     },
   ];
 
@@ -389,6 +802,11 @@ export async function processSiteChatTurn({
   });
   const parsed = parseModelJson(raw);
   session.cvDraft = mergeCvDraft(session.cvDraft, parsed?.cvDraft || {});
+  session.signupDraft = mergeSignupDraft(session.signupDraft, parsed?.signupDraft || {});
+  session.eventIntent = mergeEventIntent(session.eventIntent, parsed?.eventIntent || {});
+  if (parsed?.pendingAction) {
+    session.pendingAction = fillPendingActionFromSession(session, parsed.pendingAction);
+  }
   const reply = extractSiteAssistantReply(raw, parsed);
   session.messages.push({ role: 'assistant', content: reply });
 
@@ -396,13 +814,12 @@ export async function processSiteChatTurn({
   const wantsSave = Boolean(parsed?.saveCv) || (session.readyToSaveCv && isConfirmIntent(userText));
   session.readyToSaveCv = cvDraftHasContent(session.cvDraft) && missing.length === 0 && (wantsSave || /save (my )?cv|looks good/i.test(userText));
 
-  return {
+  return siteChatTurnResult(session, {
     reply,
-    cvDraft: session.cvDraft,
     readyToSaveCv: session.readyToSaveCv && missing.length === 0,
     saveCv: Boolean(wantsSave && signedIn && missing.length === 0),
     missingCvFields: missing,
-  };
+  });
 }
 
 export function cvDraftToProfileUpdates(draft = {}) {
