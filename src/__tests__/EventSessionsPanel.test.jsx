@@ -107,7 +107,7 @@ describe('EventSessionsPanel', () => {
     await waitFor(() => {
       expect(screen.getByTestId('session-status-counts')).toHaveTextContent('1 passed · 1 upcoming');
     });
-    expect(screen.getByText('passed')).toBeInTheDocument();
-    expect(screen.getByText('upcoming')).toBeInTheDocument();
+    expect(screen.getByText('Passed')).toBeInTheDocument();
+    expect(screen.getByText('Upcoming')).toBeInTheDocument();
   });
 });

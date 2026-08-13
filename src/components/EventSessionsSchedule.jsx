@@ -6,7 +6,9 @@ import {
   getSessionStatus,
   groupSessionsByDate,
   sessionDateKey,
+  useTickingNow,
 } from '../utils/eventSessions';
+import SessionStatusBadge from './SessionStatusBadge';
 
 const API_BASE = getApiBase();
 
@@ -25,37 +27,32 @@ function formatSessionTime(value) {
 
 const STATUS_STYLES = {
   passed: {
-    dot: 'bg-navy-400',
-    card: 'border-navy-200 bg-navy-100/90',
+    dot: 'bg-[#E76869]',
+    card: 'border-[#E76869]/25 bg-[#E76869]/10',
     title: 'text-navy-500',
     time: 'text-navy-400',
-    clock: 'text-navy-400',
-    badge: 'bg-navy-200 text-navy-600',
-    label: 'Passed',
+    clock: 'text-[#E76869]',
   },
-  live: {
-    dot: 'bg-emerald-500',
-    card: 'border-emerald-200 bg-emerald-50/80',
+  in_progress: {
+    dot: 'bg-[#00A79D]',
+    card: 'border-[#00A79D]/30 bg-[#00A79D]/10',
     title: 'text-navy-900',
     time: 'text-navy-500',
-    clock: 'text-emerald-600',
-    badge: 'bg-emerald-100 text-emerald-700',
-    label: 'Live',
+    clock: 'text-[#00A79D]',
   },
   upcoming: {
-    dot: 'bg-cyan-500',
+    dot: 'bg-[#141D45]',
     card: 'border-navy-100 bg-navy-50/60',
     title: 'text-navy-900',
     time: 'text-navy-500',
-    clock: 'text-cyan-600',
-    badge: '',
-    label: '',
+    clock: 'text-[#141D45]',
   },
 };
 
 export default function EventSessionsSchedule({ eventId, event = {}, timeZone }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(Boolean(eventId));
+  const now = useTickingNow();
   const zone = timeZone || event.timezone || 'Africa/Lusaka';
 
   useEffect(() => {
@@ -112,7 +109,7 @@ export default function EventSessionsSchedule({ eventId, event = {}, timeZone })
                 const start = formatSessionTime(session.start_time);
                 const end = formatSessionTime(session.end_time);
                 const timeLabel = [start, end].filter(Boolean).join(' – ');
-                const status = getSessionStatus(session, new Date(), { event, timeZone: zone });
+                const status = getSessionStatus(session, now, { event, timeZone: zone });
                 const style = STATUS_STYLES[status] || STATUS_STYLES.upcoming;
                 return (
                   <li key={session.id} className="relative">
@@ -122,11 +119,7 @@ export default function EventSessionsSchedule({ eventId, event = {}, timeZone })
                         <p className={`font-semibold ${style.title}`}>
                           {session.title || 'Session'}
                         </p>
-                        {style.label ? (
-                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${style.badge}`}>
-                            {style.label}
-                          </span>
-                        ) : null}
+                        <SessionStatusBadge status={status} />
                       </div>
                       {timeLabel ? (
                         <p className={`mt-1 inline-flex items-center gap-1.5 text-xs font-medium ${style.time}`}>

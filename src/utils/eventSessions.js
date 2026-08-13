@@ -1,3 +1,17 @@
+import { useEffect, useState } from 'react';
+
+export const SESSION_STATUS = {
+  upcoming: 'upcoming',
+  in_progress: 'in_progress',
+  passed: 'passed',
+};
+
+export const SESSION_STATUS_META = {
+  upcoming: { key: 'upcoming', label: 'Upcoming', color: '#141D45' },
+  in_progress: { key: 'in_progress', label: 'In Progress', color: '#00A79D' },
+  passed: { key: 'passed', label: 'Passed', color: '#E76869' },
+};
+
 export function sessionDateKey(value) {
   const raw = String(value || '').trim();
   if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
@@ -49,13 +63,15 @@ export function getSessionStatus(session = {}, now = new Date(), options = {}) {
   }
 
   const start = sessionTimeKey(session.start_time) || '00:00';
-  const end = sessionTimeKey(session.end_time) || sessionTimeKey(session.start_time) || '23:59';
+  const eventEnd = sessionTimeKey(event.end_time);
+  const sessionEnd = sessionTimeKey(session.end_time);
+  const end = sessionEnd || (eventEnd && eventEnd > start ? eventEnd : '') || '23:59';
   const startStamp = `${dateKey}T${start}`;
   const endStamp = `${dateKey}T${end}`;
 
-  if (nowStamp > endStamp) return 'passed';
-  if (nowStamp < startStamp) return 'upcoming';
-  return 'live';
+  if (nowStamp > endStamp) return SESSION_STATUS.passed;
+  if (nowStamp < startStamp) return SESSION_STATUS.upcoming;
+  return SESSION_STATUS.in_progress;
 }
 
 export function isSessionPassed(session = {}, now = new Date(), timeZoneOrOptions = 'Africa/Lusaka') {
@@ -66,13 +82,30 @@ export function isSessionPassed(session = {}, now = new Date(), timeZoneOrOption
 }
 
 export function countSessionStatuses(sessions = [], now = new Date(), options = {}) {
-  const counts = { passed: 0, upcoming: 0, live: 0, total: 0 };
+  const counts = { passed: 0, upcoming: 0, in_progress: 0, total: 0 };
   for (const session of Array.isArray(sessions) ? sessions : []) {
     const status = getSessionStatus(session, now, options);
     counts.total += 1;
     if (counts[status] != null) counts[status] += 1;
   }
   return counts;
+}
+
+export function useTickingNow(intervalMs = 15000) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const tick = () => setNow(new Date());
+    const id = window.setInterval(tick, intervalMs);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') tick();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [intervalMs]);
+  return now;
 }
 
 export function groupSessionsByDate(sessions = []) {

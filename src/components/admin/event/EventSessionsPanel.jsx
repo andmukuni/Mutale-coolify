@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { getApiBase } from '../../../utils/apiBase';
 import { getAdminAuthHeaders } from '../../../utils/authHeaders';
-import { countSessionStatuses, getSessionStatus } from '../../../utils/eventSessions';
+import { countSessionStatuses, getSessionStatus, useTickingNow } from '../../../utils/eventSessions';
+import SessionStatusBadge from '../../SessionStatusBadge';
 
 const API_BASE = getApiBase();
 
@@ -35,16 +36,10 @@ function sessionToDraft(session) {
   };
 }
 
-const STATUS_BADGE = {
-  passed: 'bg-navy-200 text-navy-600',
-  live: 'bg-emerald-100 text-emerald-700',
-  upcoming: 'bg-cyan-100 text-cyan-800',
-};
-
 function formatCountLine(counts) {
   const parts = [];
   if (counts.passed) parts.push(`${counts.passed} passed`);
-  if (counts.live) parts.push(`${counts.live} live`);
+  if (counts.in_progress) parts.push(`${counts.in_progress} in progress`);
   if (counts.upcoming) parts.push(`${counts.upcoming} upcoming`);
   if (parts.length === 0) return counts.total ? `${counts.total} sessions` : '';
   return parts.join(' · ');
@@ -57,6 +52,7 @@ export default function EventSessionsPanel({ eventId, event = {} }) {
   const [draft, setDraft] = useState(emptySession());
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState('');
+  const now = useTickingNow();
 
   const loadSessions = useCallback(async () => {
     if (!eventId) return;
@@ -142,8 +138,8 @@ export default function EventSessionsPanel({ eventId, event = {} }) {
 
   const statusOptions = useMemo(() => ({ event }), [event]);
   const counts = useMemo(
-    () => countSessionStatuses(sessions, new Date(), statusOptions),
-    [sessions, statusOptions],
+    () => countSessionStatuses(sessions, now, statusOptions),
+    [sessions, statusOptions, now],
   );
   const countLine = formatCountLine(counts);
 
@@ -176,8 +172,9 @@ export default function EventSessionsPanel({ eventId, event = {} }) {
           {sessions.length === 0 ? (
             <li className="px-4 py-6 text-sm text-navy-500 text-center">No sessions yet.</li>
           ) : sessions.map((session) => {
-            const status = getSessionStatus(session, new Date(), statusOptions);
+            const status = getSessionStatus(session, now, statusOptions);
             const passed = status === 'passed';
+            const inProgress = status === 'in_progress';
             return (
             <li
               key={session.id}
@@ -185,8 +182,10 @@ export default function EventSessionsPanel({ eventId, event = {} }) {
                 editingId === session.id
                   ? 'bg-cyan-50/70'
                   : passed
-                    ? 'bg-navy-100/70'
-                    : 'bg-white'
+                    ? 'bg-[#E76869]/10'
+                    : inProgress
+                      ? 'bg-[#00A79D]/10'
+                      : 'bg-white'
               }`}
             >
               <div>
@@ -194,14 +193,13 @@ export default function EventSessionsPanel({ eventId, event = {} }) {
                   <p className={`text-sm font-medium ${passed ? 'text-navy-500' : 'text-navy-900'}`}>
                     {session.title || `Session ${session.session_date}`}
                   </p>
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${STATUS_BADGE[status]}`}>
-                    {status}
-                  </span>
+                  <SessionStatusBadge status={status} />
                 </div>
                 <p className={`text-xs ${passed ? 'text-navy-400' : 'text-navy-500'}`}>
                   {session.session_date}
                   {session.start_time ? ` · ${String(session.start_time).slice(0, 5)}` : ''}
                   {session.end_time ? ` – ${String(session.end_time).slice(0, 5)}` : ''}
+                  {` · ${event.timezone || 'Africa/Lusaka'}`}
                 </p>
               </div>
               <div className="flex items-center gap-1 shrink-0">

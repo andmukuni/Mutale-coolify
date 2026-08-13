@@ -174,6 +174,7 @@ export default function TicketPage() {
 
             <TicketSessionsPanel
               eventId={ticket.event_id}
+              event={eventInfo}
               registrationId={ticket.registration_id}
               referenceCode={code}
               valid={valid}

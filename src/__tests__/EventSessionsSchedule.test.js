@@ -52,7 +52,7 @@ describe('event session schedule helpers', () => {
     ];
     const afterEvent = new Date('2026-08-12T16:00:00.000Z');
     const counts = countSessionStatuses(sessions, afterEvent, { event });
-    expect(counts).toEqual({ passed: 2, upcoming: 0, live: 0, total: 2 });
+    expect(counts).toEqual({ passed: 2, upcoming: 0, in_progress: 0, total: 2 });
     expect(getSessionStatus(sessions[1], afterEvent, { event })).toBe('passed');
   });
 
@@ -69,7 +69,7 @@ describe('event session schedule helpers', () => {
     expect(getSessionStatus(session, beforeEvent, { event })).toBe('upcoming');
   });
 
-  it('marks a session live while it is in progress', () => {
+  it('marks a session in progress while it is happening in the event timezone', () => {
     const event = {
       start_date: '2026-08-13',
       end_date: '2026-08-13',
@@ -79,6 +79,6 @@ describe('event session schedule helpers', () => {
     };
     const session = { session_date: '2026-08-13', start_time: '20:00', end_time: '21:00' };
     const during = new Date('2026-08-13T18:30:00.000Z');
-    expect(getSessionStatus(session, during, { event })).toBe('live');
+    expect(getSessionStatus(session, during, { event })).toBe('in_progress');
   });
 });
