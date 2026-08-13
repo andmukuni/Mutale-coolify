@@ -346,6 +346,8 @@ async function seedSystemSettings() {
       metaPixelId: process.env.META_PIXEL_ID || '',
       slackWebhook: process.env.SLACK_WEBHOOK || '',
       zapierWebhook: process.env.ZAPIER_WEBHOOK || '',
+      openaiApiKey: process.env.OPENAI_API_KEY || '',
+      openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
     },
   };
 

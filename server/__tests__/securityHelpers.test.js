@@ -57,11 +57,14 @@ describe('maskSystemSettingsSecrets', () => {
       payment: { secretKey: 'sk_live_abc' },
       email: { smtpPassword: 'pw' },
       sms: { accessId: 'ontech-key' },
+      integrations: { openaiApiKey: 'sk-test' },
     });
     expect(masked.payment.secretKey).toBe('••••••••');
     expect(masked.email.smtpPassword).toBe('••••••••');
     expect(masked.sms.accessId).toBe('••••••••');
     expect(masked.sms.accessIdConfigured).toBe(true);
+    expect(masked.integrations.openaiApiKey).toBe('••••••••');
+    expect(masked.integrations.openaiApiKeyConfigured).toBe(true);
   });
 });
 

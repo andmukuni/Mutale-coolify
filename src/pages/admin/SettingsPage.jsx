@@ -133,6 +133,8 @@ const defaultSystemConfig = {
     nrcVerificationEnabled: true,
     smartdataApiKey: '',
     smartdataBaseUrl: 'https://mysmartdata.tech/api/v1',
+    openaiApiKey: '',
+    openaiModel: 'gpt-4o-mini',
   },
   video: {
     defaultProvider: 'zoom',
@@ -1243,6 +1245,23 @@ export default function SettingsPage() {
                 <FormField label="Meta Pixel ID" name="metaPixelId" value={systemForm.integrations.metaPixelId} onChange={(e) => handleSystemChange('integrations', e)} />
                 <FormField label="Slack Webhook URL" name="slackWebhook" value={systemForm.integrations.slackWebhook} onChange={(e) => handleSystemChange('integrations', e)} placeholder="https://hooks.slack.com/services/..." />
                 <FormField label="Zapier Webhook URL" name="zapierWebhook" value={systemForm.integrations.zapierWebhook} onChange={(e) => handleSystemChange('integrations', e)} placeholder="https://hooks.zapier.com/hooks/catch/..." />
+                <FormField
+                  label="OpenAI API Key"
+                  name="openaiApiKey"
+                  type="password"
+                  value={systemForm.integrations.openaiApiKey}
+                  onChange={(e) => handleSystemChange('integrations', e)}
+                  placeholder="sk-..."
+                  helpText="Used by the event creation chatbot on Admin → Events. The saved key stays hidden."
+                />
+                <FormField
+                  label="OpenAI Model"
+                  name="openaiModel"
+                  value={systemForm.integrations.openaiModel}
+                  onChange={(e) => handleSystemChange('integrations', e)}
+                  placeholder="gpt-4o-mini"
+                  helpText="Default gpt-4o-mini. The chatbot uses OpenAI web search for event best practice."
+                />
               </div>
 
               <SaveButton loading={systemSaving} disabled={systemLoading} />

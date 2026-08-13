@@ -120,6 +120,13 @@ import {
   collectEmailSmsRecipients,
   hasExplicitSmsTo,
 } from './emailSmsCompanion.js';
+import {
+  assertDraftReadyToCreate,
+  getOrCreateChatSession,
+  processEventChatTurn,
+  resetChatSession,
+} from './eventChatService.js';
+import { buildPublicEventPageUrl, generateReceiptQrDataUrl } from '../shared/receiptQr.js';
 
 // Load `.env` from the app root (parent of server/), not relying on cwd — cPanel Passenger often starts with cwd ≠ project root.
 const __filename = fileURLToPath(import.meta.url);
@@ -788,6 +795,8 @@ const SYSTEM_SETTINGS_DEFAULTS = {
     nrcVerificationEnabled: process.env.NRC_VERIFICATION_ENABLED !== 'false',
     smartdataApiKey: process.env.SMARTDATA_API_KEY || '',
     smartdataBaseUrl: process.env.SMARTDATA_BASE_URL || 'https://mysmartdata.tech/api/v1',
+    openaiApiKey: process.env.OPENAI_API_KEY || '',
+    openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
   },
   video: {
     defaultProvider: 'zoom',
@@ -1477,6 +1486,13 @@ const rateLimitContactMessages = rateLimitByKey({
   windowMs: 60 * 60_000,
   max: 8,
   getKey: (req) => req.ip || req.connection?.remoteAddress || 'unknown',
+});
+
+const rateLimitEventChat = rateLimitByKey({
+  routeKey: 'event-chat',
+  windowMs: 60_000,
+  max: 20,
+  getKey: (req) => req.adminUser?.sub || req.ip || req.connection?.remoteAddress || 'unknown',
 });
 
 app.use((req, res, next) => {
@@ -6690,6 +6706,162 @@ app.get('/api/users/lookup', async (req, res) => {
     });
   } catch (error) {
     return res.status(500).json({ ok: false, message: 'User lookup failed.', error: error.message });
+  }
+});
+
+function getOpenAIChatConfig(settings = {}) {
+  const integrations = settings?.integrations || {};
+  return {
+    apiKey: String(integrations.openaiApiKey || process.env.OPENAI_API_KEY || '').trim(),
+    model: String(integrations.openaiModel || process.env.OPENAI_MODEL || 'gpt-4o-mini').trim() || 'gpt-4o-mini',
+  };
+}
+
+async function loadEventChatExamples() {
+  try {
+    const [rows] = await pool.query(
+      'SELECT title, category, location, event_mode, is_free, price FROM events ORDER BY created_at DESC LIMIT 5',
+    );
+    return Array.isArray(rows) ? rows : [];
+  } catch {
+    return [];
+  }
+}
+
+app.post('/api/events/chat', rateLimitEventChat, async (req, res) => {
+  try {
+    const sessionId = String(req.body?.sessionId || '').trim();
+    const message = String(req.body?.message || '').trim();
+    if (!sessionId) return res.status(400).json({ ok: false, message: 'sessionId is required.' });
+    if (!message) return res.status(400).json({ ok: false, message: 'Message is required.' });
+
+    const settings = await getSystemSettings();
+    const openai = getOpenAIChatConfig(settings);
+    if (!openai.apiKey) {
+      return res.status(400).json({
+        ok: false,
+        message: 'OpenAI API key is missing. Add it in Admin → Settings → Integrations.',
+      });
+    }
+
+    const adminId = req.adminUser?.sub || req.adminUser?.email || 'admin';
+    const session = getOrCreateChatSession(adminId, sessionId);
+    const exampleEvents = await loadEventChatExamples();
+    const result = await processEventChatTurn({
+      session,
+      userMessage: message,
+      apiKey: openai.apiKey,
+      model: openai.model,
+      exampleEvents,
+    });
+
+    return res.json({ ok: true, data: result });
+  } catch (error) {
+    return res.status(400).json({
+      ok: false,
+      message: error.message || 'Failed to process event chat.',
+    });
+  }
+});
+
+app.post('/api/events/chat/reset', rateLimitEventChat, async (req, res) => {
+  try {
+    const sessionId = String(req.body?.sessionId || '').trim();
+    if (!sessionId) return res.status(400).json({ ok: false, message: 'sessionId is required.' });
+    const adminId = req.adminUser?.sub || req.adminUser?.email || 'admin';
+    const session = resetChatSession(adminId, sessionId);
+    return res.json({
+      ok: true,
+      data: {
+        reply: 'Let us start again. What event would you like to create?',
+        draft: session.draft,
+        missing: [],
+        readyToCreate: false,
+        awaitingConfirm: false,
+      },
+    });
+  } catch (error) {
+    return res.status(400).json({ ok: false, message: error.message || 'Failed to reset chat.' });
+  }
+});
+
+app.post('/api/events/chat/create', rateLimitEventChat, async (req, res) => {
+  try {
+    const sessionId = String(req.body?.sessionId || '').trim();
+    if (!sessionId) return res.status(400).json({ ok: false, message: 'sessionId is required.' });
+
+    const adminId = req.adminUser?.sub || req.adminUser?.email || 'admin';
+    const session = getOrCreateChatSession(adminId, sessionId);
+    const confirmed = session.confirmed || Boolean(req.body?.confirm) && session.awaitingConfirm;
+    if (!confirmed) {
+      return res.status(400).json({
+        ok: false,
+        message: 'Confirm in the chat first, or send confirm: true when the draft is ready.',
+      });
+    }
+
+    let draft;
+    try {
+      draft = assertDraftReadyToCreate(session.draft);
+    } catch (error) {
+      return res.status(400).json({
+        ok: false,
+        message: error.message,
+        missing: error.missing || [],
+      });
+    }
+
+    const incoming = {
+      ...draft,
+      id: generateEntityId('evt'),
+      status: 'draft',
+    };
+    if (incoming.cover_image) {
+      incoming.cover_image = await persistCoverImageIfNeeded(incoming.cover_image, req);
+    }
+
+    const payload = normalizeEventPayload(incoming);
+    if (!payload.title || !payload.slug) {
+      return res.status(400).json({ ok: false, message: 'Title and slug are required.' });
+    }
+
+    const temporalError = validateEventTemporalRules(payload);
+    if (temporalError) {
+      return res.status(400).json({ ok: false, message: temporalError });
+    }
+
+    const placeholders = EVENT_FIELDS.map(() => '?').join(', ');
+    const values = EVENT_FIELDS.map((f) => payload[f]);
+    await pool.query(
+      `INSERT INTO events (${EVENT_FIELDS.join(', ')}) VALUES (${placeholders})`,
+      values,
+    );
+
+    const [[row]] = await pool.query('SELECT * FROM events WHERE id = ?', [payload.id]);
+    const event = mapDbEvent(row);
+    const origin = resolvePublicAppUrl(req);
+    const publicUrl = buildPublicEventPageUrl(event, origin);
+    const adminUrl = `${String(origin || '').replace(/\/$/, '')}/admin/events/${encodeURIComponent(event.id)}`;
+    const qrDataUrl = publicUrl ? await generateReceiptQrDataUrl(publicUrl, { size: 220 }) : '';
+
+    session.confirmed = false;
+    session.awaitingConfirm = false;
+    session.createdEventId = event.id;
+
+    return res.status(201).json({
+      ok: true,
+      data: {
+        event,
+        publicUrl,
+        adminUrl,
+        qrDataUrl,
+      },
+    });
+  } catch (error) {
+    if (error?.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ ok: false, message: 'Slug already exists. Ask the chatbot to adjust the title.' });
+    }
+    return res.status(500).json({ ok: false, message: 'Failed to create event from chat.', error: error.message });
   }
 });
 

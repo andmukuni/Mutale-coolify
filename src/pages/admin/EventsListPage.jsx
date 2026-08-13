@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Plus, Pencil, Trash2, Users, Globe, Lock, CheckCircle, XCircle, Copy, QrCode } from 'lucide-react';
 import EventShareQrModal from '../../components/admin/EventShareQrModal';
+import EventCreateChatFab from '../../components/admin/EventCreateChatFab';
 import { useData } from '../../context/DataContext';
 import { useBooking } from '../../context/BookingContext';
 import { useToast } from '../../context/ToastContext';
@@ -10,7 +11,7 @@ import { formatDate } from '../../utils/helpers';
 import { formatPrice, getEventDisplayStatus, isEventPast, sortEventsByRecentlyCreated } from '../../utils/eventServices';
 
 export default function EventsListPage() {
-  const { events, deleteEvent, updateEvent } = useData();
+  const { events, deleteEvent, updateEvent, refreshData } = useData();
   const { getEventRegistrationCount } = useBooking();
   const toast = useToast();
   const navigate = useNavigate();
@@ -295,6 +296,8 @@ export default function EventsListPage() {
           onClose={() => setQrShareEvent(null)}
         />
       )}
+
+      <EventCreateChatFab onCreated={() => { void refreshData?.(); }} />
 
       <ConfirmDialog
         isOpen={!!deleteTarget}

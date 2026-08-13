@@ -113,6 +113,7 @@ const SECRET_PATHS = [
   ['whatsapp', 'accessToken'],
   ['whatsapp', 'greenApiToken'],
   ['integrations', 'smartdataApiKey'],
+  ['integrations', 'openaiApiKey'],
   ['integrations', 'slackWebhook'],
   ['zoom', 'clientSecret'],
   ['zoom', 'sdkSecret'],
