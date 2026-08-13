@@ -36,4 +36,11 @@ describe('chatMarkdown', () => {
     expect(html).toContain('<strong>safe</strong>');
     expect(html).not.toContain('<script>');
   });
+
+  it('turns markdown links into safe anchors', () => {
+    const html = chatMarkdownToHtml('Open [My CV](/account/cv) or [the site](https://mutalemubanga.org).');
+    expect(html).toContain('href="/account/cv"');
+    expect(html).toContain('href="https://mutalemubanga.org/"');
+    expect(chatMarkdownToHtml('[x](javascript:alert(1))')).not.toContain('javascript:');
+  });
 });

@@ -16,6 +16,16 @@ import {
 } from './certificateService.js';
 import { processEventLifecycleNotifications } from './eventLifecycleNotifications.js';
 import {
+  cvDraftHasContent,
+  cvDraftToProfileUpdates,
+  exportSiteChatSession,
+  getOrCreateSiteChatSession,
+  importSiteChatSession,
+  mergeCvDraft,
+  processSiteChatTurn,
+  resetSiteChatSession,
+} from './siteChatService.js';
+import {
   getTemplateForEvent,
   activateOrCreateTemplate,
   saveTemplateDraft,
@@ -1502,6 +1512,13 @@ const rateLimitEventChat = rateLimitByKey({
   windowMs: 60_000,
   max: 20,
   getKey: (req) => req.adminUser?.sub || req.ip || req.connection?.remoteAddress || 'unknown',
+});
+
+const rateLimitSiteChat = rateLimitByKey({
+  routeKey: 'site-chat',
+  windowMs: 60_000,
+  max: 20,
+  getKey: (req) => req.ip || req.connection?.remoteAddress || 'unknown',
 });
 
 app.use((req, res, next) => {
@@ -5105,6 +5122,18 @@ async function ensureSchema() {
     )
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS site_chat_sessions (
+      id VARCHAR(191) PRIMARY KEY,
+      session_id VARCHAR(191) NOT NULL,
+      visitor_id VARCHAR(191) NOT NULL DEFAULT 'guest',
+      data JSON,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_site_chat_session (session_id),
+      INDEX idx_site_chat_updated (updated_at)
+    )
+  `);
+
   // Backward-compatible migration: ensure every column this app expects exists
   // on the users table, even if the table was created by another project on the
   // same database with a different schema. ER_DUP_FIELDNAME = already exists, safe to ignore.
@@ -7039,6 +7068,288 @@ app.post('/api/events/chat/create', rateLimitEventChat, async (req, res) => {
       return res.status(409).json({ ok: false, message: 'Slug already exists. Ask the chatbot to adjust the title.' });
     }
     return res.status(500).json({ ok: false, message: 'Failed to create event from chat.', error: error.message });
+  }
+});
+
+async function loadSiteChatEvents() {
+  try {
+    const [rows] = await pool.query(
+      `SELECT title, slug, category, location, venue, event_mode, is_free, price,
+              start_date, end_date, start_time, short_description, status, visibility
+       FROM events
+       ORDER BY start_date ASC`,
+    );
+    return (Array.isArray(rows) ? rows : [])
+      .filter((row) => isEventPubliclyVisible(row))
+      .slice(0, 24)
+      .map((row) => ({
+        title: row.title,
+        slug: row.slug,
+        category: row.category || '',
+        location: row.location || '',
+        venue: row.venue || '',
+        event_mode: row.event_mode || '',
+        is_free: Boolean(row.is_free),
+        price: row.price,
+        start_date: row.start_date,
+        end_date: row.end_date,
+        start_time: row.start_time,
+        short_description: String(row.short_description || '').slice(0, 280),
+      }));
+  } catch {
+    return [];
+  }
+}
+
+async function loadSiteChatBooks() {
+  try {
+    const [rows] = await pool.query(
+      `SELECT title, slug, author, price, currency, product_type
+       FROM books
+       WHERE is_published = 1
+       ORDER BY title ASC
+       LIMIT 24`,
+    );
+    return (Array.isArray(rows) ? rows : []).map((row) => ({
+      title: row.title,
+      slug: row.slug,
+      author: row.author || '',
+      price: row.price,
+      currency: row.currency || 'ZMW',
+      product_type: row.product_type || 'book',
+    }));
+  } catch {
+    return [];
+  }
+}
+
+async function loadSiteChatUserContext(userId) {
+  const id = String(userId || '').trim();
+  if (!id) return null;
+  try {
+    const [[user]] = await pool.query('SELECT * FROM users WHERE id = ? LIMIT 1', [id]);
+    if (!user) return null;
+    const [regs] = await pool.query(
+      `SELECT reference_code, status, payment_status, registered_at, event_title, event_slug
+       FROM event_registrations
+       WHERE user_id = ? AND status <> 'cancelled'
+       ORDER BY registered_at DESC
+       LIMIT 20`,
+      [id],
+    );
+    const specialtiesRaw = user.specialties;
+    return {
+      name: user.name || '',
+      email: user.email || '',
+      profession: user.profession || '',
+      organization: user.organization || '',
+      about: String(user.about || '').slice(0, 600),
+      specialties: specialtiesRaw
+        ? (Array.isArray(specialtiesRaw)
+          ? specialtiesRaw
+          : String(specialtiesRaw).split(',').map((item) => item.trim()).filter(Boolean))
+        : [],
+      portfolio_url: user.portfolio_url || '',
+      linkedin_url: user.linkedin_url || '',
+      cv_unlocked: Boolean(user.cv_unlocked_at),
+      cv_sections: parseCvSectionsFromDb(user.cv_sections),
+      registrations: (Array.isArray(regs) ? regs : []).map((row) => ({
+        event: row.event_title || '',
+        slug: row.event_slug || '',
+        ticket: row.reference_code || '',
+        status: row.status || '',
+        payment_status: row.payment_status || '',
+        registered_at: row.registered_at,
+      })),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function loadPersistedSiteChatSession(visitorId, sessionId) {
+  const existing = getOrCreateSiteChatSession(visitorId, sessionId);
+  if (existing.messages.length) return existing;
+  try {
+    const [[row]] = await pool.query(
+      'SELECT data FROM site_chat_sessions WHERE session_id = ? LIMIT 1',
+      [sessionId],
+    );
+    if (row?.data) {
+      return importSiteChatSession(visitorId, sessionId, parseJsonColumn(row.data, {}));
+    }
+  } catch {
+    // table may not exist yet on a rolling deploy
+  }
+  return existing;
+}
+
+async function savePersistedSiteChatSession(visitorId, sessionId, session) {
+  try {
+    await pool.query(
+      `INSERT INTO site_chat_sessions (id, session_id, visitor_id, data, updated_at)
+       VALUES (?, ?, ?, ?, NOW())
+       ON DUPLICATE KEY UPDATE visitor_id = VALUES(visitor_id), data = VALUES(data), updated_at = NOW()`,
+      [
+        String(sessionId || '').trim(),
+        sessionId,
+        visitorId,
+        JSON.stringify(exportSiteChatSession(session)),
+      ],
+    );
+  } catch (error) {
+    console.warn('site chat session persist failed:', error.message);
+  }
+}
+
+function resolveSiteChatVisitor(req) {
+  const auth = getJwtAuth(req);
+  if (auth.ok && auth.claims?.sub) {
+    return { signedIn: true, visitorId: String(auth.claims.sub), userId: String(auth.claims.sub) };
+  }
+  return { signedIn: false, visitorId: 'guest', userId: '' };
+}
+
+app.get('/api/site-chat/session', rateLimitSiteChat, async (req, res) => {
+  try {
+    const sessionId = String(req.query?.sessionId || '').trim();
+    if (!sessionId) return res.status(400).json({ ok: false, message: 'sessionId is required.' });
+    const { visitorId } = resolveSiteChatVisitor(req);
+    const session = await loadPersistedSiteChatSession(visitorId, sessionId);
+    return res.json({ ok: true, data: exportSiteChatSession(session) });
+  } catch (error) {
+    return res.status(400).json({ ok: false, message: error.message || 'Failed to load chat.' });
+  }
+});
+
+app.post('/api/site-chat', rateLimitSiteChat, async (req, res) => {
+  try {
+    const sessionId = String(req.body?.sessionId || '').trim();
+    const message = String(req.body?.message || '').trim();
+    if (!sessionId) return res.status(400).json({ ok: false, message: 'sessionId is required.' });
+    if (!message) return res.status(400).json({ ok: false, message: 'message is required.' });
+
+    const settings = await getSystemSettings();
+    const openai = getOpenAIChatConfig(settings);
+    if (!openai.apiKey) {
+      return res.status(400).json({
+        ok: false,
+        message: 'The site assistant is not configured yet. Please try again later.',
+      });
+    }
+
+    const { signedIn, visitorId, userId } = resolveSiteChatVisitor(req);
+    const session = await loadPersistedSiteChatSession(visitorId, sessionId);
+    const [events, books, user] = await Promise.all([
+      loadSiteChatEvents(),
+      loadSiteChatBooks(),
+      signedIn ? loadSiteChatUserContext(userId) : Promise.resolve(null),
+    ]);
+    if (user && !cvDraftHasContent(session.cvDraft)) {
+      session.cvDraft = mergeCvDraft(session.cvDraft, {
+        name: user.name,
+        profession: user.profession,
+        organization: user.organization,
+        about: user.about,
+        specialties: user.specialties,
+        portfolio_url: user.portfolio_url,
+        linkedin_url: user.linkedin_url,
+        ...(user.cv_sections || {}),
+      });
+    }
+
+    const result = await processSiteChatTurn({
+      visitorId,
+      sessionId,
+      message,
+      cvDraft: req.body?.cvDraft,
+      signedIn,
+      openai,
+      toolContext: { events, books, user },
+    });
+    await savePersistedSiteChatSession(visitorId, sessionId, session);
+
+    return res.json({ ok: true, data: result });
+  } catch (error) {
+    return res.status(400).json({
+      ok: false,
+      message: error.message || 'Failed to process chat.',
+    });
+  }
+});
+
+app.post('/api/site-chat/reset', rateLimitSiteChat, async (req, res) => {
+  try {
+    const sessionId = String(req.body?.sessionId || '').trim();
+    if (!sessionId) return res.status(400).json({ ok: false, message: 'sessionId is required.' });
+    const { visitorId } = resolveSiteChatVisitor(req);
+    resetSiteChatSession(visitorId, sessionId);
+    try {
+      await pool.query('DELETE FROM site_chat_sessions WHERE session_id = ?', [sessionId]);
+    } catch {
+      // table may not exist yet
+    }
+    return res.json({
+      ok: true,
+      data: {
+        reply: 'Fresh start. How can I help?',
+        cvDraft: {},
+        readyToSaveCv: false,
+        saveCv: false,
+      },
+    });
+  } catch (error) {
+    return res.status(400).json({ ok: false, message: error.message || 'Failed to reset chat.' });
+  }
+});
+
+app.post('/api/site-chat/save-cv', rateLimitSiteChat, async (req, res) => {
+  try {
+    const auth = getJwtAuth(req);
+    if (!auth.ok) return sendAuthFailure(res, auth);
+
+    const sessionId = String(req.body?.sessionId || '').trim();
+    if (!sessionId) return res.status(400).json({ ok: false, message: 'sessionId is required.' });
+
+    const visitorId = String(auth.claims.sub);
+    const session = await loadPersistedSiteChatSession(visitorId, sessionId);
+    if (req.body?.cvDraft && typeof req.body.cvDraft === 'object') {
+      session.cvDraft = mergeCvDraft(session.cvDraft, req.body.cvDraft);
+    }
+
+    const fields = cvDraftToProfileUpdates(session.cvDraft);
+    if (!String(fields.name || '').trim() || !String(fields.profession || '').trim()) {
+      return res.status(400).json({
+        ok: false,
+        message: 'Add at least your name and profession before saving the CV.',
+      });
+    }
+
+    await ensureCvSectionsColumn();
+    const updates = {
+      name: fields.name,
+      profession: fields.profession,
+      organization: fields.organization || '',
+      about: fields.about || '',
+      specialties: Array.isArray(fields.specialties) ? fields.specialties.join(',') : String(fields.specialties || ''),
+      portfolio_url: fields.portfolio_url || '',
+      linkedin_url: fields.linkedin_url || '',
+      cv_sections: JSON.stringify(normalizeCvSections(fields.cv_sections)),
+    };
+    const setClauses = Object.keys(updates).map((key) => `${key} = ?`).join(', ');
+    await pool.query(`UPDATE users SET ${setClauses} WHERE id = ?`, [...Object.values(updates), visitorId]);
+
+    const [[user]] = await pool.query('SELECT * FROM users WHERE id = ?', [visitorId]);
+    if (!user) return res.status(404).json({ ok: false, message: 'User not found.' });
+
+    invalidateCvSuggestionsCache(visitorId);
+    session.readyToSaveCv = false;
+    await savePersistedSiteChatSession(visitorId, sessionId, session);
+
+    return res.json({ ok: true, data: { user: mapAuthSessionUser(user, req) } });
+  } catch (error) {
+    console.error('[site-chat/save-cv]', error.message);
+    return res.status(500).json({ ok: false, message: 'Failed to save the CV.' });
   }
 });
 

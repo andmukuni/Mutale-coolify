@@ -4,8 +4,8 @@
  */
 
 export const CHAT_MARKDOWN_SANITIZE = {
-  ALLOWED_TAGS: ['p', 'strong', 'em', 'br', 'ul', 'ol', 'li', 'h3'],
-  ALLOWED_ATTR: [],
+  ALLOWED_TAGS: ['p', 'strong', 'em', 'br', 'ul', 'ol', 'li', 'h3', 'a'],
+  ALLOWED_ATTR: ['href', 'target', 'rel'],
 };
 
 function escapeHtml(text) {
@@ -16,8 +16,28 @@ function escapeHtml(text) {
     .replace(/"/g, '&quot;');
 }
 
+function safeChatHref(href) {
+  const value = String(href || '').trim();
+  if (value.startsWith('/') && !value.startsWith('//')) return value;
+  try {
+    const url = new URL(value);
+    if (url.protocol === 'https:' || url.protocol === 'http:') return url.href;
+  } catch {
+    // ignore
+  }
+  return '';
+}
+
 function inlineMarkdownToHtml(text) {
   return escapeHtml(text)
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, label, href) => {
+      const safe = safeChatHref(href.replace(/&amp;/g, '&'));
+      if (!safe) return label;
+      const attrs = /^https?:\/\//i.test(safe)
+        ? ` href="${escapeHtml(safe)}" target="_blank" rel="noopener noreferrer"`
+        : ` href="${escapeHtml(safe)}"`;
+      return `<a${attrs}>${label}</a>`;
+    })
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
 }

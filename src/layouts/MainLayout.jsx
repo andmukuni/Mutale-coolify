@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import ScrollToTop from '../components/ScrollToTop';
+import SiteAssistantFab from '../components/SiteAssistantFab';
 import { MenuProvider } from '../context/MenuContext';
 
 export default function MainLayout() {
@@ -38,6 +39,7 @@ export default function MainLayout() {
           <Outlet />
         </main>
         <Footer />
+        <SiteAssistantFab />
       </div>
     </MenuProvider>
   );
