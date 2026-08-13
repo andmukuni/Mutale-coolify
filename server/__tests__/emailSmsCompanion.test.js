@@ -38,6 +38,7 @@ describe('email SMS companion', () => {
     expect(shouldCopyAdminOnEmail({ kind: 'auth' })).toBe(false);
     expect(shouldCopyAdminOnEmail({ kind: 'access_code' })).toBe(false);
     expect(shouldCopyAdminOnEmail({ kind: 'test' })).toBe(false);
+    expect(shouldCopyAdminOnEmail({ kind: 'event_reminder' })).toBe(false);
     expect(shouldCopyAdminOnEmail({ kind: 'registration' })).toBe(true);
     expect(shouldCopyAdminOnEmail({ kind: 'receipt' })).toBe(true);
     expect(shouldCopyAdminOnEmail({})).toBe(true);

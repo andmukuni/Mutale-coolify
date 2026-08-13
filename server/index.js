@@ -14,6 +14,7 @@ import {
   sendCertificateEmailForRow,
   ensureCertificatePdfOnDisk,
 } from './certificateService.js';
+import { processEventLifecycleNotifications } from './eventLifecycleNotifications.js';
 import {
   getTemplateForEvent,
   activateOrCreateTemplate,
@@ -4666,6 +4667,22 @@ async function ensureSchema() {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       UNIQUE KEY uq_event_coupons_event_code (event_id, code),
       INDEX idx_event_coupons_event (event_id)
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS event_lifecycle_notifications (
+      id VARCHAR(90) PRIMARY KEY,
+      event_id VARCHAR(90) NOT NULL,
+      registration_id VARCHAR(90) NOT NULL,
+      kind VARCHAR(20) NOT NULL,
+      email_status VARCHAR(20) NOT NULL DEFAULT 'pending',
+      sms_status VARCHAR(20) NULL,
+      sent_at DATETIME NULL,
+      error TEXT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_lifecycle_reg_kind (registration_id, kind),
+      INDEX idx_lifecycle_event (event_id, kind)
     )
   `);
 
@@ -13444,6 +13461,24 @@ async function runCertificateJob() {
   }
 }
 
+let isProcessingEventLifecycle = false;
+
+async function runEventLifecycleJob() {
+  if (isProcessingEventLifecycle) return;
+  isProcessingEventLifecycle = true;
+  try {
+    const summary = await processEventLifecycleNotifications(pool, {
+      getSystemSettings,
+      sendEmailNotification,
+    });
+    console.log('[event-lifecycle] scheduled job:', summary);
+  } catch (error) {
+    console.error('[event-lifecycle] scheduled job failed:', error.message);
+  } finally {
+    isProcessingEventLifecycle = false;
+  }
+}
+
 function canAccessCertificate(req, cert) {
   const adminAuth = getAdminAuth(req);
   if (adminAuth.ok) return true;
@@ -14124,6 +14159,8 @@ ensureSchema()
   .then(() => {
     setTimeout(() => { void runCertificateJob(); }, 30_000);
     setInterval(() => { void runCertificateJob(); }, 60 * 60 * 1000);
+    setTimeout(() => { void runEventLifecycleJob(); }, 20_000);
+    setInterval(() => { void runEventLifecycleJob(); }, 5 * 60 * 1000);
     startHttpServer();
   })
   .catch((error) => {

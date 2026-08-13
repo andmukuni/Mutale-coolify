@@ -2,7 +2,7 @@ import { normalizeZambianSmsPhone } from './ontechSmsClient.js';
 
 export const SMS_MAX_LENGTH = 480;
 
-const SECRET_EMAIL_KINDS = new Set(['auth', 'access_code', 'test']);
+const SECRET_EMAIL_KINDS = new Set(['auth', 'access_code', 'test', 'event_reminder']);
 
 export function truncateSms(message = '', maxLength = SMS_MAX_LENGTH) {
   const text = String(message || '').trim();

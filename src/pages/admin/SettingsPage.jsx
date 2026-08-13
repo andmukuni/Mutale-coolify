@@ -1080,7 +1080,7 @@ export default function SettingsPage() {
               </div>
               <div className="grid sm:grid-cols-2 gap-4">
                 <BooleanField label="Email on new registration" name="emailOnNewRegistration" checked={systemForm.notifications.emailOnNewRegistration} onChange={(e) => handleSystemChange('notifications', e)} />
-                <BooleanField label="Email event reminders" name="emailOnEventReminder" checked={systemForm.notifications.emailOnEventReminder} onChange={(e) => handleSystemChange('notifications', e)} />
+                <BooleanField label="Email & SMS when an event starts or ends" name="emailOnEventReminder" checked={systemForm.notifications.emailOnEventReminder} onChange={(e) => handleSystemChange('notifications', e)} />
                 <BooleanField label="SMS on new registration" name="smsOnNewRegistration" checked={systemForm.notifications.smsOnNewRegistration} onChange={(e) => handleSystemChange('notifications', e)} />
                 <BooleanField label="WhatsApp on new registration" name="whatsappOnNewRegistration" checked={systemForm.notifications.whatsappOnNewRegistration} onChange={(e) => handleSystemChange('notifications', e)} />
                 <BooleanField label="WhatsApp client after event registration" name="whatsappClientOnRegistration" checked={systemForm.notifications.whatsappClientOnRegistration} onChange={(e) => handleSystemChange('notifications', e)} />
