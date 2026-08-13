@@ -266,8 +266,13 @@ export default function EventCreateChatPanel({ onClose, onCreated }) {
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return;
+                e.preventDefault();
+                sendMessage(input);
+              }}
               rows={2}
-              placeholder="Type a reply…"
+              placeholder="Type a reply… Enter to send"
               className="min-h-[44px] flex-1 resize-none rounded-xl border border-navy-200 bg-navy-50 px-3 py-2 text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500"
             />
             <LoadingButton
