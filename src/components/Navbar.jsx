@@ -392,9 +392,16 @@ function AccountMenu({ user, profilePhotoUrl, accountOpen, setAccountOpen, onLog
   );
 }
 
-const SCROLL_COMPACT_THRESHOLD = 24;
+const HEADER_EXPAND_AT = 8;
+const HEADER_COMPACT_EXTRA = 48;
 const MOBILE_COMPACT_BAR_HEIGHT = 52;
-const HEADER_COLLAPSE_MS = 220;
+
+export function nextHeaderCompactState(isCompact, scrollY, collapseHeight = 120) {
+  const y = Number(scrollY) || 0;
+  const compactAt = Math.max((Number(collapseHeight) || 0) + HEADER_COMPACT_EXTRA, 96);
+  if (isCompact) return y > HEADER_EXPAND_AT;
+  return y > compactAt;
+}
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
@@ -404,6 +411,8 @@ export default function Navbar() {
   const [topBlockHeight, setTopBlockHeight] = useState(0);
   const isScrolledRef = useRef(false);
   const topBlockRef = useRef(null);
+  const topInnerRef = useRef(null);
+  const topBlockHeightRef = useRef(0);
   const scrollRafRef = useRef(0);
   const { mainNavLinks: navLinks } = useSiteMenu();
   const { currentUser: user, userLogout } = useUserAuth();
@@ -435,20 +444,34 @@ export default function Navbar() {
 
   useLayoutEffect(() => {
     const measureTopBlock = () => {
-      const node = topBlockRef.current;
+      const node = topInnerRef.current || topBlockRef.current;
       if (!node) return;
-      setTopBlockHeight(node.scrollHeight);
+      const nextHeight = node.scrollHeight;
+      if (nextHeight <= 0) return;
+      topBlockHeightRef.current = nextHeight;
+      setTopBlockHeight(nextHeight);
     };
 
     measureTopBlock();
+    const observer = typeof ResizeObserver === 'function'
+      ? new ResizeObserver(measureTopBlock)
+      : null;
+    if (observer && topInnerRef.current) observer.observe(topInnerRef.current);
     window.addEventListener('resize', measureTopBlock, { passive: true });
-    return () => window.removeEventListener('resize', measureTopBlock);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', measureTopBlock);
+    };
   }, []);
 
   useEffect(() => {
     const updateScrolled = () => {
       scrollRafRef.current = 0;
-      const next = window.scrollY > SCROLL_COMPACT_THRESHOLD;
+      const next = nextHeaderCompactState(
+        isScrolledRef.current,
+        window.scrollY,
+        topBlockHeightRef.current,
+      );
       if (next !== isScrolledRef.current) {
         isScrolledRef.current = next;
         setIsScrolled(next);
@@ -471,8 +494,9 @@ export default function Navbar() {
   }, []);
 
   useEffect(() => {
-    isScrolledRef.current = false;
-    setIsScrolled(false);
+    const next = nextHeaderCompactState(false, window.scrollY, topBlockHeightRef.current);
+    isScrolledRef.current = next;
+    setIsScrolled(next);
   }, [location.pathname]);
 
   const handleLogout = () => {
@@ -503,32 +527,24 @@ export default function Navbar() {
     <header className="theme-fixed sticky top-0 z-50 shadow-md bg-navy-800">
       <div
         ref={topBlockRef}
-        className={`bg-navy-900 overflow-hidden will-change-[height] motion-reduce:transition-none${collapseTop ? ' pointer-events-none' : ''}`}
-        style={{
-          ...topSectionStyle,
-          transitionProperty: topBlockHeight > 0 ? 'height' : undefined,
-          transitionDuration: topBlockHeight > 0 ? `${HEADER_COLLAPSE_MS}ms` : undefined,
-          transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
-        }}
+        className={`bg-navy-900 overflow-hidden${collapseTop ? ' pointer-events-none' : ''}`}
+        style={topSectionStyle}
         aria-hidden={collapseTop}
       >
-        <HeaderUtilityBar />
-        <HeaderBrandBar
-          onMenuToggle={() => setOpen(!open)}
-          menuOpen={open}
-          showMobileActions
-          cartSlot={mobileCart}
-        />
+        <div ref={topInnerRef}>
+          <HeaderUtilityBar />
+          <HeaderBrandBar
+            onMenuToggle={() => setOpen(!open)}
+            menuOpen={open}
+            showMobileActions
+            cartSlot={mobileCart}
+          />
+        </div>
       </div>
 
       <div
-        className={`md:hidden theme-fixed bg-navy-900 border-b border-navy-800/80 overflow-hidden will-change-[height] motion-reduce:transition-none${isScrolled ? '' : ' pointer-events-none'}`}
-        style={{
-          height: isScrolled ? MOBILE_COMPACT_BAR_HEIGHT : 0,
-          transitionProperty: 'height',
-          transitionDuration: `${HEADER_COLLAPSE_MS}ms`,
-          transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
-        }}
+        className={`md:hidden theme-fixed bg-navy-900 border-b border-navy-800/80 overflow-hidden${isScrolled ? '' : ' pointer-events-none'}`}
+        style={{ height: isScrolled ? MOBILE_COMPACT_BAR_HEIGHT : 0 }}
         aria-hidden={!isScrolled}
       >
         <div className={`${containerClass} flex items-center justify-between gap-3 py-2`}>
