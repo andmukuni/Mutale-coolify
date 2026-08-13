@@ -8,12 +8,6 @@ import SessionStatusBadge from './SessionStatusBadge';
 
 const API_BASE = getApiBase();
 
-const CARD_TONE = {
-  passed: 'border-[#E76869]/25 bg-[#E76869]/10',
-  in_progress: 'session-card-live border-[#00A79D]/60',
-  upcoming: 'border-navy-50 bg-white',
-};
-
 export default function TicketSessionsPanel({
   eventId,
   event = {},
@@ -91,25 +85,19 @@ export default function TicketSessionsPanel({
       <ul className="space-y-2">
         {sessions.map((session) => {
           const status = getSessionStatus(session, now, { event });
-          const passed = status === 'passed';
-          const inProgress = status === 'in_progress';
           return (
           <li
             key={session.id}
-            className={`flex items-center justify-between gap-3 text-sm border rounded-lg px-3 py-2 ${CARD_TONE[status] || CARD_TONE.upcoming}`}
+            className="flex items-center justify-between gap-3 text-sm border border-navy-50 rounded-lg px-3 py-2"
           >
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <p className={`font-medium ${
-                  inProgress ? 'text-white' : passed ? 'text-navy-500' : 'text-navy-800'
-                }`}>
+                <p className="font-medium text-navy-800">
                   {session.title || session.session_date}
                 </p>
                 <SessionStatusBadge status={status} />
               </div>
-              <p className={`text-xs ${
-                inProgress ? 'text-white/70' : passed ? 'text-navy-400' : 'text-navy-500'
-              }`}>
+              <p className="text-xs text-navy-500">
                 {session.session_date}
                 {session.start_time ? ` · ${String(session.start_time).slice(0, 5)}` : ''}
                 {session.end_time ? ` – ${String(session.end_time).slice(0, 5)}` : ''}
@@ -121,9 +109,7 @@ export default function TicketSessionsPanel({
                 type="button"
                 onClick={() => handleJoin(session.id)}
                 disabled={joiningId === session.id}
-                className={`inline-flex items-center gap-1 text-xs font-medium disabled:opacity-50 ${
-                  inProgress ? 'text-[#7ee8e0] hover:text-white' : 'text-cyan-700 hover:text-cyan-600'
-                }`}
+                className="inline-flex items-center gap-1 text-xs font-medium text-cyan-700 hover:text-cyan-600 disabled:opacity-50"
               >
                 {joiningId === session.id ? <Loader2 size={14} className="animate-spin" /> : <ExternalLink size={14} />}
                 Join

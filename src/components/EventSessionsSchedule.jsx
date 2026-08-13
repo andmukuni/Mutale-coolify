@@ -25,30 +25,6 @@ function formatSessionTime(value) {
   return match ? formatTime(match[1]) : '';
 }
 
-const STATUS_STYLES = {
-  passed: {
-    dot: 'bg-[#E76869]',
-    card: 'border-[#E76869]/25 bg-[#E76869]/10',
-    title: 'text-navy-500',
-    time: 'text-navy-400',
-    clock: 'text-[#E76869]',
-  },
-  in_progress: {
-    dot: 'session-live-dot bg-[#00A79D]',
-    card: 'session-card-live border-[#00A79D]/60',
-    title: 'text-white',
-    time: 'text-white/70',
-    clock: 'text-[#7ee8e0]',
-  },
-  upcoming: {
-    dot: 'bg-[#141D45]',
-    card: 'border-navy-100 bg-navy-50/60',
-    title: 'text-navy-900',
-    time: 'text-navy-500',
-    clock: 'text-[#141D45]',
-  },
-};
-
 export default function EventSessionsSchedule({ eventId, event = {}, timeZone }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(Boolean(eventId));
@@ -79,9 +55,6 @@ export default function EventSessionsSchedule({ eventId, event = {}, timeZone })
   if (!eventId || loading || sessions.length === 0) return null;
 
   const days = groupSessionsByDate(sessions);
-  const hasLive = sessions.some((session) => (
-    getSessionStatus(session, now, { event, timeZone: zone }) === 'in_progress'
-  ));
 
   return (
     <div className="bg-white rounded-2xl border border-navy-100 p-6 sm:p-8 shadow-sm">
@@ -113,20 +86,19 @@ export default function EventSessionsSchedule({ eventId, event = {}, timeZone })
                 const end = formatSessionTime(session.end_time);
                 const timeLabel = [start, end].filter(Boolean).join(' – ');
                 const status = getSessionStatus(session, now, { event, timeZone: zone });
-                const style = STATUS_STYLES[status] || STATUS_STYLES.upcoming;
                 return (
-                  <li key={session.id} className={`relative ${hasLive && status !== 'in_progress' ? 'opacity-55' : ''}`}>
-                    <span className={`absolute -left-[27px] top-3.5 h-2.5 w-2.5 rounded-full border-2 border-white shadow-sm ${style.dot}`} />
-                    <div className={`rounded-xl border px-4 py-3 ${style.card}`}>
+                  <li key={session.id} className="relative">
+                    <span className="absolute -left-[27px] top-3.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-cyan-500 shadow-sm" />
+                    <div className="rounded-xl border border-navy-100 bg-navy-50/60 px-4 py-3">
                       <div className="flex items-start justify-between gap-3">
-                        <p className={`font-semibold ${style.title}`}>
+                        <p className="font-semibold text-navy-900">
                           {session.title || 'Session'}
                         </p>
                         <SessionStatusBadge status={status} />
                       </div>
                       {timeLabel ? (
-                        <p className={`mt-1 inline-flex items-center gap-1.5 text-xs font-medium ${style.time}`}>
-                          <Clock size={12} className={style.clock} />
+                        <p className="mt-1 inline-flex items-center gap-1.5 text-xs font-medium text-navy-500">
+                          <Clock size={12} className="text-cyan-600" />
                           {timeLabel}
                         </p>
                       ) : null}
