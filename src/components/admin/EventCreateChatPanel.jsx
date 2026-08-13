@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import DOMPurify from 'dompurify';
 import { Download, ExternalLink, RotateCcw, Send, Sparkles, X } from 'lucide-react';
 import { getApiBase } from '../../utils/apiBase';
 import { getAdminAuthHeaders } from '../../utils/authHeaders';
 import { useToast } from '../../context/ToastContext';
+import { chatMarkdownToHtml, CHAT_MARKDOWN_SANITIZE } from '../../utils/chatMarkdown';
 import { LoadingButton } from '../ui';
 
 const API_BASE = getApiBase();
@@ -107,6 +109,16 @@ function clearStoredChat() {
   } catch {
     // ignore
   }
+}
+
+function AssistantMarkdown({ content }) {
+  const html = DOMPurify.sanitize(chatMarkdownToHtml(content), CHAT_MARKDOWN_SANITIZE);
+  return (
+    <div
+      className="[&_p]:mb-2.5 [&_p:last-child]:mb-0 [&_strong]:font-semibold [&_strong]:text-navy-900 [&_em]:italic [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-4 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-4 [&_li]:mb-1.5 [&_h3]:mb-1 [&_h3]:mt-2 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:text-navy-900"
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
 }
 
 export default function EventCreateChatPanel({ onClose, onCreated, open = true }) {
@@ -326,11 +338,11 @@ export default function EventCreateChatPanel({ onClose, onCreated, open = true }
               key={`${item.role}-${index}`}
               className={`max-w-[90%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
                 item.role === 'user'
-                  ? 'ml-auto bg-cyan-600 text-white'
+                  ? 'ml-auto whitespace-pre-wrap bg-cyan-600 text-white'
                   : 'bg-navy-50 text-navy-800'
               }`}
             >
-              {item.content}
+              {item.role === 'assistant' ? <AssistantMarkdown content={item.content} /> : item.content}
             </div>
           ))}
 

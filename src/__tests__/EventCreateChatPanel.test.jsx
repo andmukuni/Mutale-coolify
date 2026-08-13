@@ -98,6 +98,35 @@ describe('EventCreateChatPanel', () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
+  it('renders assistant markdown as bold instead of asterisks', async () => {
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (String(url).includes('/events/chat/session')) {
+        return Promise.resolve(jsonResponse(null));
+      }
+      return Promise.resolve(jsonResponse({
+        reply: '**Title:** CV Masterclass **Format:** Virtual',
+        draft: { title: 'CV Masterclass' },
+        readyToCreate: false,
+      }));
+    });
+
+    render(
+      <MemoryRouter>
+        <EventCreateChatPanel onClose={() => {}} />
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText(/describe the event/i), {
+      target: { value: 'CV masterclass' },
+    });
+    fireEvent.click(screen.getByLabelText('Send'));
+
+    const titleLabel = await screen.findByText('Title:');
+    expect(titleLabel.tagName).toBe('STRONG');
+    expect(screen.getByText('Format:').tagName).toBe('STRONG');
+    expect(screen.queryByText(/\*\*Title:\*\*/)).not.toBeInTheDocument();
+  });
+
   it('keeps the previous chat when the panel is reopened', () => {
     window.localStorage.setItem('mutale.eventCreateChat.v1', JSON.stringify({
       sessionId: 'sess-restore',

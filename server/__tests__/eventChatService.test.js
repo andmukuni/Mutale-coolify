@@ -375,6 +375,7 @@ describe('event chat research tools', () => {
     expect(prompt).toContain(EVENT_CREATE_PLAYBOOK.slice(0, 40));
     expect(prompt).toMatch(/web_search|search_web/);
     expect(prompt).toMatch(/2026-08-13/);
+    expect(prompt).toMatch(/\*\*Label:\*\*/);
   });
 
   it('blocks private browse URLs and serves form rules from the codebase', async () => {
