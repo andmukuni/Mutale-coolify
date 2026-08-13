@@ -14,6 +14,8 @@ import {
   getAvailableSpots,
   formatPrice,
   sortEventsByRecentlyCreated,
+  constrainChildAgeInput,
+  isChildAgeNotAllowed,
   validateGuestAttendees,
 } from '../utils/eventServices';
 
@@ -446,6 +448,17 @@ describe('multi-guest registration helpers', () => {
       ok: false,
       error: 'Attendee 1 (Kid): child age cannot be greater than 17.',
     });
+  });
+
+  it('locks child age input to 0–17 and flags disallowed values', () => {
+    expect(isChildAgeNotAllowed('')).toBe(false);
+    expect(isChildAgeNotAllowed(17)).toBe(false);
+    expect(isChildAgeNotAllowed(18)).toBe(true);
+    expect(constrainChildAgeInput('', 8)).toEqual({ age: '', blocked: false, warning: '' });
+    expect(constrainChildAgeInput('17', 8)).toEqual({ age: '17', blocked: false, warning: '' });
+    expect(constrainChildAgeInput('18', 8)).toEqual({ age: 8, blocked: true, warning: 'Not allowed' });
+    expect(constrainChildAgeInput('20', '')).toEqual({ age: '', blocked: true, warning: 'Not allowed' });
+    expect(constrainChildAgeInput('abc', 5)).toEqual({ age: 5, blocked: true, warning: 'Not allowed' });
   });
 
   it('caps guest tickets by remaining capacity', () => {

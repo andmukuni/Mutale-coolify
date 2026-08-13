@@ -23,6 +23,8 @@ import {
   getRegistrationAttendeeSlotKey,
   isOnlineEvent,
   MAX_CHILD_AGE,
+  constrainChildAgeInput,
+  isChildAgeNotAllowed,
   normalizeAttendeeType,
   validateGuestAttendees,
 } from '../utils/eventServices';
@@ -150,8 +152,54 @@ function createEmptyGuest() {
     relation: '',
     sex: '',
     age: '',
+    ageWarning: '',
     lookupHint: '',
   };
+}
+
+function ChildAgeField({ guest, onAgeChange }) {
+  const ageNotAllowed = Boolean(guest.ageWarning) || isChildAgeNotAllowed(guest.age);
+  const warningId = `child-age-warning-${guest.key}`;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <label className="text-xs font-medium text-navy-600">
+          Age <span className="text-red-500">*</span>
+        </label>
+        {ageNotAllowed && (
+          <span
+            role="status"
+            className="inline-flex items-center rounded-full bg-red-50 text-red-700 ring-1 ring-inset ring-red-600/20 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5"
+          >
+            Not allowed
+          </span>
+        )}
+      </div>
+      <input
+        type="number"
+        min={0}
+        max={MAX_CHILD_AGE}
+        step={1}
+        inputMode="numeric"
+        aria-invalid={ageNotAllowed}
+        aria-describedby={ageNotAllowed ? warningId : undefined}
+        value={guest.age === 0 || guest.age ? guest.age : ''}
+        onChange={(e) => onAgeChange(e.target.value)}
+        placeholder={`0–${MAX_CHILD_AGE}`}
+        className={`w-full px-3 py-2.5 rounded-xl border bg-white text-sm text-navy-900 focus:outline-none focus:ring-2 ${
+          ageNotAllowed
+            ? 'border-red-400 focus:ring-red-500'
+            : 'border-navy-200 focus:ring-cyan-500'
+        }`}
+      />
+      {ageNotAllowed && (
+        <p id={warningId} className="text-[11px] text-red-600 mt-1">
+          Child age must be 0–{MAX_CHILD_AGE}. Switch this attendee to Adult if they are older.
+        </p>
+      )}
+    </div>
+  );
 }
 
 function resizeGuestList(current = [], nextCount = 0) {
@@ -1292,7 +1340,7 @@ export default function EventRegistrationFlow({
                             ? {
                               ...row,
                               attendee_type: e.target.value,
-                              ...(e.target.value === 'adult' ? { relation: '', age: '' } : {}),
+                              ...(e.target.value === 'adult' ? { relation: '', age: '', ageWarning: '' } : {}),
                             }
                             : row
                         )))}
@@ -1335,21 +1383,14 @@ export default function EventRegistrationFlow({
                           <option value="other">Other</option>
                         </select>
                       </div>
-                      <div>
-                        <label className="block text-xs font-medium text-navy-600 mb-1">Age <span className="text-red-500">*</span></label>
-                        <input
-                          type="number"
-                          min={0}
-                          max={MAX_CHILD_AGE}
-                          inputMode="numeric"
-                          value={guest.age === 0 || guest.age ? guest.age : ''}
-                          onChange={(e) => setGuestAttendees((prev) => prev.map((row, i) => (
-                            i === index ? { ...row, age: e.target.value } : row
-                          )))}
-                          placeholder={`0–${MAX_CHILD_AGE}`}
-                          className="w-full px-3 py-2.5 rounded-xl border border-navy-200 bg-white text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                        />
-                      </div>
+                      <ChildAgeField
+                        guest={guest}
+                        onAgeChange={(raw) => setGuestAttendees((prev) => prev.map((row, i) => {
+                          if (i !== index) return row;
+                          const next = constrainChildAgeInput(raw, row.age);
+                          return { ...row, age: next.age, ageWarning: next.warning };
+                        }))}
+                      />
                     </div>
                   )}
                   <div>

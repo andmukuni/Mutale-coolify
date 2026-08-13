@@ -76,6 +76,34 @@ export function normalizeAttendeeAge(raw) {
   return age;
 }
 
+/** True when a typed child age is present and outside 0–MAX_CHILD_AGE. */
+export function isChildAgeNotAllowed(raw) {
+  const text = String(raw ?? '').trim();
+  if (text === '') return false;
+  if (!/^\d+$/.test(text)) return true;
+  const age = Number(text);
+  return age > MAX_CHILD_AGE;
+}
+
+/**
+ * Keep the age field locked to 0–MAX_CHILD_AGE.
+ * Invalid attempts leave the current value in place and set a warning.
+ */
+export function constrainChildAgeInput(raw, currentAge = '') {
+  const text = String(raw ?? '').trim();
+  if (text === '') {
+    return { age: '', blocked: false, warning: '' };
+  }
+  if (!/^\d{1,2}$/.test(text)) {
+    return { age: currentAge, blocked: true, warning: 'Not allowed' };
+  }
+  const age = Number(text);
+  if (age > MAX_CHILD_AGE) {
+    return { age: currentAge, blocked: true, warning: 'Not allowed' };
+  }
+  return { age: text, blocked: false, warning: '' };
+}
+
 export function deriveGuestAttendeeSlotKey(name, index) {
   const slug = String(name || '').trim().toLowerCase().slice(0, 140);
   return `${slug || 'guest'}::${Number(index)}`;
