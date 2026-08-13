@@ -189,7 +189,7 @@ export default function EventDetailPage() {
               </div>
             </div>
 
-            <EventSessionsSchedule eventId={event.id} />
+            <EventSessionsSchedule eventId={event.id} event={event} />
 
             {event.organizer_name && (
               <div className="bg-white rounded-2xl border border-navy-100 p-6 sm:p-8 shadow-sm">

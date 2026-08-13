@@ -860,7 +860,7 @@ export default function EventFormPage() {
 
               {isEditing && (
                 <div className="pt-2 border-t border-navy-100">
-                  <EventSessionsPanel eventId={form.id} />
+                  <EventSessionsPanel eventId={form.id} event={form} />
                 </div>
               )}
 

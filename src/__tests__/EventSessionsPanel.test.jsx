@@ -38,7 +38,13 @@ describe('EventSessionsPanel', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    render(<EventSessionsPanel eventId="evt-1" />);
+    render(<EventSessionsPanel eventId="evt-1" event={{
+      start_date: '2026-09-01',
+      end_date: '2026-09-01',
+      start_time: '09:00',
+      end_time: '17:00',
+      timezone: 'Africa/Lusaka',
+    }} />);
 
     await waitFor(() => {
       expect(screen.getByText('Opening lecture')).toBeInTheDocument();
@@ -75,5 +81,33 @@ describe('EventSessionsPanel', () => {
       end_time: '10:30',
       meeting_url: 'https://zoom.example/session',
     });
+  });
+
+  it('counts passed and upcoming from the event period', async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(jsonResponse([
+      session,
+      {
+        id: 'esn-2',
+        title: 'Wrap-up',
+        session_date: '2026-08-11',
+        start_time: '09:00:00',
+        end_time: '10:00:00',
+      },
+    ])));
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<EventSessionsPanel eventId="evt-1" event={{
+      start_date: '2026-08-10',
+      end_date: '2026-09-16',
+      start_time: '09:00',
+      end_time: '17:00',
+      timezone: 'Africa/Lusaka',
+    }} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('session-status-counts')).toHaveTextContent('1 passed · 1 upcoming');
+    });
+    expect(screen.getByText('passed')).toBeInTheDocument();
+    expect(screen.getByText('upcoming')).toBeInTheDocument();
   });
 });

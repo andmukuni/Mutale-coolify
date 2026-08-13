@@ -19,6 +19,7 @@ import {
   PowerOff,
   FileDown,
   Ticket,
+  CalendarDays,
 } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { useBooking } from '../../context/BookingContext';
@@ -31,6 +32,7 @@ import { useToast } from '../../context/ToastContext';
 import EventProfileSummaryHero from '../../components/admin/event/EventProfileSummaryHero';
 import EventProfileQuickActions from '../../components/admin/event/EventProfileQuickActions';
 import EventTicketsPanel from '../../components/admin/event/EventTicketsPanel';
+import EventSessionsPanel from '../../components/admin/event/EventSessionsPanel';
 import EventForumPanel from '../../components/EventForumPanel';
 import CertificatePreviewModal from '../../components/admin/certificate/CertificatePreviewModal';
 import CertificateTemplateThumbnail from '../../components/admin/certificate/CertificateTemplateThumbnail';
@@ -48,6 +50,7 @@ const API_BASE = getApiBase();
 
 const PROFILE_TABS = [
   { id: 'overview', label: 'Overview', icon: LayoutGrid },
+  { id: 'sessions', label: 'Sessions', icon: CalendarDays },
   { id: 'certificates', label: 'Certificates', icon: Award },
   { id: 'attendees', label: 'Attendees', icon: Users },
   { id: 'tickets', label: 'Tickets', icon: Ticket },
@@ -911,6 +914,15 @@ export default function EventProfilePage() {
             )}
           </div>
         )}
+      </FeedCard>
+          )}
+
+          {activeTab === 'sessions' && (
+      <FeedCard
+        title="Sessions"
+        subtitle="Series schedule — one registration covers every session. Status follows the event period."
+      >
+        <EventSessionsPanel eventId={event.id} event={event} />
       </FeedCard>
           )}
 

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { getApiBase } from '../../../utils/apiBase';
 import { getAdminAuthHeaders } from '../../../utils/authHeaders';
+import { countSessionStatuses, getSessionStatus } from '../../../utils/eventSessions';
 
 const API_BASE = getApiBase();
 
@@ -34,7 +35,22 @@ function sessionToDraft(session) {
   };
 }
 
-export default function EventSessionsPanel({ eventId }) {
+const STATUS_BADGE = {
+  passed: 'bg-navy-200 text-navy-600',
+  live: 'bg-emerald-100 text-emerald-700',
+  upcoming: 'bg-cyan-100 text-cyan-800',
+};
+
+function formatCountLine(counts) {
+  const parts = [];
+  if (counts.passed) parts.push(`${counts.passed} passed`);
+  if (counts.live) parts.push(`${counts.live} live`);
+  if (counts.upcoming) parts.push(`${counts.upcoming} upcoming`);
+  if (parts.length === 0) return counts.total ? `${counts.total} sessions` : '';
+  return parts.join(' · ');
+}
+
+export default function EventSessionsPanel({ eventId, event = {} }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -124,6 +140,13 @@ export default function EventSessionsPanel({ eventId }) {
     }
   };
 
+  const statusOptions = useMemo(() => ({ event }), [event]);
+  const counts = useMemo(
+    () => countSessionStatuses(sessions, new Date(), statusOptions),
+    [sessions, statusOptions],
+  );
+  const countLine = formatCountLine(counts);
+
   if (!eventId) return null;
 
   return (
@@ -132,7 +155,16 @@ export default function EventSessionsPanel({ eventId }) {
         <h3 className="text-sm font-semibold text-navy-900">Master class sessions</h3>
         <p className="text-xs text-navy-500 mt-1">
           One registration covers all sessions (series pass). Attendance is tracked per session.
+          Status follows the event period
+          {event.start_date || event.date
+            ? ` (${event.start_date || event.date}${event.end_date && event.end_date !== (event.start_date || event.date) ? ` – ${event.end_date}` : ''}).`
+            : '.'}
         </p>
+        {countLine ? (
+          <p className="mt-2 text-xs font-semibold text-navy-700" data-testid="session-status-counts">
+            {countLine}
+          </p>
+        ) : null}
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -143,16 +175,30 @@ export default function EventSessionsPanel({ eventId }) {
         <ul className="divide-y divide-navy-100 rounded-xl border border-navy-100 overflow-hidden">
           {sessions.length === 0 ? (
             <li className="px-4 py-6 text-sm text-navy-500 text-center">No sessions yet.</li>
-          ) : sessions.map((session) => (
+          ) : sessions.map((session) => {
+            const status = getSessionStatus(session, new Date(), statusOptions);
+            const passed = status === 'passed';
+            return (
             <li
               key={session.id}
               className={`px-4 py-3 flex items-start justify-between gap-3 ${
-                editingId === session.id ? 'bg-cyan-50/70' : 'bg-white'
+                editingId === session.id
+                  ? 'bg-cyan-50/70'
+                  : passed
+                    ? 'bg-navy-100/70'
+                    : 'bg-white'
               }`}
             >
               <div>
-                <p className="text-sm font-medium text-navy-900">{session.title || `Session ${session.session_date}`}</p>
-                <p className="text-xs text-navy-500">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className={`text-sm font-medium ${passed ? 'text-navy-500' : 'text-navy-900'}`}>
+                    {session.title || `Session ${session.session_date}`}
+                  </p>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${STATUS_BADGE[status]}`}>
+                    {status}
+                  </span>
+                </div>
+                <p className={`text-xs ${passed ? 'text-navy-400' : 'text-navy-500'}`}>
                   {session.session_date}
                   {session.start_time ? ` · ${String(session.start_time).slice(0, 5)}` : ''}
                   {session.end_time ? ` – ${String(session.end_time).slice(0, 5)}` : ''}
@@ -177,7 +223,8 @@ export default function EventSessionsPanel({ eventId }) {
                 </button>
               </div>
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
 

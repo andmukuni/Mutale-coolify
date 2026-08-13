@@ -2,29 +2,15 @@ import { useEffect, useState } from 'react';
 import { CalendarDays, Clock } from 'lucide-react';
 import { getApiBase } from '../utils/apiBase';
 import { formatDate, formatTime } from '../utils/helpers';
+import {
+  getSessionStatus,
+  groupSessionsByDate,
+  sessionDateKey,
+} from '../utils/eventSessions';
 
 const API_BASE = getApiBase();
 
-export function sessionDateKey(value) {
-  const raw = String(value || '').trim();
-  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
-  return raw;
-}
-
-export function groupSessionsByDate(sessions = []) {
-  const groups = [];
-  const index = new Map();
-  for (const session of Array.isArray(sessions) ? sessions : []) {
-    const key = sessionDateKey(session.session_date) || 'undated';
-    if (!index.has(key)) {
-      const group = { date: key, sessions: [] };
-      index.set(key, group);
-      groups.push(group);
-    }
-    index.get(key).sessions.push(session);
-  }
-  return groups;
-}
+export { sessionDateKey, groupSessionsByDate, isSessionPassed } from '../utils/eventSessions';
 
 function formatSessionDate(value) {
   const key = sessionDateKey(value);
@@ -37,9 +23,40 @@ function formatSessionTime(value) {
   return match ? formatTime(match[1]) : '';
 }
 
-export default function EventSessionsSchedule({ eventId }) {
+const STATUS_STYLES = {
+  passed: {
+    dot: 'bg-navy-400',
+    card: 'border-navy-200 bg-navy-100/90',
+    title: 'text-navy-500',
+    time: 'text-navy-400',
+    clock: 'text-navy-400',
+    badge: 'bg-navy-200 text-navy-600',
+    label: 'Passed',
+  },
+  live: {
+    dot: 'bg-emerald-500',
+    card: 'border-emerald-200 bg-emerald-50/80',
+    title: 'text-navy-900',
+    time: 'text-navy-500',
+    clock: 'text-emerald-600',
+    badge: 'bg-emerald-100 text-emerald-700',
+    label: 'Live',
+  },
+  upcoming: {
+    dot: 'bg-cyan-500',
+    card: 'border-navy-100 bg-navy-50/60',
+    title: 'text-navy-900',
+    time: 'text-navy-500',
+    clock: 'text-cyan-600',
+    badge: '',
+    label: '',
+  },
+};
+
+export default function EventSessionsSchedule({ eventId, event = {}, timeZone }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(Boolean(eventId));
+  const zone = timeZone || event.timezone || 'Africa/Lusaka';
 
   useEffect(() => {
     if (!eventId) return undefined;
@@ -95,16 +112,25 @@ export default function EventSessionsSchedule({ eventId }) {
                 const start = formatSessionTime(session.start_time);
                 const end = formatSessionTime(session.end_time);
                 const timeLabel = [start, end].filter(Boolean).join(' – ');
+                const status = getSessionStatus(session, new Date(), { event, timeZone: zone });
+                const style = STATUS_STYLES[status] || STATUS_STYLES.upcoming;
                 return (
                   <li key={session.id} className="relative">
-                    <span className="absolute -left-[27px] top-3.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-cyan-500 shadow-sm" />
-                    <div className="rounded-xl border border-navy-100 bg-navy-50/60 px-4 py-3">
-                      <p className="font-semibold text-navy-900">
-                        {session.title || 'Session'}
-                      </p>
+                    <span className={`absolute -left-[27px] top-3.5 h-2.5 w-2.5 rounded-full border-2 border-white shadow-sm ${style.dot}`} />
+                    <div className={`rounded-xl border px-4 py-3 ${style.card}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <p className={`font-semibold ${style.title}`}>
+                          {session.title || 'Session'}
+                        </p>
+                        {style.label ? (
+                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${style.badge}`}>
+                            {style.label}
+                          </span>
+                        ) : null}
+                      </div>
                       {timeLabel ? (
-                        <p className="mt-1 inline-flex items-center gap-1.5 text-xs font-medium text-navy-500">
-                          <Clock size={12} className="text-cyan-600" />
+                        <p className={`mt-1 inline-flex items-center gap-1.5 text-xs font-medium ${style.time}`}>
+                          <Clock size={12} className={style.clock} />
                           {timeLabel}
                         </p>
                       ) : null}
