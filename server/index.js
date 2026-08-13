@@ -115,6 +115,11 @@ import {
   sendOntechSms,
   validateOntechSmsSettings,
 } from './ontechSmsClient.js';
+import {
+  buildSmsMessage,
+  collectEmailSmsRecipients,
+  hasExplicitSmsTo,
+} from './emailSmsCompanion.js';
 
 // Load `.env` from the app root (parent of server/), not relying on cwd — cPanel Passenger often starts with cwd ≠ project root.
 const __filename = fileURLToPath(import.meta.url);
@@ -3387,7 +3392,57 @@ function buildRegistrationEmailHtml({
 </html>`;
 }
 
-async function sendEmailNotification({ settings, to, subject, text, html, attachments = [] }) {
+async function lookupUserPhoneByEmail(email) {
+  const normalized = String(email || '').trim().toLowerCase();
+  if (!normalized || !normalized.includes('@')) return '';
+  try {
+    const [[user]] = await pool.query(
+      'SELECT phone, whatsapp FROM users WHERE email = ? LIMIT 1',
+      [normalized],
+    );
+    return String(user?.phone || user?.whatsapp || '').trim();
+  } catch {
+    return '';
+  }
+}
+
+async function sendCompanionSmsForEmail({
+  settings,
+  to,
+  subject,
+  text,
+  smsTo,
+  smsMessage,
+  kind,
+}) {
+  let phones = smsTo;
+  if (!hasExplicitSmsTo(smsTo)) {
+    phones = await lookupUserPhoneByEmail(to);
+  }
+
+  const recipients = collectEmailSmsRecipients({ settings, smsTo: phones, kind });
+  if (!recipients.length) return [];
+
+  const message = buildSmsMessage({ subject, text, smsMessage });
+  const results = [];
+  for (const phone of recipients) {
+    results.push(await sendSmsNotification({ settings, to: phone, message }));
+  }
+  return results;
+}
+
+async function sendEmailNotification({
+  settings,
+  to,
+  subject,
+  text,
+  html,
+  attachments = [],
+  smsTo,
+  smsMessage,
+  kind,
+  skipSms = false,
+}) {
   const recipient = String(to || '').trim();
   if (!recipient) return { channel: 'email', status: 'skipped', reason: 'No email recipient configured.' };
 
@@ -3400,6 +3455,7 @@ async function sendEmailNotification({ settings, to, subject, text, html, attach
     return { channel: 'email', status: 'failed', reason: 'From email is not configured.' };
   }
 
+  let emailResult;
   try {
     const transport = buildSmtpTransport(emailCfg);
     await transport.sendMail({
@@ -3413,11 +3469,30 @@ async function sendEmailNotification({ settings, to, subject, text, html, attach
     });
 
     console.log(`[notification:email] ✓ sent to ${recipient} — "${subject}"`);
-    return { channel: 'email', status: 'sent', recipient };
+    emailResult = { channel: 'email', status: 'sent', recipient };
   } catch (error) {
     console.error(`[notification:email] ✗ failed to ${recipient} — ${error.message}`);
-    return { channel: 'email', status: 'failed', recipient, reason: error.message };
+    emailResult = { channel: 'email', status: 'failed', recipient, reason: error.message };
   }
+
+  if (!skipSms) {
+    try {
+      emailResult.sms = await sendCompanionSmsForEmail({
+        settings,
+        to: recipient,
+        subject,
+        text,
+        smsTo,
+        smsMessage,
+        kind,
+      });
+    } catch (smsError) {
+      console.warn(`[notification:sms] companion failed after email to ${recipient}: ${smsError.message}`);
+      emailResult.sms = [{ channel: 'sms', status: 'failed', reason: smsError.message }];
+    }
+  }
+
+  return emailResult;
 }
 
 async function sendSmsNotification({ settings, to, message }) {
@@ -3536,20 +3611,12 @@ async function dispatchRegistrationNotifications({ settings, payload = {} }) {
       to: notifications.adminAlertEmail,
       subject,
       text: message,
+      smsTo: notifications.adminAlertPhone,
+      smsMessage: message,
+      kind: 'registration_alert',
     }));
   } else {
     tasks.push(Promise.resolve({ channel: 'email', status: 'skipped', reason: 'Email notifications are disabled.' }));
-  }
-
-  if (parseBoolean(notifications.smsOnNewRegistration, false)) {
-    tasks.push(sendSmsNotification({
-      settings,
-      to: notifications.adminAlertPhone,
-      message,
-      meta: { type: 'new_registration' },
-    }));
-  } else {
-    tasks.push(Promise.resolve({ channel: 'sms', status: 'skipped', reason: 'SMS notifications are disabled.' }));
   }
 
   if (parseBoolean(notifications.whatsappOnNewRegistration, false)) {
@@ -3563,7 +3630,10 @@ async function dispatchRegistrationNotifications({ settings, payload = {} }) {
     tasks.push(Promise.resolve({ channel: 'whatsapp', status: 'skipped', reason: 'WhatsApp notifications are disabled.' }));
   }
 
-  const results = await Promise.all(tasks);
+  const rawResults = await Promise.all(tasks);
+  const results = rawResults.flatMap((result) => (
+    Array.isArray(result?.sms) ? [result, ...result.sms] : [result]
+  ));
 
   const summary = {
     sent: results.filter((r) => r.status === 'sent').length,
@@ -3596,6 +3666,8 @@ async function dispatchTestNotification({ settings, channel, recipient = '', mes
       to: String(recipient || notifications.adminAlertEmail || '').trim(),
       subject: 'Mutale notification test (Email)',
       text,
+      skipSms: true,
+      kind: 'test',
     });
   }
 
@@ -5246,6 +5318,9 @@ app.post('/api/auth/register', rateLimitAuth({ windowMs: 60 * 60 * 1000, max: 10
           buttonUrl: verifyUrl,
           footerLines: ['Best regards,', 'Mutale Mubanga'],
         }),
+        smsTo: String(phone || whatsapp || '').trim(),
+        smsMessage: `Hi ${displayName}, confirm your Mutale account: ${verifyUrl} (expires in 24 hours)`,
+        kind: 'auth',
       });
     } catch (emailErr) {
       console.warn('[auth/register] Verification email failed to send:', emailErr.message);
@@ -5305,7 +5380,7 @@ app.post('/api/auth/resend-verification', rateLimitAuth({ windowMs: 60 * 60 * 10
     const email = String(req.body?.email || '').trim().toLowerCase();
     if (!email) return res.status(400).json({ ok: false, message: 'Email is required.' });
 
-    const [[user]] = await pool.query('SELECT id, name, email_verified FROM users WHERE email = ?', [email]);
+    const [[user]] = await pool.query('SELECT id, name, phone, whatsapp, email_verified FROM users WHERE email = ?', [email]);
     // Always respond OK to avoid email enumeration
     if (!user || user.email_verified) {
       return res.json({ ok: true, message: 'If that email exists and is unverified, a new link has been sent.' });
@@ -5340,6 +5415,9 @@ app.post('/api/auth/resend-verification', rateLimitAuth({ windowMs: 60 * 60 * 10
           buttonUrl: verifyUrl,
           footerLines: ['Best regards,', 'Mutale Mubanga'],
         }),
+        smsTo: String(user.phone || user.whatsapp || '').trim(),
+        smsMessage: `Hi ${user.name}, confirm your Mutale account: ${verifyUrl} (expires in 24 hours)`,
+        kind: 'auth',
       });
     } catch (emailErr) {
       console.warn('[auth/resend-verification] Email failed:', emailErr.message);
@@ -5361,7 +5439,7 @@ app.post('/api/auth/forgot-password', rateLimitAuth({ windowMs: 60 * 60 * 1000, 
       return res.status(400).json({ ok: false, message: 'Please enter a valid email address.' });
     }
 
-    const [[user]] = await pool.query('SELECT id, name, email_verified FROM users WHERE email = ?', [email]);
+    const [[user]] = await pool.query('SELECT id, name, phone, whatsapp, email_verified FROM users WHERE email = ?', [email]);
 
     // Always respond OK to avoid email enumeration
     if (!user || !user.email_verified) {
@@ -5399,6 +5477,9 @@ app.post('/api/auth/forgot-password', rateLimitAuth({ windowMs: 60 * 60 * 1000, 
           buttonUrl: resetUrl,
           footerLines: ['Best regards,', 'Mutale Mubanga'],
         }),
+        smsTo: String(user.phone || user.whatsapp || '').trim(),
+        smsMessage: `Hi ${user.name}, reset your Mutale password: ${resetUrl} (expires in 1 hour)`,
+        kind: 'auth',
       });
     } catch (emailErr) {
       console.warn('[auth/forgot-password] Email failed:', emailErr.message);
@@ -8761,6 +8842,13 @@ app.post('/api/registrations', async (req, res) => {
           settings,
           to: recipientEmail,
           subject: `Registration Confirmed: ${event.title}`,
+          smsTo: String(authUser.phone || authUser.whatsapp || '').trim(),
+          smsMessage: [
+            `Registration confirmed: ${event.title}.`,
+            refCode ? `Ref: ${refCode}` : '',
+            ticketUrl || eventUrl,
+          ].filter(Boolean).join(' '),
+          kind: 'registration',
           text: receiptAttached
             ? `${emailBody}\n\nYour receipt is attached to this email.`
             : emailBody,
@@ -9656,24 +9744,27 @@ app.post('/api/contact-messages/:id/reply', async (req, res) => {
     }
 
     const settings = await getSystemSettings();
-    const emailCfg = settings?.email || {};
-    const fromName = String(emailCfg.fromName || 'Mutale Admin').trim();
-    const fromEmail = String(emailCfg.fromEmail || '').trim();
-    const replyTo = String(emailCfg.replyTo || fromEmail).trim();
-
+    const fromEmail = String(settings?.email?.fromEmail || '').trim();
     if (!fromEmail) {
       return res.status(400).json({ ok: false, message: 'From Email is not configured in Admin Settings → Email Configuration.' });
     }
 
-    const transport = buildSmtpTransport(emailCfg);
-
-    await transport.sendMail({
-  from: fromName ? `"${fromName}" <${fromEmail}>` : fromEmail,
+    const replyResult = await sendEmailNotification({
+      settings,
       to: String(contactMessage.email || '').trim(),
-      replyTo: replyTo || undefined,
       subject,
       text: message,
+      smsTo: String(contactMessage.phone || '').trim(),
+      smsMessage: `Mutale: ${subject}\n${message}`,
+      kind: 'contact_reply',
     });
+
+    if (replyResult?.status !== 'sent') {
+      return res.status(500).json({
+        ok: false,
+        message: replyResult?.reason || 'Failed to send reply email',
+      });
+    }
 
     await pool.query('UPDATE contact_messages SET is_read = TRUE WHERE id = ?', [id]);
 

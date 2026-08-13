@@ -12,7 +12,7 @@ import {
   verifyAccessCode,
   verifyGuestSessionToken,
 } from './guestTicketService.js';
-import { resolveAttendeeEmail } from '../shared/ticketViewModel.js';
+import { resolveAttendeeEmail, resolveAttendeePhone } from '../shared/ticketViewModel.js';
 
 function getBearerToken(req) {
   const header = String(req.headers?.authorization || '').trim();
@@ -434,6 +434,9 @@ export function registerGuestTicketRoutes(app, deps) {
         html: `<p>Your verification code is: <strong>${code}</strong></p>
 <p>Use this code on your ticket page to download your certificate or verify access.</p>
 <p>This code expires in 15 minutes.</p>`,
+        smsTo: resolveAttendeePhone(loaded.registration),
+        smsMessage: `Your Mutale access code for ${eventTitle} is ${code}. It expires in 15 minutes.`,
+        kind: 'access_code',
       });
 
       return res.json({ ok: true, message: 'Access code sent.', email_hint: email.replace(/(.{2}).*(@.*)/, '$1***$2') });

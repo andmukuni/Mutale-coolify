@@ -85,6 +85,7 @@ describe('SettingsPage Ontech SMS', () => {
     );
 
     expect(await screen.findByText('Ontech SMS')).toBeInTheDocument();
+    expect(screen.getByText(/emails also send a matching SMS/i)).toBeInTheDocument();
     expect(await screen.findByLabelText('API Key *')).toHaveValue('••••••••');
     expect(screen.getByLabelText('Sender ID *')).toHaveValue('Mutale');
     expect(screen.getByLabelText('Sender ID *')).toHaveAttribute('maxlength', '11');

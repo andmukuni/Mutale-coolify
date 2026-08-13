@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Save,
@@ -641,11 +641,6 @@ export default function SettingsPage() {
     }
   };
 
-  const activeTabMeta = useMemo(
-    () => tabs.find((tab) => tab.key === activeTab) || tabs[0],
-    [activeTab],
-  );
-
   return (
     <div>
       <PageHeader
@@ -739,10 +734,6 @@ export default function SettingsPage() {
           </aside>
 
           <div className="lg:col-span-9 space-y-6 min-w-0">
-            <div className="hidden sm:flex items-center gap-2 text-sm text-navy-500">
-              <span className="font-medium text-navy-800">{activeTabMeta.label}</span>
-            </div>
-
         {activeTab === 'profile' && (
           <Card
             title="Profile Information"
@@ -948,7 +939,7 @@ export default function SettingsPage() {
                   >
                     Ontech Bulk SMS portal
                   </a>
-                  , then save them here.
+                  , then save them here. When this is enabled, emails also send a matching SMS.
                 </p>
               </div>
               <BooleanField
@@ -1082,6 +1073,9 @@ export default function SettingsPage() {
         {activeTab === 'notifications' && (
           <Card title="Notification Configuration" subtitle="Enable channels and recipients for registration alerts">
             <form onSubmit={handleSaveSystem} className="space-y-4">
+              <div className="rounded-xl border border-cyan-100 bg-cyan-50/70 p-4 text-sm text-cyan-900">
+                When Ontech SMS is enabled in the SMS tab, every email also sends a short SMS to the recipient (if we have a phone number) and to the Alert SMS Phone. Password reset, email confirmation, and access-code messages go only to the user.
+              </div>
               <div className="grid sm:grid-cols-2 gap-4">
                 <BooleanField label="Email on new registration" name="emailOnNewRegistration" checked={systemForm.notifications.emailOnNewRegistration} onChange={(e) => handleSystemChange('notifications', e)} />
                 <BooleanField label="Email event reminders" name="emailOnEventReminder" checked={systemForm.notifications.emailOnEventReminder} onChange={(e) => handleSystemChange('notifications', e)} />

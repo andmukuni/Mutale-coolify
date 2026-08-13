@@ -452,6 +452,13 @@ export async function sendCertificateEmailForRow(pool, certRow, appRoot, sendEma
       filename: `Certificate-${certRow.certificate_code}.pdf`,
       path: absolutePath,
     }],
+    smsTo: String(certRow.attendee_phone || resolveAttendeePhone(registration) || '').trim(),
+    smsMessage: [
+      `Your certificate for ${certRow.event_title} is ready.`,
+      certRow.certificate_code ? `ID: ${certRow.certificate_code}` : '',
+      portalUrl,
+    ].filter(Boolean).join(' '),
+    kind: 'certificate',
   });
 
   if (result?.status === 'sent') {

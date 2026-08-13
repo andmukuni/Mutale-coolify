@@ -371,6 +371,13 @@ export async function sendReceiptEmail({
       content: pdfBuffer,
       contentType: 'application/pdf',
     }],
+    smsTo: String(registration.user_phone || '').trim(),
+    smsMessage: [
+      copy.subject,
+      'Your receipt is ready.',
+      refCode ? `Ref: ${refCode}` : '',
+    ].filter(Boolean).join(' '),
+    kind: 'receipt',
   });
 
   if (result?.status === 'sent') {

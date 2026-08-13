@@ -1,5 +1,5 @@
 import { renderTicketDocumentHtml } from '../shared/ticketDocumentHtml.js';
-import { buildTicketViewModel, isGuestTicket, isInPersonEventRecord, isTicketPaymentEligible, resolveAttendeeName } from '../shared/ticketViewModel.js';
+import { buildTicketViewModel, isGuestTicket, isInPersonEventRecord, isTicketPaymentEligible, resolveAttendeeName, resolveAttendeePhone } from '../shared/ticketViewModel.js';
 import { buildTicketFilename, generateTicketPdfBuffer } from '../shared/ticketPdfServer.js';
 import { loadReceiptLogoDataUrl } from '../shared/receiptLogoAsset.js';
 
@@ -28,6 +28,7 @@ export function buildTicketEmailCopy({
     return {
       subject: `Ticket copy: ${eventTitle} (${forLabel})`,
       previewText: `Your ticket copy for ${eventTitle}.`,
+      ticketUrl,
       greeting: `Hi ${recipientName || 'there'},`,
       introLines: [
         `Here is your copy of the entry ticket for ${forLabel === 'you' ? 'your registration' : forLabel}.`,
@@ -41,6 +42,7 @@ export function buildTicketEmailCopy({
   return {
     subject: `Your entry ticket: ${eventTitle}`,
     previewText: `Your entry ticket for ${eventTitle}.`,
+    ticketUrl,
     greeting: `Hi ${recipientName || attendeeName || 'there'},`,
     introLines: [
       `Your entry ticket for "${eventTitle}" is ready.`,
@@ -147,6 +149,10 @@ export async function sendTicketEmail({
   const html = buildTicketEmailHtmlWrapper({ copy, ticketHtml });
   const filename = buildTicketFilename(registration);
 
+  const smsTo = role === 'buyer_copy'
+    ? String(registration.user_phone || '').trim()
+    : resolveAttendeePhone(registration);
+  const ticketUrl = String(copy.ticketUrl || '').trim();
   const result = await sendEmailNotification({
     settings,
     to: recipient,
@@ -158,6 +164,13 @@ export async function sendTicketEmail({
       content: pdfBuffer,
       contentType: 'application/pdf',
     }],
+    smsTo,
+    smsMessage: [
+      copy.subject,
+      'Your ticket is ready.',
+      ticketUrl,
+    ].filter(Boolean).join(' '),
+    kind: 'ticket',
   });
 
   return result?.status === 'sent'
