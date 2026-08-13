@@ -34,11 +34,11 @@ const STATUS_STYLES = {
     clock: 'text-[#E76869]',
   },
   in_progress: {
-    dot: 'bg-[#00A79D]',
-    card: 'border-[#00A79D]/30 bg-[#00A79D]/10',
-    title: 'text-navy-900',
-    time: 'text-navy-500',
-    clock: 'text-[#00A79D]',
+    dot: 'session-live-dot bg-[#00A79D]',
+    card: 'session-card-live border-[#00A79D]/60',
+    title: 'text-white',
+    time: 'text-white/70',
+    clock: 'text-[#7ee8e0]',
   },
   upcoming: {
     dot: 'bg-[#141D45]',
@@ -79,6 +79,9 @@ export default function EventSessionsSchedule({ eventId, event = {}, timeZone })
   if (!eventId || loading || sessions.length === 0) return null;
 
   const days = groupSessionsByDate(sessions);
+  const hasLive = sessions.some((session) => (
+    getSessionStatus(session, now, { event, timeZone: zone }) === 'in_progress'
+  ));
 
   return (
     <div className="bg-white rounded-2xl border border-navy-100 p-6 sm:p-8 shadow-sm">
@@ -112,7 +115,7 @@ export default function EventSessionsSchedule({ eventId, event = {}, timeZone })
                 const status = getSessionStatus(session, now, { event, timeZone: zone });
                 const style = STATUS_STYLES[status] || STATUS_STYLES.upcoming;
                 return (
-                  <li key={session.id} className="relative">
+                  <li key={session.id} className={`relative ${hasLive && status !== 'in_progress' ? 'opacity-55' : ''}`}>
                     <span className={`absolute -left-[27px] top-3.5 h-2.5 w-2.5 rounded-full border-2 border-white shadow-sm ${style.dot}`} />
                     <div className={`rounded-xl border px-4 py-3 ${style.card}`}>
                       <div className="flex items-start justify-between gap-3">

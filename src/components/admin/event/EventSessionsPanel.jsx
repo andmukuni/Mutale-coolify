@@ -168,7 +168,7 @@ export default function EventSessionsPanel({ eventId, event = {} }) {
       {loading ? (
         <div className="py-6 flex justify-center"><Loader2 className="animate-spin text-cyan-600" size={22} /></div>
       ) : (
-        <ul className="divide-y divide-navy-100 rounded-xl border border-navy-100 overflow-hidden">
+        <ul className="divide-y divide-navy-100 rounded-xl border border-navy-100">
           {sessions.length === 0 ? (
             <li className="px-4 py-6 text-sm text-navy-500 text-center">No sessions yet.</li>
           ) : sessions.map((session) => {
@@ -178,24 +178,28 @@ export default function EventSessionsPanel({ eventId, event = {} }) {
             return (
             <li
               key={session.id}
-              className={`px-4 py-3 flex items-start justify-between gap-3 ${
+              className={`px-4 py-3 flex items-start justify-between gap-3 first:rounded-t-xl last:rounded-b-xl ${
                 editingId === session.id
                   ? 'bg-cyan-50/70'
-                  : passed
-                    ? 'bg-[#E76869]/10'
-                    : inProgress
-                      ? 'bg-[#00A79D]/10'
+                  : inProgress
+                    ? 'session-card-live'
+                    : passed
+                      ? 'bg-[#E76869]/10'
                       : 'bg-white'
               }`}
             >
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <p className={`text-sm font-medium ${passed ? 'text-navy-500' : 'text-navy-900'}`}>
+                  <p className={`text-sm font-medium ${
+                    inProgress ? 'text-white' : passed ? 'text-navy-500' : 'text-navy-900'
+                  }`}>
                     {session.title || `Session ${session.session_date}`}
                   </p>
                   <SessionStatusBadge status={status} />
                 </div>
-                <p className={`text-xs ${passed ? 'text-navy-400' : 'text-navy-500'}`}>
+                <p className={`text-xs ${
+                  inProgress ? 'text-white/70' : passed ? 'text-navy-400' : 'text-navy-500'
+                }`}>
                   {session.session_date}
                   {session.start_time ? ` · ${String(session.start_time).slice(0, 5)}` : ''}
                   {session.end_time ? ` – ${String(session.end_time).slice(0, 5)}` : ''}
@@ -206,7 +210,11 @@ export default function EventSessionsPanel({ eventId, event = {} }) {
                 <button
                   type="button"
                   onClick={() => handleEdit(session)}
-                  className="p-2 text-navy-400 hover:text-cyan-700 rounded-lg hover:bg-cyan-50"
+                  className={`p-2 rounded-lg ${
+                    inProgress
+                      ? 'text-white/70 hover:text-white hover:bg-white/10'
+                      : 'text-navy-400 hover:text-cyan-700 hover:bg-cyan-50'
+                  }`}
                   aria-label="Edit session"
                 >
                   <Pencil size={16} />
@@ -214,7 +222,11 @@ export default function EventSessionsPanel({ eventId, event = {} }) {
                 <button
                   type="button"
                   onClick={() => handleDelete(session.id)}
-                  className="p-2 text-navy-400 hover:text-red-600 rounded-lg hover:bg-red-50"
+                  className={`p-2 rounded-lg ${
+                    inProgress
+                      ? 'text-white/70 hover:text-red-200 hover:bg-white/10'
+                      : 'text-navy-400 hover:text-red-600 hover:bg-red-50'
+                  }`}
                   aria-label="Delete session"
                 >
                   <Trash2 size={16} />
