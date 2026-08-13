@@ -4,14 +4,20 @@ import { formatDate } from '../utils/helpers';
 
 export default function BlogCard({ post }) {
   return (
-    <div className="app-card bg-white rounded-2xl border border-navy-100 overflow-hidden hover:shadow-xl hover:border-cyan-200 transition-all duration-300 group flex flex-col">
+    <Link
+      to={`/blog/${post.slug}`}
+      aria-label={`Read ${post.title}`}
+      className="app-card group flex h-full flex-col overflow-hidden rounded-2xl border border-navy-100 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-cyan-200 hover:shadow-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2"
+    >
       {post.image ? (
-        <img
-          src={post.image}
-          alt={post.title}
-          className="h-48 w-full object-cover"
-          loading="lazy"
-        />
+        <div className="overflow-hidden">
+          <img
+            src={post.image}
+            alt=""
+            className="h-48 w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
+            loading="lazy"
+          />
+        </div>
       ) : (
         <div className="h-48 bg-gradient-to-br from-navy-800 to-navy-950 flex items-center justify-center">
           <div className="text-center">
@@ -47,14 +53,11 @@ export default function BlogCard({ post }) {
             <Clock size={12} />
             {post.readTime}
           </span>
-          <Link
-            to={`/blog/${post.slug}`}
-            className="inline-flex items-center gap-1 text-sm font-medium text-cyan-600 hover:text-cyan-700 transition-colors"
-          >
+          <span className="inline-flex items-center gap-1 text-sm font-medium text-cyan-600 transition-all group-hover:gap-1.5 group-hover:text-cyan-700">
             Read More <ArrowRight size={14} />
-          </Link>
+          </span>
         </div>
       </div>
-    </div>
+    </Link>
   );
 }

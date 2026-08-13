@@ -17,6 +17,7 @@ import {
 import { formatDate, formatTime } from '../utils/helpers';
 import { resolveUserBearerToken } from '../utils/authHeaders';
 import EventMerchStrip from '../components/EventMerchStrip';
+import EventSessionsSchedule from '../components/EventSessionsSchedule';
 import EventForumPanel from '../components/EventForumPanel';
 import StatusBadge from '../components/ui/StatusBadge';
 
@@ -157,12 +158,9 @@ export default function EventDetailPage() {
             </span>
           </div>
 
-          <h1 className="text-3xl sm:text-5xl font-bold text-white mb-4 max-w-4xl leading-tight">
+          <h1 className="text-3xl sm:text-5xl font-bold text-white mb-8 max-w-4xl leading-tight">
             {event.title}
           </h1>
-          <p className="text-navy-200 text-base sm:text-lg max-w-3xl leading-relaxed mb-8">
-            {event.short_description || event.description}
-          </p>
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 max-w-4xl">
             <HeroMetric label="Date" value={formatDate(event.start_date || event.date)} icon={Calendar} />
@@ -190,6 +188,8 @@ export default function EventDetailPage() {
                 ))}
               </div>
             </div>
+
+            <EventSessionsSchedule eventId={event.id} />
 
             {event.organizer_name && (
               <div className="bg-white rounded-2xl border border-navy-100 p-6 sm:p-8 shadow-sm">

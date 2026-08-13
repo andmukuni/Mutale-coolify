@@ -46,26 +46,26 @@ export default function EventCard({ event }) {
   };
 
   return (
-    <div className={`app-card bg-white rounded-2xl border overflow-hidden transition-all duration-300 group flex flex-col ${
-      isLive
-        ? 'border-4 border-emerald-400 shadow-[0_0_0_3px_rgba(16,185,129,0.2)] hover:shadow-[0_0_0_4px_rgba(16,185,129,0.28)]'
-        : 'border-navy-100 hover:shadow-xl hover:border-cyan-200'
-    } cursor-pointer focus-within:ring-2 focus-within:ring-cyan-500 focus-within:ring-offset-2`}
+    <div
+      className={`app-card group flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2 ${
+        isLive
+          ? 'border-4 border-emerald-400 shadow-[0_0_0_3px_rgba(16,185,129,0.2)] hover:shadow-2xl hover:shadow-emerald-200/50'
+          : 'border-navy-100 hover:border-cyan-200 hover:shadow-2xl'
+      }`}
       role="link"
       tabIndex={0}
       onClick={handleCardClick}
       onKeyDown={handleCardKeyDown}
       aria-label={`View details for ${event.title}`}
     >
-      {/* Cover image */}
       {event.cover_image && (
-        <Link to={`/events/${event.slug}`} className="block overflow-hidden">
+        <div className="overflow-hidden">
           <img
             src={event.cover_image}
-            alt={event.title}
-            className="w-full h-44 object-cover group-hover:scale-[1.02] transition-transform duration-300"
+            alt=""
+            className="h-44 w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
           />
-        </Link>
+        </div>
       )}
 
       <div className="p-6 flex flex-col flex-1">
@@ -96,11 +96,9 @@ export default function EventCard({ event }) {
           )}
         </div>
 
-        <Link to={`/events/${event.slug}`}>
-          <h3 className="text-base font-bold text-navy-900 mb-3 group-hover:text-cyan-700 transition-colors line-clamp-2 break-words">
-            {event.title}
-          </h3>
-        </Link>
+        <h3 className="text-base font-bold text-navy-900 mb-3 group-hover:text-cyan-700 transition-colors line-clamp-2 break-words">
+          {event.title}
+        </h3>
 
         <div className="space-y-1.5 mb-4">
           <div className="flex items-center gap-2 text-xs text-navy-500">
@@ -137,12 +135,9 @@ export default function EventCard({ event }) {
         </div>
 
         <div className="flex items-center justify-between gap-2">
-          <Link
-            to={`/events/${event.slug}`}
-            className="inline-flex items-center gap-1 text-sm font-medium text-cyan-600 hover:text-cyan-700 transition-colors"
-          >
+          <span className="inline-flex items-center gap-1 text-sm font-medium text-cyan-600 transition-all group-hover:gap-1.5 group-hover:text-cyan-700">
             View Details <ArrowRight size={13} />
-          </Link>
+          </span>
           {!isPast && event.status === 'published' && (
             userAlreadyRegistered && !isInPerson ? (
               <span
