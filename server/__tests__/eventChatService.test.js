@@ -10,6 +10,7 @@ import {
   extractAssistantReply,
   extractFunctionCalls,
   generateEventSlug,
+  isCreateClaim,
   isConfirmIntent,
   isDeclineIntent,
   isPublicHttpUrl,
@@ -126,6 +127,8 @@ describe('confirm intent', () => {
     expect(isConfirmIntent('yes')).toBe(true);
     expect(isConfirmIntent('Create it')).toBe(true);
     expect(isConfirmIntent('go ahead')).toBe(true);
+    expect(isConfirmIntent('create the draft')).toBe(true);
+    expect(isCreateClaim('I have created the draft.')).toBe(true);
     expect(isConfirmIntent('not yet')).toBe(false);
     expect(isDeclineIntent('no')).toBe(true);
     expect(isDeclineIntent('wait')).toBe(true);
@@ -286,6 +289,40 @@ describe('processEventChatTurn', () => {
     expect(result.reply).toBe('Hi! Tell me about the event you have in mind.');
     expect(result.draft.category).toBe('');
     expect(result.draft.is_free).toBeNull();
+  });
+
+  it('confirms create when the model marks the draft ready to save', async () => {
+    const session = {
+      messages: [],
+      draft: createEmptyDraft(),
+      awaitingConfirm: false,
+      confirmed: false,
+    };
+
+    const result = await processEventChatTurn({
+      session,
+      userMessage: 'ISO 15189 workshop in Lusaka on 15 September 2026, free, registration closes 10 September at 17:00',
+      apiKey: 'test',
+      openaiCall: async () => JSON.stringify({
+        reply: 'I have enough to save this as a draft.',
+        create: true,
+        draft: {
+          title: 'ISO 15189 Readiness Workshop',
+          description: 'A one-day laboratory accreditation workshop.',
+          location: 'Lusaka, Zambia',
+          start_date: '2026-09-15',
+          end_date: '2026-09-15',
+          registration_deadline: '2026-09-10',
+          registration_deadline_time: '17:00',
+          is_free: true,
+        },
+      }),
+    });
+
+    expect(result.confirmed).toBe(true);
+    expect(result.readyToCreate).toBe(true);
+    expect(session.confirmed).toBe(true);
+    expect(result.draft.slug).toBe('iso-15189-readiness-workshop');
   });
 
   it('asks the model to research when the admin describes an event', async () => {

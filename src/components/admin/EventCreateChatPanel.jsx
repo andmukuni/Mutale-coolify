@@ -7,6 +7,12 @@ import { useToast } from '../../context/ToastContext';
 import { LoadingButton } from '../ui';
 
 const API_BASE = getApiBase();
+const STORAGE_KEY = 'mutale.eventCreateChat.v1';
+
+const WELCOME_MESSAGE = {
+  role: 'assistant',
+  content: 'Tell me about the event in your own words — topic, who it is for, in person or online, and any date you have in mind. I will fill in as much as I can and only ask what is still missing.',
+};
 
 function newSessionId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -75,24 +81,87 @@ function draftRows(draft = {}) {
   ].filter(([, value]) => String(value || '').trim());
 }
 
-export default function EventCreateChatPanel({ onClose, onCreated }) {
+function readStoredChat() {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.sessionId) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredChat(state) {
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
+function clearStoredChat() {
+  try {
+    window.localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+export default function EventCreateChatPanel({ onClose, onCreated, open = true }) {
   const toast = useToast();
   const listRef = useRef(null);
-  const [sessionId] = useState(newSessionId);
+  const storedRef = useRef(typeof window === 'undefined' ? null : readStoredChat());
+  const stored = storedRef.current;
+  const [sessionId, setSessionId] = useState(() => stored?.sessionId || newSessionId());
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [readyToCreate, setReadyToCreate] = useState(false);
-  const [draft, setDraft] = useState({});
-  const [created, setCreated] = useState(null);
-  const [messages, setMessages] = useState([
-    {
-      role: 'assistant',
-      content: 'Tell me about the event in your own words — topic, who it is for, in person or online, and any date you have in mind. I will fill in as much as I can and only ask what is still missing.',
-    },
-  ]);
+  const [readyToCreate, setReadyToCreate] = useState(Boolean(stored?.readyToCreate));
+  const [draft, setDraft] = useState(stored?.draft || {});
+  const [created, setCreated] = useState(stored?.created || null);
+  const [messages, setMessages] = useState(
+    Array.isArray(stored?.messages) && stored.messages.length ? stored.messages : [WELCOME_MESSAGE],
+  );
 
   const filledRows = useMemo(() => draftRows(draft), [draft]);
+
+  useEffect(() => {
+    writeStoredChat({
+      sessionId,
+      messages,
+      draft,
+      readyToCreate,
+      created,
+    });
+  }, [sessionId, messages, draft, readyToCreate, created]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch(`${API_BASE}/events/chat/session?sessionId=${encodeURIComponent(sessionId)}`, {
+          headers: getAdminAuthHeaders(),
+        });
+        const json = await response.json().catch(() => ({}));
+        if (cancelled || !response.ok || !json?.ok || !json.data) return;
+        const remote = json.data;
+        if (Array.isArray(remote.messages) && remote.messages.length) {
+          setMessages((prev) => (prev.length > 1 ? prev : [
+            WELCOME_MESSAGE,
+            ...remote.messages.filter((item) => item?.content),
+          ]));
+        }
+        if (remote.draft) setDraft((prev) => ({ ...prev, ...remote.draft }));
+        if (remote.created?.event) setCreated((prev) => prev || remote.created);
+        setReadyToCreate(Boolean(remote.awaitingConfirm || remote.readyToCreate));
+      } catch {
+        // keep local session
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [sessionId]);
 
   useEffect(() => {
     const node = listRef.current;
@@ -119,7 +188,7 @@ export default function EventCreateChatPanel({ onClose, onCreated }) {
       const response = await fetch(`${API_BASE}/events/chat`, {
         method: 'POST',
         headers: getAdminAuthHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ sessionId, message }),
+        body: JSON.stringify({ sessionId, message, draft }),
       });
       const json = await response.json().catch(() => ({}));
       if (!response.ok || !json?.ok) {
@@ -127,7 +196,7 @@ export default function EventCreateChatPanel({ onClose, onCreated }) {
       }
       applyResult(json.data || {});
       if (json.data?.confirmed) {
-        await createEvent();
+        await createEvent(json.data.draft);
       }
     } catch (error) {
       const msg = error.message || 'Could not reach the event assistant.';
@@ -138,13 +207,13 @@ export default function EventCreateChatPanel({ onClose, onCreated }) {
     }
   };
 
-  const createEvent = async () => {
+  const createEvent = async (draftOverride) => {
     setCreating(true);
     try {
       const response = await fetch(`${API_BASE}/events/chat/create`, {
         method: 'POST',
         headers: getAdminAuthHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ sessionId, confirm: true }),
+        body: JSON.stringify({ sessionId, confirm: true, draft: draftOverride || draft }),
       });
       const json = await response.json().catch(() => ({}));
       if (!response.ok || !json?.ok) {
@@ -164,9 +233,12 @@ export default function EventCreateChatPanel({ onClose, onCreated }) {
   };
 
   const resetChat = async () => {
+    const nextId = newSessionId();
     setCreated(null);
     setReadyToCreate(false);
     setDraft({});
+    setSessionId(nextId);
+    clearStoredChat();
     try {
       await fetch(`${API_BASE}/events/chat/reset`, {
         method: 'POST',
@@ -192,6 +264,8 @@ export default function EventCreateChatPanel({ onClose, onCreated }) {
     link.download = `event-qr-${slug}.png`;
     link.click();
   };
+
+  if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">

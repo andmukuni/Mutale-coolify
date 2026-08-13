@@ -293,11 +293,17 @@ export function assertDraftReadyToCreate(draft = {}) {
 export function isConfirmIntent(text) {
   const normalized = String(text || '').trim().toLowerCase();
   if (!normalized) return false;
-  if (/^(yes|y|yeah|yep|yup|ok|okay|sure|please|do it|go ahead|confirm|confirmed|create|create it|create the event|create this event)\.?$/.test(normalized)) {
+  if (/^(yes|y|yeah|yep|yup|ok|okay|sure|please|do it|go ahead|confirm|confirmed|create|create it|create the event|create this event|create the draft|save it|save the draft|post it)\.?$/.test(normalized)) {
     return true;
   }
-  return /\b(yes|create (it|the event|this event)|go ahead|please create)\b/.test(normalized)
+  return /\b(yes|create (it|the event|this event|the draft)|save (it|the draft)|go ahead|please create)\b/.test(normalized)
     && !/\b(not|don't|dont|no)\b/.test(normalized);
+}
+
+export function isCreateClaim(text) {
+  return /\b(i('ve| have)? (just )?(created|saved|posted)|draft (is|has been) (created|saved)|creating (the|this) (event|draft) now|saved as a draft)\b/i.test(
+    String(text || ''),
+  );
 }
 
 export function isDeclineIntent(text) {
@@ -423,8 +429,9 @@ export function buildSystemPrompt({
     `Today in Africa/Lusaka: ${today}.`,
     organizer.name ? `Default organizer: ${[organizer.name, organizer.email, organizer.phone, organizer.location].filter(Boolean).join(' · ')}` : '',
     'If they dump everything in one paragraph, fill the draft and summarise. If they are vague, ask the most useful next question — usually audience, format, and date — not "the next field".',
-    'When required fields are present, recap in plain language and ask if they want you to create the draft.',
-    'Return JSON with keys reply (natural conversational prose, no field-name jargon) and draft (only fields you are confident about). You may wrap JSON in a fence. The reply should already be useful even if someone never opens the JSON.',
+    'When required fields are present, recap in plain language and ask if they want you to create the draft. Never say you already created or saved it unless create is true in your JSON — the server is what writes the row.',
+    'If the admin asks you to create, save, or post the draft and required fields are present, set create:true. The server will insert a draft event and it will appear on Admin → Events immediately.',
+    'Return JSON with keys reply (natural conversational prose, no field-name jargon), draft (only fields you are confident about), and optional create (boolean). You may wrap JSON in a fence.',
     `Known so far: ${JSON.stringify(draft || {})}`,
     `Still needed before create: ${(missing || []).join(', ') || 'none — recap and ask to create'}`,
     exampleLines.length ? `Recent site events for tone:\n${exampleLines.join('\n')}` : '',
@@ -756,6 +763,34 @@ export function sessionKey(adminId, sessionId) {
   return `${String(adminId || 'admin').trim()}::${String(sessionId || '').trim()}`;
 }
 
+export function exportChatSession(session = {}) {
+  return {
+    messages: Array.isArray(session.messages) ? session.messages : [],
+    draft: session.draft || createEmptyDraft(),
+    awaitingConfirm: Boolean(session.awaitingConfirm),
+    confirmed: Boolean(session.confirmed),
+    createdEventId: session.createdEventId || '',
+    created: session.created || null,
+  };
+}
+
+export function importChatSession(adminId, sessionId, data = {}) {
+  const session = {
+    messages: Array.isArray(data.messages) ? data.messages : [],
+    draft: mergeEventDraft(createEmptyDraft(), data.draft || {}),
+    awaitingConfirm: Boolean(data.awaitingConfirm),
+    confirmed: Boolean(data.confirmed),
+    createdEventId: data.createdEventId || '',
+    created: data.created || null,
+  };
+  sessions.set(sessionKey(adminId, sessionId), session);
+  return session;
+}
+
+export function peekChatSession(adminId, sessionId) {
+  return sessions.get(sessionKey(adminId, sessionId)) || null;
+}
+
 export function getOrCreateChatSession(adminId, sessionId) {
   const key = sessionKey(adminId, sessionId);
   if (!sessions.has(key)) {
@@ -764,6 +799,8 @@ export function getOrCreateChatSession(adminId, sessionId) {
       draft: createEmptyDraft(),
       awaitingConfirm: false,
       confirmed: false,
+      createdEventId: '',
+      created: null,
     });
   }
   return sessions.get(key);
@@ -792,11 +829,12 @@ export async function processEventChatTurn({
     throw new Error('Message is required.');
   }
 
-  if (session.awaitingConfirm && isConfirmIntent(text)) {
+  if (isConfirmIntent(text)) {
     try {
       const draft = assertDraftReadyToCreate(session.draft);
       session.draft = draft;
       session.confirmed = true;
+      session.awaitingConfirm = true;
       return {
         reply: 'Creating the event now.',
         draft,
@@ -806,17 +844,19 @@ export async function processEventChatTurn({
         confirmed: true,
       };
     } catch (error) {
-      session.awaitingConfirm = false;
-      session.confirmed = false;
-      const missing = error.missing || listMissingEventFields(session.draft);
-      return {
-        reply: `I still need a few details before I can create it: ${missing.join(', ')}.`,
-        draft: session.draft,
-        missing,
-        readyToCreate: false,
-        awaitingConfirm: false,
-        confirmed: false,
-      };
+      if (draftHasUserContent(session.draft) || session.awaitingConfirm) {
+        session.awaitingConfirm = false;
+        session.confirmed = false;
+        const missing = error.missing || listMissingEventFields(session.draft);
+        return {
+          reply: `I still need a few details before I can create it: ${missing.join(', ')}.`,
+          draft: session.draft,
+          missing,
+          readyToCreate: false,
+          awaitingConfirm: false,
+          confirmed: false,
+        };
+      }
     }
   }
 
@@ -875,10 +915,34 @@ export async function processEventChatTurn({
   }
   const missing = listMissingEventFields(session.draft);
   const ready = missing.length === 0 && Boolean(String(session.draft.title || '').trim());
-  session.awaitingConfirm = ready;
-
   const reply = extractAssistantReply(raw, parsed);
+  const wantsCreate = parsed.create === true
+    || parsed.action === 'create'
+    || isCreateClaim(reply)
+    || isConfirmIntent(text);
 
+  if (ready && wantsCreate) {
+    try {
+      const prepared = assertDraftReadyToCreate(session.draft);
+      session.draft = prepared;
+      session.confirmed = true;
+      session.awaitingConfirm = true;
+      session.messages.push({ role: 'assistant', content: reply || 'Creating the event now.' });
+      return {
+        reply: reply || 'Creating the event now.',
+        draft: prepared,
+        missing: [],
+        readyToCreate: true,
+        awaitingConfirm: true,
+        confirmed: true,
+      };
+    } catch {
+      // keep the conversational reply and wait for the missing fields
+    }
+  }
+
+  session.awaitingConfirm = ready;
+  session.confirmed = false;
   session.messages.push({ role: 'assistant', content: reply });
 
   return {

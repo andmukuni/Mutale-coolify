@@ -296,6 +296,17 @@ export function DataProvider({ children }) {
   }, [location.pathname, refreshAllData]);
 
   // Event CRUD
+  const ingestEvent = (event) => {
+    if (!event?.id) return;
+    const next = normalizeEvent(event);
+    setEvents((prev) => {
+      if (prev.some((item) => item.id === next.id)) {
+        return prev.map((item) => (item.id === next.id ? { ...item, ...next } : item));
+      }
+      return [next, ...prev];
+    });
+  };
+
   const addEvent = (event) => {
     const newEvent = normalizeEvent({ ...event, id: event.id || generateId('evt') });
     setEvents(prev => [newEvent, ...prev]);
@@ -540,6 +551,7 @@ export function DataProvider({ children }) {
       publications,
       isDataLoaded,
       addEvent,
+      ingestEvent,
       updateEvent,
       deleteEvent,
       addBlogPost,

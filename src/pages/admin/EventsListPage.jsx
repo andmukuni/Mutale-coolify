@@ -11,7 +11,7 @@ import { formatDate } from '../../utils/helpers';
 import { formatPrice, getEventDisplayStatus, isEventPast, sortEventsByRecentlyCreated } from '../../utils/eventServices';
 
 export default function EventsListPage() {
-  const { events, deleteEvent, updateEvent, refreshData } = useData();
+  const { events, deleteEvent, updateEvent, refreshData, ingestEvent } = useData();
   const { getEventRegistrationCount } = useBooking();
   const toast = useToast();
   const navigate = useNavigate();
@@ -297,7 +297,12 @@ export default function EventsListPage() {
         />
       )}
 
-      <EventCreateChatFab onCreated={() => { void refreshData?.(); }} />
+      <EventCreateChatFab
+        onCreated={(event) => {
+          if (event) ingestEvent?.(event);
+          void refreshData?.();
+        }}
+      />
 
       <ConfirmDialog
         isOpen={!!deleteTarget}

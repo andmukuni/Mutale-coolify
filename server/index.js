@@ -122,7 +122,11 @@ import {
 } from './emailSmsCompanion.js';
 import {
   assertDraftReadyToCreate,
+  exportChatSession,
   getOrCreateChatSession,
+  importChatSession,
+  mergeEventDraft,
+  peekChatSession,
   processEventChatTurn,
   resetChatSession,
 } from './eventChatService.js';
@@ -1449,6 +1453,7 @@ function isAdminProtectedRoute(req) {
   if (routePath.startsWith('/api/settings/')) return true;
   if (routePath === '/api/profile' && method === 'PUT') return true;
   if (routePath.startsWith('/api/site-images')) return true;
+  if (routePath.startsWith('/api/events/chat')) return true;
   if (routePath.startsWith('/api/events') && ['POST', 'PUT', 'DELETE'].includes(method)) return true;
   if (/^\/api\/events\/[^/]+\/zoom\/meta$/.test(routePath)) return true;
   if (/^\/api\/events\/[^/]+\/daily\/meta$/.test(routePath)) return true;
@@ -5043,6 +5048,18 @@ async function ensureSchema() {
     )
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS event_chat_sessions (
+      id VARCHAR(191) PRIMARY KEY,
+      admin_id VARCHAR(191) NOT NULL,
+      session_id VARCHAR(191) NOT NULL,
+      data JSON,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_event_chat_admin_session (admin_id, session_id),
+      INDEX idx_event_chat_updated (updated_at)
+    )
+  `);
+
   // Backward-compatible migration: ensure every column this app expects exists
   // on the users table, even if the table was created by another project on the
   // same database with a different schema. ER_DUP_FIELDNAME = already exists, safe to ignore.
@@ -6754,6 +6771,80 @@ async function loadEventChatSiteContext() {
   };
 }
 
+async function loadPersistedChatSession(adminId, sessionId) {
+  const existing = peekChatSession(adminId, sessionId);
+  if (existing) return existing;
+  try {
+    const [[row]] = await pool.query(
+      'SELECT data FROM event_chat_sessions WHERE admin_id = ? AND session_id = ? LIMIT 1',
+      [adminId, sessionId],
+    );
+    if (row?.data) {
+      return importChatSession(adminId, sessionId, parseJsonColumn(row.data, {}));
+    }
+  } catch {
+    // table may not exist yet on a rolling deploy
+  }
+  return getOrCreateChatSession(adminId, sessionId);
+}
+
+async function savePersistedChatSession(adminId, sessionId, session) {
+  try {
+    await pool.query(
+      `INSERT INTO event_chat_sessions (id, admin_id, session_id, data, updated_at)
+       VALUES (?, ?, ?, ?, NOW())
+       ON DUPLICATE KEY UPDATE data = VALUES(data), updated_at = NOW()`,
+      [
+        `${String(adminId || 'admin')}::${String(sessionId || '')}`,
+        adminId,
+        sessionId,
+        JSON.stringify(exportChatSession(session)),
+      ],
+    );
+  } catch (error) {
+    console.warn('event chat session persist failed:', error.message);
+  }
+}
+
+app.get('/api/events/chat/session', rateLimitEventChat, async (req, res) => {
+  try {
+    const adminId = req.adminUser?.sub || req.adminUser?.email || 'admin';
+    const sessionId = String(req.query?.sessionId || '').trim();
+    let row = null;
+    if (sessionId) {
+      const session = await loadPersistedChatSession(adminId, sessionId);
+      return res.json({
+        ok: true,
+        data: {
+          sessionId,
+          ...exportChatSession(session),
+        },
+      });
+    }
+    try {
+      [[row]] = await pool.query(
+        'SELECT session_id, data FROM event_chat_sessions WHERE admin_id = ? ORDER BY updated_at DESC LIMIT 1',
+        [adminId],
+      );
+    } catch {
+      row = null;
+    }
+    if (!row) {
+      return res.json({ ok: true, data: null });
+    }
+    const session = importChatSession(adminId, row.session_id, parseJsonColumn(row.data, {}));
+    return res.json({
+      ok: true,
+      data: {
+        sessionId: row.session_id,
+        ...exportChatSession(session),
+      },
+    });
+  } catch (error) {
+    return res.status(400).json({ ok: false, message: error.message || 'Failed to load chat session.' });
+  }
+});
+
 app.post('/api/events/chat', rateLimitEventChat, async (req, res) => {
   try {
     const sessionId = String(req.body?.sessionId || '').trim();
@@ -6771,7 +6862,10 @@ app.post('/api/events/chat', rateLimitEventChat, async (req, res) => {
     }
 
     const adminId = req.adminUser?.sub || req.adminUser?.email || 'admin';
-    const session = getOrCreateChatSession(adminId, sessionId);
+    const session = await loadPersistedChatSession(adminId, sessionId);
+    if (req.body?.draft && typeof req.body.draft === 'object') {
+      session.draft = mergeEventDraft(session.draft, req.body.draft);
+    }
     const siteContext = await loadEventChatSiteContext();
     const result = await processEventChatTurn({
       session,
@@ -6781,6 +6875,7 @@ app.post('/api/events/chat', rateLimitEventChat, async (req, res) => {
       exampleEvents: siteContext.events,
       siteContext,
     });
+    await savePersistedChatSession(adminId, sessionId, session);
 
     return res.json({ ok: true, data: result });
   } catch (error) {
@@ -6797,6 +6892,7 @@ app.post('/api/events/chat/reset', rateLimitEventChat, async (req, res) => {
     if (!sessionId) return res.status(400).json({ ok: false, message: 'sessionId is required.' });
     const adminId = req.adminUser?.sub || req.adminUser?.email || 'admin';
     const session = resetChatSession(adminId, sessionId);
+    await savePersistedChatSession(adminId, sessionId, session);
     return res.json({
       ok: true,
       data: {
@@ -6818,8 +6914,11 @@ app.post('/api/events/chat/create', rateLimitEventChat, async (req, res) => {
     if (!sessionId) return res.status(400).json({ ok: false, message: 'sessionId is required.' });
 
     const adminId = req.adminUser?.sub || req.adminUser?.email || 'admin';
-    const session = getOrCreateChatSession(adminId, sessionId);
-    const confirmed = session.confirmed || Boolean(req.body?.confirm) && session.awaitingConfirm;
+    const session = await loadPersistedChatSession(adminId, sessionId);
+    if (req.body?.draft && typeof req.body.draft === 'object') {
+      session.draft = mergeEventDraft(session.draft, req.body.draft);
+    }
+    const confirmed = Boolean(session.confirmed || req.body?.confirm);
     if (!confirmed) {
       return res.status(400).json({
         ok: false,
@@ -6874,6 +6973,12 @@ app.post('/api/events/chat/create', rateLimitEventChat, async (req, res) => {
     session.confirmed = false;
     session.awaitingConfirm = false;
     session.createdEventId = event.id;
+    session.created = { event, publicUrl, adminUrl };
+    session.messages.push({
+      role: 'assistant',
+      content: `Draft event created: ${event.title}. It is now on Admin → Events.`,
+    });
+    await savePersistedChatSession(adminId, sessionId, session);
 
     return res.status(201).json({
       ok: true,
