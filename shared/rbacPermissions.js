@@ -27,6 +27,7 @@ export const ADMIN_PERMISSIONS = [
   { key: 'cv.view', name: 'View CV purchases', group: 'Finance' },
   { key: 'website.manage', name: 'Manage website pages', group: 'System' },
   { key: 'settings.manage', name: 'Manage system settings', group: 'System' },
+  { key: 'templates.manage', name: 'Manage email & SMS templates', group: 'System' },
   { key: 'rbac.manage', name: 'Manage roles & permissions', group: 'System' },
 ];
 
@@ -53,6 +54,7 @@ export const DEFAULT_ADMIN_ROLES = [
       'publications.view', 'publications.manage',
       'shop.view', 'shop.manage', 'shop.orders',
       'receipts.view',
+      'templates.manage',
     ],
   },
   {
@@ -118,6 +120,7 @@ export const NAV_PERMISSION_MAP = {
   sections: 'website.manage',
   'partner-logos': 'website.manage',
   menu: 'website.manage',
+  templates: 'templates.manage',
   settings: 'settings.manage',
   'access-control': 'rbac.manage',
 };

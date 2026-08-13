@@ -187,6 +187,7 @@ export function resolveRouteAdminPermission(req) {
   const method = String(req.method || '').toUpperCase();
 
   if (path.startsWith('/api/admin/rbac')) return 'rbac.manage';
+  if (path.startsWith('/api/admin/notification-templates')) return 'templates.manage';
 
   if (path.startsWith('/api/settings/')) return 'settings.manage';
   if (path.startsWith('/api/finance/')) return method === 'GET' ? 'finance.view' : 'finance.payouts';

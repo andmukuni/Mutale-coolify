@@ -3,6 +3,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import {
   buildTicketEmailCopy,
+  buildTicketSmsMessage,
+  formatFirstNameSentenceCase,
   sendTicketEmailsForRegistration,
   isTicketEmailAlreadySent,
 } from '../ticketService.js';
@@ -45,6 +47,31 @@ describe('buildTicketEmailCopy', () => {
     });
     expect(copy.subject).toContain('Ticket copy');
     expect(copy.subject).toContain('Guest A');
+  });
+});
+
+describe('buildTicketSmsMessage', () => {
+  it('sentence-cases the purchaser first name', () => {
+    expect(formatFirstNameSentenceCase('ANDREW MUKUNI')).toBe('Andrew');
+    expect(formatFirstNameSentenceCase('mutale')).toBe('Mutale');
+    expect(formatFirstNameSentenceCase('')).toBe('');
+  });
+
+  it('thanks the purchaser and points to the ticket link', () => {
+    expect(buildTicketSmsMessage({
+      registration: { user_name: 'ANDREW MUKUNI' },
+      event: { title: 'Navigating the Hidden Sorrows of Leading' },
+      ticketUrl: 'https://mutalemubanga.org/tickets/REG-1',
+    })).toBe(
+      'Thank you, Andrew. Navigating the Hidden Sorrows of Leading. View your ticket here: https://mutalemubanga.org/tickets/REG-1',
+    );
+  });
+
+  it('omits the name when the purchaser is unknown', () => {
+    expect(buildTicketSmsMessage({
+      event: { title: 'Summit' },
+      ticketUrl: 'https://example.com/tickets/MM-1',
+    })).toBe('Thank you. Summit. View your ticket here: https://example.com/tickets/MM-1');
   });
 });
 
@@ -124,6 +151,9 @@ describe('sendTicketEmailsForRegistration', () => {
     });
     expect(result.status).toBe('sent');
     expect(sendEmailNotification).toHaveBeenCalledTimes(2);
+    expect(sendEmailNotification.mock.calls[0][0].smsMessage).toBe(
+      'Thank you, Buyer. Summit. View your ticket here: https://example.com/tickets/MM-TKT-1',
+    );
     expect(pool.query).toHaveBeenCalledWith(
       expect.stringContaining('ticket_email_sent_at'),
       expect.any(Array),

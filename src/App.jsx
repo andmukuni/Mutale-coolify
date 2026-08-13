@@ -80,6 +80,7 @@ const SectionsPage = lazy(() => import('./pages/admin/SectionsPage'));
 const PartnerLogosPage = lazy(() => import('./pages/admin/PartnerLogosPage'));
 const MenuManagementPage = lazy(() => import('./pages/admin/MenuManagementPage'));
 const AccessControlPage = lazy(() => import('./pages/admin/AccessControlPage'));
+const NotificationTemplatesPage = lazy(() => import('./pages/admin/NotificationTemplatesPage'));
 
 function RouteLoader() {
   return (
@@ -281,6 +282,7 @@ export default function App() {
         <Route path="sections" element={<SectionsPage />} />
         <Route path="partner-logos" element={<PartnerLogosPage />} />
         <Route path="menu" element={<MenuManagementPage />} />
+        <Route path="templates" element={<NotificationTemplatesPage />} />
         <Route path="access-control" element={<AccessControlPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="finance/ledger" element={<TransactionLedgerPage />} />

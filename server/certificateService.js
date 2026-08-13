@@ -20,6 +20,7 @@ import {
   resolveAttendeeName,
   resolveAttendeePhone,
 } from '../shared/ticketViewModel.js';
+import { buildPersonTemplateVars } from '../shared/notificationTemplates.js';
 
 const NAVY = '#0B1D36';
 const CYAN = '#06B6D4';
@@ -459,6 +460,14 @@ export async function sendCertificateEmailForRow(pool, certRow, appRoot, sendEma
       portalUrl,
     ].filter(Boolean).join(' '),
     kind: 'certificate',
+    templateSlug: 'certificate',
+    templateVars: {
+      ...buildPersonTemplateVars(certRow.attendee_name),
+      full_name: certRow.attendee_name,
+      event_title: certRow.event_title,
+      certificate_code: certRow.certificate_code,
+      portal_url: portalUrl,
+    },
   });
 
   if (result?.status === 'sent') {

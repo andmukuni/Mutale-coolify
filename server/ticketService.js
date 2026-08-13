@@ -2,11 +2,45 @@ import { renderTicketDocumentHtml } from '../shared/ticketDocumentHtml.js';
 import { buildTicketViewModel, isGuestTicket, isInPersonEventRecord, isTicketPaymentEligible, resolveAttendeeName, resolveAttendeePhone } from '../shared/ticketViewModel.js';
 import { buildTicketFilename, generateTicketPdfBuffer } from '../shared/ticketPdfServer.js';
 import { loadReceiptLogoDataUrl } from '../shared/receiptLogoAsset.js';
+import {
+  buildPersonTemplateVars,
+  buildThankYouLine,
+  formatFirstNameSentenceCase,
+  getSystemTemplate,
+  renderTemplate,
+} from '../shared/notificationTemplates.js';
+import { applyNotificationTemplates } from './notificationTemplateService.js';
+
+export { formatFirstNameSentenceCase };
 
 function normalizeEmail(value = '') {
   const email = String(value || '').trim().toLowerCase();
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return '';
   return email;
+}
+
+function ticketTemplateVars({ registration = {}, event = {}, ticketUrl = '', recipientName = '' } = {}) {
+  const purchaserName = String(registration.user_name || recipientName || '').trim();
+  const eventTitle = String(event.title || registration.event_title || '').trim().replace(/\.+$/, '');
+  return {
+    ...buildPersonTemplateVars(purchaserName),
+    event_title: eventTitle,
+    ticket_url: String(ticketUrl || '').trim(),
+    reference: String(registration.reference_code || '').trim(),
+  };
+}
+
+export function buildTicketSmsMessage({
+  registration = {},
+  event = {},
+  ticketUrl = '',
+} = {}) {
+  const vars = ticketTemplateVars({ registration, event, ticketUrl });
+  const catalog = getSystemTemplate('ticket', 'sms');
+  if (catalog?.body) return renderTemplate(catalog.body, vars);
+  const titlePart = vars.event_title ? `${vars.event_title}.` : '';
+  const linkPart = vars.ticket_url ? `View your ticket here: ${vars.ticket_url}` : '';
+  return [vars.thank_you || buildThankYouLine(registration.user_name), titlePart, linkPart].filter(Boolean).join(' ');
 }
 
 export function buildTicketEmailCopy({
@@ -106,6 +140,7 @@ export async function sendTicketEmail({
   sendEmailNotification,
   appRoot = '',
   appOrigin = '',
+  pool = null,
 }) {
   const recipient = normalizeEmail(to);
   if (!recipient) {
@@ -153,11 +188,20 @@ export async function sendTicketEmail({
     ? String(registration.user_phone || '').trim()
     : resolveAttendeePhone(registration);
   const ticketUrl = String(copy.ticketUrl || '').trim();
+  const slug = role === 'buyer_copy' ? 'ticket_buyer' : 'ticket';
+  const vars = ticketTemplateVars({ registration, event, ticketUrl, recipientName });
+  const applied = await applyNotificationTemplates(pool, {
+    slug,
+    vars,
+    subject: copy.subject,
+    text,
+    smsMessage: buildTicketSmsMessage({ registration, event, ticketUrl }),
+  });
   const result = await sendEmailNotification({
     settings,
     to: recipient,
-    subject: copy.subject,
-    text,
+    subject: applied.subject,
+    text: applied.text,
     html,
     attachments: [{
       filename,
@@ -165,11 +209,7 @@ export async function sendTicketEmail({
       contentType: 'application/pdf',
     }],
     smsTo,
-    smsMessage: [
-      copy.subject,
-      'Your ticket is ready.',
-      ticketUrl,
-    ].filter(Boolean).join(' '),
+    smsMessage: applied.smsMessage,
     kind: 'ticket',
   });
 
@@ -233,6 +273,7 @@ export async function sendTicketEmailsForRegistration({
       sendEmailNotification,
       appRoot,
       appOrigin,
+      pool,
     }));
   }
 
@@ -247,6 +288,7 @@ export async function sendTicketEmailsForRegistration({
       sendEmailNotification,
       appRoot,
       appOrigin,
+      pool,
     }));
   } else if (buyerEmail && !guestEmailResolved) {
     sends.push(sendTicketEmail({
@@ -259,6 +301,7 @@ export async function sendTicketEmailsForRegistration({
       sendEmailNotification,
       appRoot,
       appOrigin,
+      pool,
     }));
   } else if (!guestEmailResolved && !buyerEmail) {
     return { status: 'skipped', reason: 'No recipient email.' };

@@ -437,6 +437,11 @@ export function registerGuestTicketRoutes(app, deps) {
         smsTo: resolveAttendeePhone(loaded.registration),
         smsMessage: `Your Mutale access code for ${eventTitle} is ${code}. It expires in 15 minutes.`,
         kind: 'access_code',
+        templateSlug: 'guest_access_code',
+        templateVars: {
+          event_title: eventTitle,
+          access_code: code,
+        },
       });
 
       return res.json({ ok: true, message: 'Access code sent.', email_hint: email.replace(/(.{2}).*(@.*)/, '$1***$2') });

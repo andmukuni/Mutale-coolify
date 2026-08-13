@@ -31,6 +31,7 @@ import {
   Shield,
   Handshake,
   Navigation,
+  Mail,
 } from 'lucide-react';
 import SiteLogo from '../components/SiteLogo';
 import ThemeToggle from '../components/ThemeToggle';
@@ -93,6 +94,7 @@ const SYSTEM_NAVIGATION = [
   { key: 'menu', name: 'Menu Management', to: '/admin/menu', icon: Navigation },
   { key: 'users', name: 'Users Table', to: '/admin/users', icon: Users },
   { key: 'messages', name: 'Messages', to: '/admin/messages', icon: MessageSquare },
+  { key: 'templates', name: 'Templates', to: '/admin/templates', icon: Mail },
   { key: 'ledger', name: 'Transaction Ledger', to: '/admin/finance/ledger', icon: ReceiptText },
   { key: 'receipts', name: 'Receipts', to: '/admin/receipts', icon: Receipt },
   { key: 'cv', name: 'CVs', to: '/admin/cv', icon: FileUser },

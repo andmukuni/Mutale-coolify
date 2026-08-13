@@ -5,6 +5,7 @@ import {
   resolveAttendeeName,
   resolveAttendeePhone,
 } from '../shared/ticketViewModel.js';
+import { buildPersonTemplateVars } from '../shared/notificationTemplates.js';
 
 export const LIFECYCLE_LOOKBACK_MS = 48 * 60 * 60 * 1000;
 export const LIFECYCLE_KINDS = {
@@ -204,6 +205,13 @@ export async function processEventLifecycleNotifications(pool, deps = {}, now = 
             smsTo: message.smsTo,
             smsMessage: message.smsMessage,
             kind: 'event_reminder',
+            templateSlug: kind === LIFECYCLE_KINDS.started ? 'event_started' : 'event_ended',
+            templateVars: {
+              ...buildPersonTemplateVars(resolveAttendeeName(registration)),
+              event_title: event.title,
+              ticket_url: message.ticketUrl,
+              event_url: message.eventUrl,
+            },
           });
 
           const emailStatus = result?.status || 'failed';

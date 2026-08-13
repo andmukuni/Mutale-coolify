@@ -10,6 +10,7 @@ import {
   resolveReceiptType,
 } from '../shared/receiptHelpers.js';
 import { loadReceiptLogoDataUrl } from '../shared/receiptLogoAsset.js';
+import { buildPersonTemplateVars } from '../shared/notificationTemplates.js';
 
 export { isReceiptEligible, formatReceiptDisplayNumber } from '../shared/receiptPdf.js';
 export { loadReceiptLogoDataUrl };
@@ -378,6 +379,12 @@ export async function sendReceiptEmail({
       refCode ? `Ref: ${refCode}` : '',
     ].filter(Boolean).join(' '),
     kind: 'receipt',
+    templateSlug: 'receipt',
+    templateVars: {
+      ...buildPersonTemplateVars(user.name),
+      event_title: registration.event_title || event.title || copy.subject.replace(/^Receipt:\s*/i, ''),
+      reference: refCode,
+    },
   });
 
   if (result?.status === 'sent') {

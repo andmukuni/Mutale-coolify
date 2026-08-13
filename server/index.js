@@ -62,6 +62,9 @@ import {
   generateRegistrationTicketBuffer,
 } from './ticketService.js';
 import { registerGuestTicketRoutes } from './guestTicketRoutes.js';
+import { registerNotificationTemplateRoutes } from './notificationTemplateRoutes.js';
+import { applyNotificationTemplates, seedSystemNotificationTemplates } from './notificationTemplateService.js';
+import { buildPersonTemplateVars } from '../shared/notificationTemplates.js';
 import {
   publishLencoPaymentUpdate,
   subscribeLencoPaymentUpdates,
@@ -3509,7 +3512,23 @@ async function sendEmailNotification({
   smsMessage,
   kind,
   skipSms = false,
+  templateSlug,
+  templateVars,
 }) {
+  const slug = String(templateSlug || kind || '').trim();
+  if (slug && templateVars && typeof templateVars === 'object') {
+    const applied = await applyNotificationTemplates(pool, {
+      slug,
+      vars: templateVars,
+      subject,
+      text,
+      smsMessage,
+    });
+    subject = applied.subject;
+    text = applied.text;
+    smsMessage = applied.smsMessage;
+  }
+
   const recipient = String(to || '').trim();
   if (!recipient) return { channel: 'email', status: 'skipped', reason: 'No email recipient configured.' };
 
@@ -5046,6 +5065,10 @@ async function ensureSchema() {
     }
   }
 
+  await seedSystemNotificationTemplates(pool).catch((error) => {
+    console.warn(`[notification_templates] seed failed: ${error.message}`);
+  });
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS book_orders (
       id VARCHAR(90) PRIMARY KEY,
@@ -5428,6 +5451,11 @@ app.post('/api/auth/register', rateLimitAuth({ windowMs: 60 * 60 * 1000, max: 10
         smsTo: String(phone || whatsapp || '').trim(),
         smsMessage: `Hi ${displayName}, confirm your Mutale account: ${verifyUrl} (expires in 24 hours)`,
         kind: 'auth',
+        templateSlug: 'verify_email',
+        templateVars: {
+          ...buildPersonTemplateVars(displayName),
+          verify_url: verifyUrl,
+        },
       });
     } catch (emailErr) {
       console.warn('[auth/register] Verification email failed to send:', emailErr.message);
@@ -5525,6 +5553,11 @@ app.post('/api/auth/resend-verification', rateLimitAuth({ windowMs: 60 * 60 * 10
         smsTo: String(user.phone || user.whatsapp || '').trim(),
         smsMessage: `Hi ${user.name}, confirm your Mutale account: ${verifyUrl} (expires in 24 hours)`,
         kind: 'auth',
+        templateSlug: 'verify_email',
+        templateVars: {
+          ...buildPersonTemplateVars(user.name),
+          verify_url: verifyUrl,
+        },
       });
     } catch (emailErr) {
       console.warn('[auth/resend-verification] Email failed:', emailErr.message);
@@ -5587,6 +5620,11 @@ app.post('/api/auth/forgot-password', rateLimitAuth({ windowMs: 60 * 60 * 1000, 
         smsTo: String(user.phone || user.whatsapp || '').trim(),
         smsMessage: `Hi ${user.name}, reset your Mutale password: ${resetUrl} (expires in 1 hour)`,
         kind: 'auth',
+        templateSlug: 'password_reset',
+        templateVars: {
+          ...buildPersonTemplateVars(user.name),
+          reset_url: resetUrl,
+        },
       });
     } catch (emailErr) {
       console.warn('[auth/forgot-password] Email failed:', emailErr.message);
@@ -9502,6 +9540,14 @@ app.post('/api/registrations', async (req, res) => {
             ticketUrl || eventUrl,
           ].filter(Boolean).join(' '),
           kind: 'registration',
+          templateSlug: 'registration',
+          templateVars: {
+            ...buildPersonTemplateVars(recipientName),
+            event_title: event.title,
+            reference: refCode,
+            ticket_url: ticketUrl || eventUrl,
+            event_url: eventUrl,
+          },
           text: receiptAttached
             ? `${emailBody}\n\nYour receipt is attached to this email.`
             : emailBody,
@@ -9965,6 +10011,8 @@ registerGuestTicketRoutes(app, {
   __appRoot,
 });
 
+registerNotificationTemplateRoutes(app, { pool });
+
 app.post('/api/registrations/check-in', async (req, res) => {
   try {
     const adminAuth = getAdminAuth(req);
@@ -10407,6 +10455,8 @@ app.post('/api/contact-messages/:id/reply', async (req, res) => {
       smsTo: String(contactMessage.phone || '').trim(),
       smsMessage: `Mutale: ${subject}\n${message}`,
       kind: 'contact_reply',
+      templateSlug: 'contact_reply',
+      templateVars: { subject, message },
     });
 
     if (replyResult?.status !== 'sent') {
