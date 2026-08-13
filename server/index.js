@@ -449,10 +449,12 @@ function normalizeAttendeeSex(raw = '') {
   return '';
 }
 
+const MAX_CHILD_AGE = 18;
+
 function normalizeAttendeeAge(raw) {
   if (raw == null || raw === '') return null;
   const age = Math.floor(Number(raw));
-  if (!Number.isFinite(age) || age < 0 || age > 120) return null;
+  if (!Number.isFinite(age) || age < 0) return null;
   return age;
 }
 
@@ -469,7 +471,7 @@ function normalizeGuestAttendeeInput(raw = {}) {
     : (guardianRaw || null);
   const sexRaw = raw.attendee_sex ?? raw.sex ?? raw.gender ?? '';
   const ageRaw = raw.attendee_age ?? raw.age;
-  const attendee_sex = normalizedType === 'child' ? (normalizeAttendeeSex(sexRaw) || null) : null;
+  const attendee_sex = normalizeAttendeeSex(sexRaw) || null;
   const attendee_age = normalizedType === 'child' ? normalizeAttendeeAge(ageRaw) : null;
   return {
     booked_for_name,
@@ -2326,9 +2328,7 @@ function normalizeRegistrationPayload(payload = {}, idOverride) {
     booked_for_phone: String(payload.booked_for_phone || '').trim() || null,
     attendee_type: String(payload.attendee_type || 'adult').trim().toLowerCase() === 'child' ? 'child' : 'adult',
     guardian_phone: String(payload.guardian_phone || '').trim() || null,
-    attendee_sex: String(payload.attendee_type || 'adult').trim().toLowerCase() === 'child'
-      ? (normalizeAttendeeSex(payload.attendee_sex || payload.sex || payload.gender) || null)
-      : null,
+    attendee_sex: normalizeAttendeeSex(payload.attendee_sex || payload.sex || payload.gender) || null,
     attendee_age: String(payload.attendee_type || 'adult').trim().toLowerCase() === 'child'
       ? normalizeAttendeeAge(payload.attendee_age ?? payload.age)
       : null,
@@ -9296,11 +9296,14 @@ app.post('/api/registrations/batch', async (req, res) => {
       if (guest.attendee_type === 'child' && !guest.booked_for_relation) {
         return res.status(400).json({ ok: false, message: 'Each child attendee must include your relationship (parent, guardian, etc.).' });
       }
-      if (guest.attendee_type === 'child' && !guest.attendee_sex) {
-        return res.status(400).json({ ok: false, message: 'Each child attendee must include sex (male or female).' });
+      if (!guest.attendee_sex) {
+        return res.status(400).json({ ok: false, message: 'Each attendee must include sex (male or female).' });
       }
       if (guest.attendee_type === 'child' && guest.attendee_age == null) {
         return res.status(400).json({ ok: false, message: 'Each child attendee must include age.' });
+      }
+      if (guest.attendee_type === 'child' && guest.attendee_age > MAX_CHILD_AGE) {
+        return res.status(400).json({ ok: false, message: `Child attendee age cannot be greater than ${MAX_CHILD_AGE}.` });
       }
     }
 

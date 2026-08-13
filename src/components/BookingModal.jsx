@@ -22,6 +22,7 @@ import {
   getMaxGuestTickets,
   getRegistrationAttendeeSlotKey,
   isOnlineEvent,
+  MAX_CHILD_AGE,
   normalizeAttendeeType,
   validateGuestAttendees,
 } from '../utils/eventServices';
@@ -531,7 +532,7 @@ export default function EventRegistrationFlow({
           phone: guest.phone.trim(),
           attendee_type: attendeeType,
           relation: String(guest.relation || '').trim(),
-          sex: attendeeType === 'child' ? String(guest.sex || '').trim() : '',
+          sex: String(guest.sex || '').trim(),
           age: attendeeType === 'child' ? guest.age : '',
         };
       })
@@ -1291,7 +1292,7 @@ export default function EventRegistrationFlow({
                             ? {
                               ...row,
                               attendee_type: e.target.value,
-                              ...(e.target.value === 'adult' ? { relation: '', sex: '', age: '' } : {}),
+                              ...(e.target.value === 'adult' ? { relation: '', age: '' } : {}),
                             }
                             : row
                         )))}
@@ -1301,7 +1302,23 @@ export default function EventRegistrationFlow({
                         <option value="child">Child</option>
                       </select>
                     </div>
-                    {normalizeAttendeeType(guest.attendee_type) === 'child' && (
+                    <div>
+                      <label className="block text-xs font-medium text-navy-600 mb-1">Sex <span className="text-red-500">*</span></label>
+                      <select
+                        value={guest.sex || ''}
+                        onChange={(e) => setGuestAttendees((prev) => prev.map((row, i) => (
+                          i === index ? { ...row, sex: e.target.value } : row
+                        )))}
+                        className="w-full px-3 py-2.5 rounded-xl border border-navy-200 bg-white text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                      >
+                        <option value="">Select…</option>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                      </select>
+                    </div>
+                  </div>
+                  {normalizeAttendeeType(guest.attendee_type) === 'child' && (
+                    <div className="grid sm:grid-cols-2 gap-2">
                       <div>
                         <label className="block text-xs font-medium text-navy-600 mb-1">Your relationship <span className="text-red-500">*</span></label>
                         <select
@@ -1318,36 +1335,18 @@ export default function EventRegistrationFlow({
                           <option value="other">Other</option>
                         </select>
                       </div>
-                    )}
-                  </div>
-                  {normalizeAttendeeType(guest.attendee_type) === 'child' && (
-                    <div className="grid sm:grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-xs font-medium text-navy-600 mb-1">Sex <span className="text-red-500">*</span></label>
-                        <select
-                          value={guest.sex || ''}
-                          onChange={(e) => setGuestAttendees((prev) => prev.map((row, i) => (
-                            i === index ? { ...row, sex: e.target.value } : row
-                          )))}
-                          className="w-full px-3 py-2.5 rounded-xl border border-navy-200 bg-white text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                        >
-                          <option value="">Select…</option>
-                          <option value="male">Male</option>
-                          <option value="female">Female</option>
-                        </select>
-                      </div>
                       <div>
                         <label className="block text-xs font-medium text-navy-600 mb-1">Age <span className="text-red-500">*</span></label>
                         <input
                           type="number"
                           min={0}
-                          max={120}
+                          max={MAX_CHILD_AGE}
                           inputMode="numeric"
                           value={guest.age === 0 || guest.age ? guest.age : ''}
                           onChange={(e) => setGuestAttendees((prev) => prev.map((row, i) => (
                             i === index ? { ...row, age: e.target.value } : row
                           )))}
-                          placeholder="e.g. 10"
+                          placeholder="0–18"
                           className="w-full px-3 py-2.5 rounded-xl border border-navy-200 bg-white text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                         />
                       </div>

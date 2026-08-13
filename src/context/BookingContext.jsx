@@ -242,7 +242,7 @@ export function BookingProvider({ children }) {
         booked_for_relation: String(row.relation || row.booked_for_relation || '').trim(),
         attendee_type: attendeeType,
         guardian_phone: String(row.guardian_phone || row.guardianPhone || '').trim(),
-        attendee_sex: isChild ? String(row.sex || row.attendee_sex || row.gender || '').trim() : '',
+        attendee_sex: String(row.sex || row.attendee_sex || row.gender || '').trim(),
         attendee_age: isChild ? (row.age ?? row.attendee_age ?? '') : '',
       };
     });

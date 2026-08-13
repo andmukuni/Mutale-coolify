@@ -50,6 +50,7 @@ export function allowsMultiAttendeeRegistration(event) {
 const VALID_ATTENDEE_TYPES = new Set(['adult', 'child']);
 const VALID_CHILD_RELATIONS = new Set(['parent', 'guardian', 'teacher', 'other']);
 const VALID_ATTENDEE_SEX = new Set(['male', 'female']);
+export const MAX_CHILD_AGE = 18;
 
 export function normalizeAttendeeType(raw = 'adult') {
   const t = String(raw || 'adult').trim().toLowerCase();
@@ -71,7 +72,7 @@ export function normalizeAttendeeSex(raw = '') {
 export function normalizeAttendeeAge(raw) {
   if (raw == null || raw === '') return null;
   const age = Math.floor(Number(raw));
-  if (!Number.isFinite(age) || age < 0 || age > 120) return null;
+  if (!Number.isFinite(age) || age < 0) return null;
   return age;
 }
 
@@ -93,18 +94,21 @@ export function validateGuestAttendees(attendees = []) {
       return { ok: false, error: `Attendee ${i + 1} needs a name.` };
     }
     const attendeeType = normalizeAttendeeType(row.attendee_type || row.attendeeType);
+    const sex = normalizeAttendeeSex(row.sex || row.attendee_sex || row.gender);
+    if (!sex) {
+      return { ok: false, error: `Attendee ${i + 1} (${name}): select sex (male or female).` };
+    }
     if (attendeeType === 'child') {
       const relation = normalizeAttendeeRelation(row.relation || row.booked_for_relation);
       if (!relation) {
         return { ok: false, error: `Attendee ${i + 1} (${name}): select your relationship (parent, guardian, etc.).` };
       }
-      const sex = normalizeAttendeeSex(row.sex || row.attendee_sex || row.gender);
-      if (!sex) {
-        return { ok: false, error: `Attendee ${i + 1} (${name}): select sex (male or female).` };
-      }
       const age = normalizeAttendeeAge(row.age ?? row.attendee_age);
       if (age == null) {
         return { ok: false, error: `Attendee ${i + 1} (${name}): enter age.` };
+      }
+      if (age > MAX_CHILD_AGE) {
+        return { ok: false, error: `Attendee ${i + 1} (${name}): child age cannot be greater than ${MAX_CHILD_AGE}.` };
       }
     }
     const key = name.toLowerCase();

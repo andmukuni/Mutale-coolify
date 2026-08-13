@@ -430,13 +430,22 @@ describe('multi-guest registration helpers', () => {
   });
 
   it('validates guest names and rejects duplicates', () => {
-    expect(validateGuestAttendees([{ name: 'Ada' }, { name: 'Ben' }]).ok).toBe(true);
+    expect(validateGuestAttendees([{ name: 'Ada', sex: 'female' }, { name: 'Ben', sex: 'male' }]).ok).toBe(true);
     expect(validateGuestAttendees([{ name: '' }]).ok).toBe(false);
-    expect(validateGuestAttendees([{ name: 'Ada' }, { name: 'ada' }]).ok).toBe(false);
+    expect(validateGuestAttendees([{ name: 'Ada', sex: 'female' }, { name: 'ada', sex: 'male' }]).ok).toBe(false);
+    expect(validateGuestAttendees([{ name: 'Ada' }])).toEqual({
+      ok: false,
+      error: 'Attendee 1 (Ada): select sex (male or female).',
+    });
     expect(validateGuestAttendees([{ name: 'Kid', attendee_type: 'child', relation: 'parent', sex: 'female', age: 8 }]).ok).toBe(true);
+    expect(validateGuestAttendees([{ name: 'Kid', attendee_type: 'child', relation: 'parent', sex: 'female', age: 18 }]).ok).toBe(true);
     expect(validateGuestAttendees([{ name: 'Kid', attendee_type: 'child' }]).ok).toBe(false);
     expect(validateGuestAttendees([{ name: 'Kid', attendee_type: 'child', relation: 'parent' }]).ok).toBe(false);
     expect(validateGuestAttendees([{ name: 'Kid', attendee_type: 'child', relation: 'parent', sex: 'male' }]).ok).toBe(false);
+    expect(validateGuestAttendees([{ name: 'Kid', attendee_type: 'child', relation: 'parent', sex: 'male', age: 19 }])).toEqual({
+      ok: false,
+      error: 'Attendee 1 (Kid): child age cannot be greater than 18.',
+    });
   });
 
   it('caps guest tickets by remaining capacity', () => {
