@@ -108,6 +108,13 @@ import {
 } from './rbacService.js';
 import { getBundledReceiptLogoPath } from '../shared/receiptLogoAsset.js';
 import { isValidPdfBuffer } from '../shared/receiptPdf.js';
+import {
+  ONTECH_SMS_BASE_URL,
+  normalizeOntechSmsSettings,
+  normalizeZambianSmsPhone,
+  sendOntechSms,
+  validateOntechSmsSettings,
+} from './ontechSmsClient.js';
 
 // Load `.env` from the app root (parent of server/), not relying on cwd — cPanel Passenger often starts with cwd ≠ project root.
 const __filename = fileURLToPath(import.meta.url);
@@ -732,12 +739,11 @@ const SYSTEM_SETTINGS_DEFAULTS = {
     sandboxMode: envBoolean(process.env.LENCO_SANDBOX, false),
   },
   sms: {
-    provider: process.env.SMS_PROVIDER || 'twilio',
-    senderId: process.env.SMS_SENDER_ID || '',
-    apiKey: process.env.SMS_API_KEY || '',
-    apiSecret: process.env.SMS_API_SECRET || '',
-    defaultCountryCode: process.env.SMS_DEFAULT_COUNTRY_CODE || '+260',
-    webhookUrl: process.env.SMS_WEBHOOK_URL || '',
+    enabled: envBoolean(process.env.ONTECH_SMS_ENABLED, false),
+    provider: 'ontech',
+    baseUrl: process.env.ONTECH_BASE_URL || ONTECH_SMS_BASE_URL,
+    accessId: process.env.ONTECH_ACCESS_ID || process.env.ONTECH_API_KEY || '',
+    senderId: process.env.ONTECH_SENDER_ID || '',
   },
   whatsapp: {
     provider: process.env.WHATSAPP_PROVIDER || 'green_api',
@@ -748,6 +754,7 @@ const SYSTEM_SETTINGS_DEFAULTS = {
     greenApiInstanceId: process.env.GREEN_API_INSTANCE_ID || '',
     greenApiToken: process.env.GREEN_API_TOKEN || '',
     webhookUrl: process.env.WHATSAPP_WEBHOOK_URL || '',
+    defaultCountryCode: process.env.WHATSAPP_DEFAULT_COUNTRY_CODE || '+260',
   },
   notifications: {
     emailOnNewRegistration: true,
@@ -841,7 +848,7 @@ function mergeSystemSettings(stored = {}) {
     ...normalizedStored,
     email: { ...SYSTEM_SETTINGS_DEFAULTS.email, ...(normalizedStored.email || {}) },
     payment: { ...SYSTEM_SETTINGS_DEFAULTS.payment, ...(normalizedStored.payment || {}) },
-    sms: { ...SYSTEM_SETTINGS_DEFAULTS.sms, ...(normalizedStored.sms || {}) },
+    sms: normalizeOntechSmsSettings(normalizedStored.sms, SYSTEM_SETTINGS_DEFAULTS.sms),
     whatsapp: { ...SYSTEM_SETTINGS_DEFAULTS.whatsapp, ...(normalizedStored.whatsapp || {}) },
     notifications: { ...SYSTEM_SETTINGS_DEFAULTS.notifications, ...(normalizedStored.notifications || {}) },
     security: { ...SYSTEM_SETTINGS_DEFAULTS.security, ...(normalizedStored.security || {}) },
@@ -1816,8 +1823,12 @@ async function getSystemSettings() {
 
 async function saveSystemSettings(payload = {}) {
   const stored = await getSystemSettings();
-  const withSecrets = preserveMaskedSecrets(payload, stored);
+  const incoming = payload?.sms === undefined
+    ? { ...payload, sms: stored.sms }
+    : payload;
+  const withSecrets = preserveMaskedSecrets(incoming, stored);
   const merged = mergeSystemSettings(withSecrets);
+  validateOntechSmsSettings(merged);
   validateVideoSettingsBeforeSave(merged);
   await pool.query(
     'INSERT INTO system_settings (id, data) VALUES (1, ?) ON DUPLICATE KEY UPDATE data = VALUES(data)',
@@ -2998,7 +3009,7 @@ async function sendGreenApiWhatsApp({ settings, to, message }) {
   const apiUrl = String(waCfg.greenApiUrl || 'https://api.green-api.com').trim().replace(/\/+$/, '');
   const idInstance = String(waCfg.greenApiInstanceId || '').trim();
   const apiTokenInstance = String(waCfg.greenApiToken || '').trim();
-  const chatId = phoneToGreenApiChatId(to, settings?.sms?.defaultCountryCode || '+260');
+  const chatId = phoneToGreenApiChatId(to, settings?.whatsapp?.defaultCountryCode || '+260');
 
   if (!chatId) {
     return { channel: 'whatsapp', status: 'skipped', reason: 'No valid WhatsApp recipient configured.' };
@@ -3409,45 +3420,39 @@ async function sendEmailNotification({ settings, to, subject, text, html, attach
   }
 }
 
-async function sendSmsNotification({ settings, to, message, meta = {} }) {
+async function sendSmsNotification({ settings, to, message }) {
   const smsCfg = settings?.sms || {};
-  const provider = String(smsCfg.provider || 'none').toLowerCase();
-  const recipient = normalizePhoneForChannel(to, smsCfg.defaultCountryCode);
+  const recipient = normalizeZambianSmsPhone(to);
 
   if (!recipient) return { channel: 'sms', status: 'skipped', reason: 'No phone recipient configured.' };
-  if (provider === 'none') return { channel: 'sms', status: 'skipped', recipient, reason: 'SMS provider is disabled.' };
-
-  const webhookUrl = String(smsCfg.webhookUrl || '').trim();
-  if (!webhookUrl) {
+  if (!parseBoolean(smsCfg.enabled, false)) {
     return {
       channel: 'sms',
-      status: 'failed',
+      status: 'skipped',
       recipient,
-      reason: 'SMS webhook URL is not configured. Add it in Admin Settings → SMS Configuration.',
+      reason: 'Ontech SMS is disabled.',
     };
   }
 
   try {
-    const apiKey = String(smsCfg.apiKey || '').trim();
-    const apiSecret = String(smsCfg.apiSecret || '').trim();
-
-    await sendWebhookNotification({
-      webhookUrl,
-      payload: {
-        provider,
-        to: recipient,
-        senderId: String(smsCfg.senderId || '').trim(),
-        message,
-        credentials: {
-          apiKey,
-          apiSecret,
-        },
-        meta,
-      },
+    const result = await sendOntechSms({
+      baseUrl: smsCfg.baseUrl,
+      accessId: smsCfg.accessId,
+      senderId: smsCfg.senderId,
+    }, {
+      phone: recipient,
+      message,
     });
 
-    console.log(`[notification:sms] ✓ sent to ${recipient} via ${provider} (key: ${maskSecret(apiKey)})`);
-    return { channel: 'sms', status: 'sent', recipient };
+    console.log(`[notification:sms] ✓ sent to ${recipient} via Ontech (key: ${maskSecret(smsCfg.accessId)})`);
+    return {
+      channel: 'sms',
+      status: 'sent',
+      recipient,
+      provider: result.provider,
+      messageId: result.messageId,
+      data: result.raw,
+    };
   } catch (error) {
     console.error(`[notification:sms] ✗ failed to ${recipient} — ${error.message}`);
     return { channel: 'sms', status: 'failed', recipient, reason: error.message };
@@ -3457,7 +3462,7 @@ async function sendSmsNotification({ settings, to, message, meta = {} }) {
 async function sendWhatsAppNotification({ settings, to, message, meta = {} }) {
   const waCfg = settings?.whatsapp || {};
   const provider = String(waCfg.provider || 'none').toLowerCase();
-  const recipient = normalizePhoneForChannel(to, settings?.sms?.defaultCountryCode || '+260');
+  const recipient = normalizePhoneForChannel(to, settings?.whatsapp?.defaultCountryCode || '+260');
 
   if (!recipient) return { channel: 'whatsapp', status: 'skipped', reason: 'No WhatsApp recipient configured.' };
   if (provider === 'none') return { channel: 'whatsapp', status: 'skipped', recipient, reason: 'WhatsApp provider is disabled.' };
@@ -9727,7 +9732,7 @@ app.put('/api/settings/system', async (req, res) => {
   try {
     const payload = req.body || {};
     const settings = await saveSystemSettings(payload);
-    return res.json({ ok: true, data: settings });
+    return res.json({ ok: true, data: maskSystemSettingsSecrets(settings) });
   } catch (error) {
     const message = error?.message || 'Failed to save system settings';
     const status = message.includes('must be') ? 400 : 500;

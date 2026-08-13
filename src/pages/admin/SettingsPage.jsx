@@ -90,12 +90,11 @@ const defaultSystemConfig = {
     sandboxMode: true,
   },
   sms: {
-    provider: 'twilio',
+    enabled: false,
+    provider: 'ontech',
+    baseUrl: 'https://bulksms.ontech.co.zm/smsservice',
+    accessId: '',
     senderId: '',
-    apiKey: '',
-    apiSecret: '',
-    defaultCountryCode: '+260',
-    webhookUrl: '',
   },
   whatsapp: {
     provider: 'green_api',
@@ -227,6 +226,8 @@ export default function SettingsPage() {
   const [connectionStatus, setConnectionStatus] = useState(null);
   const [testingNotificationChannel, setTestingNotificationChannel] = useState('');
   const [notificationStatus, setNotificationStatus] = useState(null);
+  const [testSmsPhone, setTestSmsPhone] = useState('');
+  const [testSmsMessage, setTestSmsMessage] = useState('');
   const [confirmReset, setConfirmReset] = useState(false);
   const [testingZoom, setTestingZoom] = useState(false);
   const [zoomTestStatus, setZoomTestStatus] = useState(null);
@@ -585,7 +586,7 @@ export default function SettingsPage() {
     window.location.reload();
   };
 
-  const handleTestNotification = async (channel) => {
+  const handleTestNotification = async (channel, recipient = '', message = '') => {
     setTestingNotificationChannel(channel);
     setNotificationStatus(null);
 
@@ -597,7 +598,8 @@ export default function SettingsPage() {
       });
 
       if (!persistResponse.ok) {
-        throw new Error(`Failed to persist settings before test (${persistResponse.status})`);
+        const json = await persistResponse.json().catch(() => ({}));
+        throw new Error(json?.message || json?.error || `Failed to persist settings before test (${persistResponse.status})`);
       }
 
       const response = await fetch(`${API_BASE}/notifications/test`, {
@@ -605,9 +607,10 @@ export default function SettingsPage() {
         headers: getAdminAuthHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           channel,
-          recipient: channel === 'whatsapp'
+          recipient: recipient || (channel === 'whatsapp'
             ? (systemForm.whatsapp.senderNumber || systemForm.notifications.adminAlertWhatsApp || '0973790404')
-            : undefined,
+            : undefined),
+          message: message || undefined,
         }),
       });
 
@@ -621,7 +624,7 @@ export default function SettingsPage() {
       setNotificationStatus({
         type: result.status === 'sent' ? 'success' : result.status === 'failed' ? 'error' : 'info',
         message: result.status === 'sent'
-          ? `${channelLabel(channel)} test sent successfully to ${result.recipient || 'configured recipient'}${result.data?.idMessage ? ` (message ID: ${result.data.idMessage})` : ''}.`
+          ? `${channelLabel(channel)} test sent successfully to ${result.recipient || 'configured recipient'}${result.messageId || result.data?.idMessage ? ` (message ID: ${result.messageId || result.data.idMessage})` : ''}.`
           : result.status === 'skipped'
             ? `${channelLabel(channel)} test skipped: ${result.reason || 'No recipient configured. Fill in the alert recipient field above and save first.'}`
             : result.reason || `${channelLabel(channel)} test completed with status: ${result.status || 'unknown'}.`,
@@ -932,20 +935,105 @@ export default function SettingsPage() {
         )}
 
         {activeTab === 'sms' && (
-          <Card title="SMS Configuration" subtitle="Configure SMS provider and credentials">
+          <Card title="Ontech SMS" subtitle="Paste your Ontech API key and approved Sender ID">
             <form onSubmit={handleSaveSystem} className="space-y-4">
-              <div className="grid sm:grid-cols-2 gap-4">
-                <FormField label="Provider" name="provider" type="select" value={systemForm.sms.provider} onChange={(e) => handleSystemChange('sms', e)} options={[{ value: 'twilio', label: 'Twilio' }, { value: 'africastalking', label: 'Africa\'s Talking' }, { value: 'aws_sns', label: 'AWS SNS' }, { value: 'webhook', label: 'Custom Webhook' }, { value: 'none', label: 'Disabled' }]} />
-                <FormField label="Sender ID" name="senderId" value={systemForm.sms.senderId} onChange={(e) => handleSystemChange('sms', e)} />
-                <FormField label="API Key" name="apiKey" value={systemForm.sms.apiKey} onChange={(e) => handleSystemChange('sms', e)} />
-                <FormField label="API Secret" name="apiSecret" type="password" value={systemForm.sms.apiSecret} onChange={(e) => handleSystemChange('sms', e)} />
+              <div className="rounded-xl border border-cyan-100 bg-cyan-50/70 p-4 text-sm text-cyan-900 space-y-2">
+                <p>
+                  Ontech is the only SMS provider used by this site. Copy your API key and Sender ID from the{' '}
+                  <a
+                    href="https://bulksms.ontech.co.zm"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium underline"
+                  >
+                    Ontech Bulk SMS portal
+                  </a>
+                  , then save them here.
+                </p>
               </div>
+              <BooleanField
+                label="Enable Ontech SMS delivery"
+                name="enabled"
+                checked={Boolean(systemForm.sms.enabled)}
+                onChange={(e) => handleSystemChange('sms', e)}
+              />
               <div className="grid sm:grid-cols-2 gap-4">
-                <FormField label="Default Country Code" name="defaultCountryCode" value={systemForm.sms.defaultCountryCode} onChange={(e) => handleSystemChange('sms', e)} />
-                <FormField label="Delivery Webhook URL" name="webhookUrl" value={systemForm.sms.webhookUrl} onChange={(e) => handleSystemChange('sms', e)} placeholder="https://..." />
+                <FormField
+                  label="API Key"
+                  name="accessId"
+                  type="password"
+                  value={systemForm.sms.accessId}
+                  onChange={(e) => handleSystemChange('sms', e)}
+                  placeholder="Ontech API key"
+                  required={Boolean(systemForm.sms.enabled)}
+                  helpText="The saved key stays hidden. Enter a new value only when replacing it."
+                  helpLink={{ href: 'https://bulksms.ontech.co.zm', label: 'Open Ontech portal' }}
+                />
+                <FormField
+                  label="Sender ID"
+                  name="senderId"
+                  value={systemForm.sms.senderId}
+                  onChange={(e) => handleSystemChange('sms', e)}
+                  placeholder="Mutale"
+                  maxLength={11}
+                  required={Boolean(systemForm.sms.enabled)}
+                  helpText="Maximum 11 characters and must be approved on your Ontech account."
+                />
               </div>
-              <p className="text-xs text-navy-500">Webhook mode sends a POST payload to your provider adapter/service.</p>
-              <SaveButton loading={systemSaving} disabled={systemLoading} />
+              <FormField
+                label="API Base URL"
+                name="baseUrl"
+                value={systemForm.sms.baseUrl}
+                onChange={(e) => handleSystemChange('sms', e)}
+                placeholder="https://bulksms.ontech.co.zm/smsservice"
+                helpText="Leave as the default Ontech SMS endpoint unless Ontech gives you a different URL."
+              />
+              <SaveButton label="Save Ontech SMS Settings" loading={systemSaving} disabled={systemLoading} />
+
+              <div className="border-t border-navy-100 pt-5 space-y-4">
+                <div>
+                  <h4 className="text-sm font-semibold text-navy-900">Send a test SMS</h4>
+                  <p className="mt-1 text-xs text-navy-500">The Ontech settings above are saved before the test is sent.</p>
+                </div>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <FormField
+                    label="Zambian Phone Number"
+                    name="testSmsPhone"
+                    value={testSmsPhone}
+                    onChange={(e) => setTestSmsPhone(e.target.value)}
+                    placeholder="260971234567"
+                    helpText="Formats such as 097…, +260…, and 260… are accepted."
+                  />
+                  <FormField
+                    label="Test Message"
+                    name="testSmsMessage"
+                    value={testSmsMessage}
+                    onChange={(e) => setTestSmsMessage(e.target.value)}
+                    placeholder="Mutale SMS test — connection successful."
+                  />
+                </div>
+                <LoadingButton
+                  type="button"
+                  onClick={() => handleTestNotification('sms', testSmsPhone.trim(), testSmsMessage.trim())}
+                  loading={testingNotificationChannel === 'sms'}
+                  loadingLabel="Sending SMS test..."
+                  disabled={systemLoading || !testSmsPhone.trim() || Boolean(testingNotificationChannel)}
+                  className="border border-cyan-200 text-cyan-700 hover:bg-cyan-50 px-5 py-2.5 rounded-xl text-sm font-medium transition-colors"
+                >
+                  Send Test SMS
+                </LoadingButton>
+                {notificationStatus && (
+                  <div className={`rounded-lg border px-3 py-2 text-sm ${
+                    notificationStatus.type === 'success'
+                      ? 'border-green-200 bg-green-50 text-green-700'
+                      : notificationStatus.type === 'info'
+                        ? 'border-amber-200 bg-amber-50 text-amber-700'
+                        : 'border-red-200 bg-red-50 text-red-700'
+                  }`}>
+                    {notificationStatus.message}
+                  </div>
+                )}
+              </div>
             </form>
           </Card>
         )}

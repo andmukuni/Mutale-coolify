@@ -56,9 +56,12 @@ describe('maskSystemSettingsSecrets', () => {
     const masked = maskSystemSettingsSecrets({
       payment: { secretKey: 'sk_live_abc' },
       email: { smtpPassword: 'pw' },
+      sms: { accessId: 'ontech-key' },
     });
     expect(masked.payment.secretKey).toBe('••••••••');
     expect(masked.email.smtpPassword).toBe('••••••••');
+    expect(masked.sms.accessId).toBe('••••••••');
+    expect(masked.sms.accessIdConfigured).toBe(true);
   });
 });
 
@@ -69,6 +72,22 @@ describe('preserveMaskedSecrets', () => {
       { payment: { secretKey: 'sk_real' } },
     );
     expect(out.payment.secretKey).toBe('sk_real');
+  });
+
+  it('keeps a stored Ontech key when the UI sends the mask', () => {
+    const out = preserveMaskedSecrets(
+      { sms: { accessId: '••••••••' } },
+      { sms: { accessId: 'ontech-real-key' } },
+    );
+    expect(out.sms.accessId).toBe('ontech-real-key');
+  });
+
+  it('replaces a stored Ontech key when a new key is entered', () => {
+    const out = preserveMaskedSecrets(
+      { sms: { accessId: 'ontech-new-key' } },
+      { sms: { accessId: 'ontech-old-key' } },
+    );
+    expect(out.sms.accessId).toBe('ontech-new-key');
   });
 });
 

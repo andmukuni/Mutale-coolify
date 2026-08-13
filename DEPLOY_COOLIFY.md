@@ -104,6 +104,9 @@ Copy values from [`.env.coolify.example`](.env.coolify.example) into Coolify →
 | `DEFAULT_ADMIN_NAME` | `Mutale Mubanga` |
 | `TICKET_PDF_LEGACY` / `RECEIPT_PDF_LEGACY` | leave empty (branded HTML PDFs; image includes Chromium) |
 | `LENCO_SANDBOX` | `true` (for staging payments testing) |
+| `ONTECH_SMS_ENABLED` | `false` when configuring SMS later in Admin Settings; `true` for environment-only configuration |
+| `ONTECH_ACCESS_ID` | Ontech API key (optional when saved in Admin → Settings → SMS) |
+| `ONTECH_SENDER_ID` | Approved Ontech Sender ID, maximum 11 characters |
 
 Generate secrets:
 

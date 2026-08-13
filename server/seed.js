@@ -309,12 +309,11 @@ async function seedSystemSettings() {
       sandboxMode: envBoolean(process.env.LENCO_SANDBOX, true),
     },
     sms: {
-      provider: process.env.SMS_PROVIDER || 'twilio',
-      senderId: process.env.SMS_SENDER_ID || '',
-      apiKey: process.env.SMS_API_KEY || '',
-      apiSecret: process.env.SMS_API_SECRET || '',
-      defaultCountryCode: process.env.SMS_DEFAULT_COUNTRY_CODE || '+260',
-      webhookUrl: process.env.SMS_WEBHOOK_URL || '',
+      enabled: envBoolean(process.env.ONTECH_SMS_ENABLED, false),
+      provider: 'ontech',
+      baseUrl: process.env.ONTECH_BASE_URL || 'https://bulksms.ontech.co.zm/smsservice',
+      accessId: process.env.ONTECH_ACCESS_ID || process.env.ONTECH_API_KEY || '',
+      senderId: process.env.ONTECH_SENDER_ID || '',
     },
     whatsapp: {
       provider: process.env.WHATSAPP_PROVIDER || 'meta_cloud',
@@ -322,6 +321,7 @@ async function seedSystemSettings() {
       accessToken: process.env.WHATSAPP_ACCESS_TOKEN || '',
       phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || '',
       webhookUrl: process.env.WHATSAPP_WEBHOOK_URL || '',
+      defaultCountryCode: process.env.WHATSAPP_DEFAULT_COUNTRY_CODE || '+260',
     },
     notifications: {
       emailOnNewRegistration: true,
