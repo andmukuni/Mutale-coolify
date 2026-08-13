@@ -137,7 +137,7 @@ export async function generateBadgeTemplatePreviewPdf(pool, eventId, appRoot, ap
   const data = buildSamplePreviewData(event, {
     event_date: formatEventDateRange(event),
     event_name: String(event?.title || 'Sample Event'),
-    reference_code: 'REG-SAMPLE01',
+    reference_code: 'MM-20260813-4821',
   });
   const buffer = await generateCertificatePdfFromTemplate(template, data, { appRoot, appOrigin });
   return { ok: true, buffer, filename: `Badge-Preview-${eventId}.pdf` };

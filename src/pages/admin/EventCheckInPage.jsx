@@ -316,7 +316,7 @@ export default function EventCheckInPage() {
               type="text"
               value={scanInput}
               onChange={(e) => setScanInput(e.target.value)}
-              placeholder="REG-… or paste scanned URL"
+              placeholder="MM-20260813-4821 or paste scanned URL"
               className="w-full rounded-xl border border-navy-200 px-4 py-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-cyan-500/30 focus:border-cyan-500"
               autoComplete="off"
             />

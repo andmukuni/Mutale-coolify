@@ -17,6 +17,7 @@
 import { createContext, useContext, useCallback, useEffect, useState } from 'react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { checkEventAvailability, deriveAttendeeSlotKey } from '../utils/eventServices';
+import { generateTicketReference } from '../../shared/ticketReference.js';
 import { getApiBase } from '../utils/apiBase';
 import { getSessionAuthHeaders, getUserAuthHeaders, hasSessionAuth, resolveUserBearerToken } from '../utils/authHeaders';
 import { useAuth } from './AuthContext';
@@ -24,16 +25,6 @@ import { useUserAuth } from './UserAuthContext';
 
 const BookingContext = createContext();
 const API_BASE = getApiBase();
-
-// ─── Reference code generator ───────────────────────────────────────────────
-function generateRefCode() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let code = 'MM-';
-  for (let i = 0; i < 8; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return code;
-}
 
 // ─── Provider ────────────────────────────────────────────────────────────────
 export function BookingProvider({ children }) {
@@ -166,7 +157,7 @@ export function BookingProvider({ children }) {
       user_email: user.email,
       event_id: event.id,
       registration_type: registrationType,
-      reference_code: referenceCode || generateRefCode(),
+      reference_code: referenceCode || generateTicketReference(),
       status: registrationStatus || 'confirmed',
       amount: paymentAmount ?? amount ?? (event.is_free ? 0 : (event.price ?? 0)),
       currency: paymentCurrency || 'ZMW',

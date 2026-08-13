@@ -727,7 +727,7 @@ export function buildDefaultBadgeDesign(event = {}, opts = {}) {
   const sampleData = buildSamplePreviewData(event, {
     event_name: String(event?.title || 'Event Name'),
     attendee_name: 'Jane M. Sample',
-    reference_code: 'REG-SAMPLE01',
+    reference_code: 'MM-20260813-4821',
   });
 
   return {
@@ -778,7 +778,7 @@ export function buildDefaultBadgeDesign(event = {}, opts = {}) {
         x: 0.5,
         y: 0.64,
         canvas,
-        sampleData: { ...sampleData, reference_code: sampleData.reference_code || 'REG-SAMPLE01' },
+        sampleData: { ...sampleData, reference_code: sampleData.reference_code || 'MM-20260813-4821' },
         style: { fontSize: 8, fontFamily: 'courier', color: '#94A3B8', align: 'center', bold: false },
       }),
       createDesignElement('qr', {
@@ -856,7 +856,7 @@ export function buildSamplePreviewData(event = {}, overrides = {}) {
     event_date: overrides.event_date || formatEventDateRange(event),
     certificate_number: overrides.certificate_number || 'MM-CERT-SAMPLE01',
     issue_date: overrides.issue_date || formatDisplayDate(new Date()),
-    reference_code: overrides.reference_code || 'REG-SAMPLE01',
+    reference_code: overrides.reference_code || 'MM-20260813-4821',
     qr_code: overrides.qr_code || '',
   };
 }

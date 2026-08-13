@@ -3,7 +3,7 @@ import QRCode from 'qrcode';
 /**
  * Public gate check-in URL encoded in entry QR codes.
  * Opens the check-in page; staff with an admin session auto-check-in on scan.
- * @param {string} referenceCode - Unique per-ticket reference (REG-…)
+ * @param {string} referenceCode - Unique per-ticket reference (MM-YYYYMMDD-XXXX)
  * @param {string} appOrigin - Site origin without trailing slash
  * @returns {string|null}
  */

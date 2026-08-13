@@ -65,6 +65,7 @@ import {
   validateVirtualGuestEmail,
 } from './guestTicketService.js';
 import { buildTicketFilename, isValidTicketPdfBuffer } from '../shared/ticketPdf.js';
+import { generateTicketReference, isTicketReference } from '../shared/ticketReference.js';
 import { buildTicketViewModel, isGuestTicket, isTicketPaymentEligible, resolveAttendeePhone } from '../shared/ticketViewModel.js';
 import { loadReceiptLogoDataUrl, loadWhiteLogoDataUrl } from '../shared/receiptLogoAsset.js';
 import { mergeReceiptRecords } from '../shared/receiptHelpers.js';
@@ -1592,6 +1593,31 @@ function generatePaymentReference(prefix = 'MM') {
   return `${prefix}-${Date.now()}-${random}`;
 }
 
+async function insertEventRegistrationRow(queryable, enriched) {
+  const placeholders = EVENT_REGISTRATION_FIELDS.map(() => '?').join(', ');
+  let lastError;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    if (attempt > 0) {
+      enriched.reference_code = generateTicketReference();
+    }
+    try {
+      const regValues = EVENT_REGISTRATION_FIELDS.map((field) => enriched[field]);
+      await queryable.query(
+        `INSERT INTO event_registrations (${EVENT_REGISTRATION_FIELDS.join(', ')}) VALUES (${placeholders})`,
+        regValues,
+      );
+      return enriched;
+    } catch (err) {
+      if (String(err.message || '').includes('uq_event_reference_code')) {
+        lastError = err;
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError;
+}
+
 function generateEntityId(prefix = 'id') {
   const random = Math.random().toString(36).slice(2, 10).toLowerCase();
   return `${prefix}-${Date.now()}-${random}`;
@@ -2312,7 +2338,9 @@ function normalizeRegistrationPayload(payload = {}, idOverride) {
     event_id: eventId,
     event_title: String(payload.event_title || '').trim(),
     event_slug: String(payload.event_slug || '').trim(),
-    reference_code: String(payload.reference_code || generatePaymentReference('REG')).trim(),
+    reference_code: isTicketReference(payload.reference_code)
+      ? String(payload.reference_code).trim()
+      : generateTicketReference(),
     registration_type: String(payload.registration_type || 'subscription').trim().toLowerCase(),
     status: String(payload.status || 'confirmed').trim().toLowerCase(),
     amount: normalizedAmount,
@@ -9020,14 +9048,7 @@ app.post('/api/registrations', async (req, res) => {
       }, payload.id);
 
       enriched = await applyTrustedRegistrationPaymentState(mergedForNorm, event);
-
-      const placeholders = EVENT_REGISTRATION_FIELDS.map(() => '?').join(', ');
-      const regValues = EVENT_REGISTRATION_FIELDS.map((field) => enriched[field]);
-
-      await conn.query(
-        `INSERT INTO event_registrations (${EVENT_REGISTRATION_FIELDS.join(', ')}) VALUES (${placeholders})`,
-        regValues,
-      );
+      await insertEventRegistrationRow(conn, enriched);
 
       if (pricing.coupon) {
         await conn.query(
@@ -9487,13 +9508,7 @@ app.post('/api/registrations/batch', async (req, res) => {
         });
 
         const enriched = await applyTrustedRegistrationPaymentState(mergedForNorm, event);
-        const placeholders = EVENT_REGISTRATION_FIELDS.map(() => '?').join(', ');
-        const regValues = EVENT_REGISTRATION_FIELDS.map((field) => enriched[field]);
-
-        await conn.query(
-          `INSERT INTO event_registrations (${EVENT_REGISTRATION_FIELDS.join(', ')}) VALUES (${placeholders})`,
-          regValues,
-        );
+        await insertEventRegistrationRow(conn, enriched);
         insertedRows.push(enriched);
       }
 
@@ -14046,13 +14061,7 @@ app.post('/api/admin/events/:eventId/walk-in-registrations', async (req, res) =>
       notes: 'walk_in',
     }, regId);
 
-    const placeholders = EVENT_REGISTRATION_FIELDS.map(() => '?').join(', ');
-    const regValues = EVENT_REGISTRATION_FIELDS.map((field) => enriched[field]);
-
-    await pool.query(
-      `INSERT INTO event_registrations (${EVENT_REGISTRATION_FIELDS.join(', ')}) VALUES (${placeholders})`,
-      regValues,
-    );
+    await insertEventRegistrationRow(pool, enriched);
 
     const refreshed = await markEventRegistrationAttendance(regId, 'gate');
     const mapped = mapDbRegistration(refreshed || enriched);
