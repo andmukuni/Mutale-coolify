@@ -1,12 +1,8 @@
 import { Suspense, lazy, Component, useEffect } from 'react';
-import { Routes, Route, useLocation, useNavigate } from 'react-router-dom';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import ProtectedRoute from './components/ProtectedRoute';
 import RequireUserAuth from './components/RequireUserAuth';
-import { Modal } from './components/ui';
 import TopProgressBar from './components/ui/TopProgressBar';
-import { useUserAuth } from './context/UserAuthContext';
-import { useAuth } from './context/AuthContext';
-import { purgeInvalidAuthState } from './utils/authHeaders';
 import { lazyWithRetry } from './utils/lazyWithRetry';
 
 const MainLayout = lazy(() => import('./layouts/MainLayout'));
@@ -127,30 +123,7 @@ class ErrorBoundary extends Component {
 }
 
 export default function App() {
-  const navigate = useNavigate();
   const location = useLocation();
-  const {
-    idleLogoutPromptOpen,
-    dismissIdleLogoutPrompt,
-    userIdleTimeoutMinutes,
-  } = useUserAuth();
-  const {
-    idleLogoutPromptOpen: adminIdleLogoutPromptOpen,
-    dismissIdleLogoutPrompt: dismissAdminIdleLogoutPrompt,
-    adminIdleTimeoutMinutes,
-  } = useAuth();
-
-  const openUserLogin = () => {
-    dismissIdleLogoutPrompt();
-    purgeInvalidAuthState();
-    navigate('/account/login');
-  };
-
-  const openAdminLogin = () => {
-    dismissAdminIdleLogoutPrompt();
-    purgeInvalidAuthState();
-    navigate('/admin/login', { state: { from: { pathname: location.pathname } } });
-  };
 
   useEffect(() => {
     sessionStorage.removeItem('lazy-chunk-reload');
@@ -296,68 +269,6 @@ export default function App() {
       </Routes>
     </Suspense>
     </ErrorBoundary>
-
-    <Modal
-      isOpen={idleLogoutPromptOpen && !location.pathname.startsWith('/account/login')}
-      onClose={dismissIdleLogoutPrompt}
-      title="Session timed out"
-      subtitle="You were logged out due to inactivity."
-      size="sm"
-      footer={(
-        <>
-          <button
-            type="button"
-            onClick={dismissIdleLogoutPrompt}
-            className="px-4 py-2 rounded-lg border border-navy-200 text-navy-600 hover:bg-navy-50 text-sm font-medium"
-          >
-            Continue browsing
-          </button>
-          <button
-            type="button"
-            onClick={openUserLogin}
-            className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium"
-          >
-            Log in
-          </button>
-        </>
-      )}
-    >
-      <p className="text-sm text-navy-600">
-        For security, we sign users out after {userIdleTimeoutMinutes} minutes of inactivity.
-        Please sign in again to continue growing.
-      </p>
-    </Modal>
-
-    <Modal
-      isOpen={adminIdleLogoutPromptOpen && location.pathname.startsWith('/admin') && !location.pathname.startsWith('/admin/login')}
-      onClose={dismissAdminIdleLogoutPrompt}
-      title="Admin session timed out"
-      subtitle="You were logged out due to inactivity."
-      size="sm"
-      footer={(
-        <>
-          <button
-            type="button"
-            onClick={dismissAdminIdleLogoutPrompt}
-            className="px-4 py-2 rounded-lg border border-navy-200 text-navy-600 hover:bg-navy-50 text-sm font-medium"
-          >
-            Continue browsing
-          </button>
-          <button
-            type="button"
-            onClick={openAdminLogin}
-            className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium"
-          >
-            Log in
-          </button>
-        </>
-      )}
-    >
-      <p className="text-sm text-navy-600">
-        For security, we sign admins out after {adminIdleTimeoutMinutes} minutes of inactivity.
-        Please sign in again to continue managing the portal.
-      </p>
-    </Modal>
     </>
   );
 }

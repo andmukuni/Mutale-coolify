@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { getApiBase } from '../utils/apiBase';
 import { getAdminAuthHeaders, buildPublicUserSession, dispatchUserSessionSync, purgeInvalidAuthState, clearAllAuthStorage, clearAdminAuthStorage } from '../utils/authHeaders';
 import { permissionMatches } from '../../shared/rbacPermissions.js';
@@ -39,10 +40,13 @@ function canAccessAdminPanel(userData = {}) {
 }
 
 export function AuthProvider({ children }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const locationRef = useRef(location);
+  locationRef.current = location;
   const [user, setUser] = useState(() => getStoredSession());
   const [loginError, setLoginError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [idleLogoutPromptOpen, setIdleLogoutPromptOpen] = useState(false);
   const idleTimerRef = useRef(null);
 
   const isAuthenticated = Boolean(user);
@@ -92,7 +96,6 @@ export function AuthProvider({ children }) {
         dispatchUserSessionSync(publicSession);
       }
 
-      setIdleLogoutPromptOpen(false);
       setUser(session);
       return true;
     } catch {
@@ -110,12 +113,7 @@ export function AuthProvider({ children }) {
       window.clearTimeout(idleTimerRef.current);
       idleTimerRef.current = null;
     }
-    setIdleLogoutPromptOpen(false);
     setUser(null);
-  }, []);
-
-  const dismissIdleLogoutPrompt = useCallback(() => {
-    setIdleLogoutPromptOpen(false);
   }, []);
 
   const resetIdleTimer = useCallback(() => {
@@ -127,10 +125,13 @@ export function AuthProvider({ children }) {
       clearAllAuthStorage();
       dispatchUserSessionSync(null);
       setUser(null);
-      setIdleLogoutPromptOpen(true);
       setLoginError('Admin session ended due to inactivity. Please log in again.');
+      const from = locationRef.current;
+      if (!from.pathname.startsWith('/admin/login')) {
+        navigate('/admin/login', { replace: true, state: { from } });
+      }
     }, ADMIN_IDLE_TIMEOUT_MS);
-  }, [user]);
+  }, [user, navigate]);
 
   const recordUserActivity = useCallback(() => {
     if (!user) return;
@@ -223,8 +224,6 @@ export function AuthProvider({ children }) {
         clearLoginError,
         hasPermission,
         refreshPermissions,
-        idleLogoutPromptOpen,
-        dismissIdleLogoutPrompt,
         adminIdleTimeoutMinutes: ADMIN_IDLE_TIMEOUT_MINUTES,
       }}
     >

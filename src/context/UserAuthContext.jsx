@@ -4,6 +4,7 @@
  * Auth is backed by the MySQL API. Session stored in localStorage under 'mm_user_session'.
  */
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { getApiBase } from '../utils/apiBase';
 import {
   USER_SESSION_SYNC_EVENT,
@@ -63,10 +64,13 @@ function saveSessionWithToken(user, token) {
 }
 
 export function UserAuthProvider({ children }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const locationRef = useRef(location);
+  locationRef.current = location;
   const [currentUser, setCurrentUser] = useState(() => getStoredUserSession());
   const [authError, setAuthError] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
-  const [idleLogoutPromptOpen, setIdleLogoutPromptOpen] = useState(false);
   const idleTimerRef = useRef(null);
 
   const isUserAuthenticated = Boolean(currentUser);
@@ -116,7 +120,6 @@ export function UserAuthProvider({ children }) {
         return { ok: false, unverified: json.unverified || false };
       }
       const session = saveSessionWithToken(json.data, json.token);
-      setIdleLogoutPromptOpen(false);
       setCurrentUser(session);
       dispatchUserSessionSync(session);
       return { ok: true };
@@ -135,13 +138,8 @@ export function UserAuthProvider({ children }) {
       window.clearTimeout(idleTimerRef.current);
       idleTimerRef.current = null;
     }
-    setIdleLogoutPromptOpen(false);
     setCurrentUser(null);
   }, [idleTimerRef]);
-
-  const dismissIdleLogoutPrompt = useCallback(() => {
-    setIdleLogoutPromptOpen(false);
-  }, []);
 
   const resetIdleTimer = useCallback(() => {
     if (!currentUser) return;
@@ -152,10 +150,13 @@ export function UserAuthProvider({ children }) {
       clearAllAuthStorage();
       dispatchUserSessionSync(null);
       setCurrentUser(null);
-      setIdleLogoutPromptOpen(true);
       setAuthError('Your session ended due to inactivity. Please log in again.');
+      const from = locationRef.current;
+      if (!from.pathname.startsWith('/account/login') && !from.pathname.startsWith('/admin')) {
+        navigate('/account/login', { replace: true, state: { from } });
+      }
     }, USER_IDLE_TIMEOUT_MS);
-  }, [currentUser, idleTimerRef]);
+  }, [currentUser, idleTimerRef, navigate]);
 
   const recordUserActivity = useCallback(() => {
     if (!currentUser) return;
@@ -357,8 +358,6 @@ export function UserAuthProvider({ children }) {
       resetPasswordWithToken,
       clearAuthError,
       applySessionUser,
-      idleLogoutPromptOpen,
-      dismissIdleLogoutPrompt,
       userIdleTimeoutMinutes: USER_IDLE_TIMEOUT_MINUTES,
     }}>
       {children}
