@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { CalendarDays, Clock } from 'lucide-react';
 import { getApiBase } from '../utils/apiBase';
 import { formatDate, formatTime } from '../utils/helpers';
@@ -9,6 +10,7 @@ import {
   useTickingNow,
 } from '../utils/eventSessions';
 import SessionStatusBadge from './SessionStatusBadge';
+import LiveSessionJoinBalloon from './LiveSessionJoinBalloon';
 
 const API_BASE = getApiBase();
 
@@ -25,9 +27,46 @@ function formatSessionTime(value) {
   return match ? formatTime(match[1]) : '';
 }
 
-export default function EventSessionsSchedule({ eventId, event = {}, timeZone }) {
+function balloonStorageKey(sessionId) {
+  return `mm_live_join_balloon:${sessionId}`;
+}
+
+const STATUS_STYLES = {
+  passed: {
+    dot: 'bg-[#E76869]',
+    card: 'border-[#E76869]/25 bg-[#E76869]/10',
+    title: 'text-navy-500',
+    time: 'text-navy-400',
+    clock: 'text-[#E76869]',
+  },
+  in_progress: {
+    dot: 'session-live-dot bg-[#00A79D]',
+    card: 'session-card-live border-[#00A79D]/60',
+    title: 'text-white',
+    time: 'text-white/70',
+    clock: 'text-[#7ee8e0]',
+  },
+  upcoming: {
+    dot: 'bg-[#141D45]',
+    card: 'border-navy-100 bg-navy-50/60',
+    title: 'text-navy-900',
+    time: 'text-navy-500',
+    clock: 'text-[#141D45]',
+  },
+};
+
+export default function EventSessionsSchedule({
+  eventId,
+  event = {},
+  timeZone,
+  joinHref,
+  joinLabel,
+  joinHint,
+  joinState,
+}) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(Boolean(eventId));
+  const [balloonOpen, setBalloonOpen] = useState(false);
   const now = useTickingNow();
   const zone = timeZone || event.timezone || 'Africa/Lusaka';
 
@@ -52,12 +91,37 @@ export default function EventSessionsSchedule({ eventId, event = {}, timeZone })
     return () => { cancelled = true; };
   }, [eventId]);
 
+  const liveSession = sessions.find((session) => (
+    getSessionStatus(session, now, { event, timeZone: zone }) === 'in_progress'
+  ));
+
+  useEffect(() => {
+    if (!liveSession?.id) {
+      setBalloonOpen(false);
+      return undefined;
+    }
+    if (sessionStorage.getItem(balloonStorageKey(liveSession.id))) {
+      setBalloonOpen(false);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setBalloonOpen(true), 350);
+    return () => window.clearTimeout(timer);
+  }, [liveSession?.id]);
+
+  const dismissBalloon = () => {
+    if (liveSession?.id) {
+      sessionStorage.setItem(balloonStorageKey(liveSession.id), '1');
+    }
+    setBalloonOpen(false);
+  };
+
   if (!eventId || loading || sessions.length === 0) return null;
 
   const days = groupSessionsByDate(sessions);
+  const hasLive = Boolean(liveSession);
 
   return (
-    <div className="bg-white rounded-2xl border border-navy-100 p-6 sm:p-8 shadow-sm">
+    <div className="bg-white rounded-2xl border border-navy-100 p-6 sm:p-8 shadow-sm overflow-visible">
       <div className="mb-6">
         <h2 className="text-xl font-bold text-navy-900 flex items-center gap-2">
           <CalendarDays size={20} className="text-cyan-600" />
@@ -86,23 +150,47 @@ export default function EventSessionsSchedule({ eventId, event = {}, timeZone })
                 const end = formatSessionTime(session.end_time);
                 const timeLabel = [start, end].filter(Boolean).join(' – ');
                 const status = getSessionStatus(session, now, { event, timeZone: zone });
-                return (
-                  <li key={session.id} className="relative">
-                    <span className="absolute -left-[27px] top-3.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-cyan-500 shadow-sm" />
-                    <div className="rounded-xl border border-navy-100 bg-navy-50/60 px-4 py-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <p className="font-semibold text-navy-900">
-                          {session.title || 'Session'}
-                        </p>
-                        <SessionStatusBadge status={status} />
-                      </div>
-                      {timeLabel ? (
-                        <p className="mt-1 inline-flex items-center gap-1.5 text-xs font-medium text-navy-500">
-                          <Clock size={12} className="text-cyan-600" />
-                          {timeLabel}
-                        </p>
-                      ) : null}
+                const style = STATUS_STYLES[status] || STATUS_STYLES.upcoming;
+                const isLive = status === 'in_progress';
+                const showBalloon = isLive && balloonOpen;
+                const card = (
+                  <div className={`rounded-xl border px-4 py-3 ${style.card}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <p className={`font-semibold ${style.title}`}>
+                        {session.title || 'Session'}
+                      </p>
+                      <SessionStatusBadge status={status} />
                     </div>
+                    {timeLabel ? (
+                      <p className={`mt-1 inline-flex items-center gap-1.5 text-xs font-medium ${style.time}`}>
+                        <Clock size={12} className={style.clock} />
+                        {timeLabel}
+                      </p>
+                    ) : null}
+                  </div>
+                );
+
+                return (
+                  <li key={session.id} className={`relative ${hasLive && !isLive ? 'opacity-55' : ''}`}>
+                    <span className={`absolute -left-[27px] top-3.5 h-2.5 w-2.5 rounded-full border-2 border-white shadow-sm ${style.dot}`} />
+                    {showBalloon ? (
+                      <LiveSessionJoinBalloon
+                        sessionTitle={session.title}
+                        timeLabel={timeLabel}
+                        joinHref={joinHref}
+                        joinLabel={joinLabel}
+                        joinHint={joinHint}
+                        joinState={joinState}
+                        onDismiss={dismissBalloon}
+                      />
+                    ) : null}
+                    {isLive && joinHref ? (
+                      <Link to={joinHref} state={joinState} className="block rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00A79D]">
+                        {card}
+                      </Link>
+                    ) : (
+                      card
+                    )}
                   </li>
                 );
               })}

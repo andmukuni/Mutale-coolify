@@ -189,7 +189,26 @@ export default function EventDetailPage() {
               </div>
             </div>
 
-            <EventSessionsSchedule eventId={event.id} event={event} />
+            <EventSessionsSchedule
+              eventId={event.id}
+              event={event}
+              joinHref={inferredMode !== 'in_person'
+                ? (userAlreadyRegistered
+                  ? `/events/${slug}/join`
+                  : (isUserAuthenticated ? `/events/${slug}/register` : '/account/login'))
+                : null}
+              joinLabel={userAlreadyRegistered
+                ? 'Join the live session'
+                : (isUserAuthenticated ? 'Register to join' : 'Sign in to join')}
+              joinHint={inferredMode === 'in_person'
+                ? 'This session is live now. If you have a ticket, you are in the right place.'
+                : (userAlreadyRegistered
+                  ? 'This is the session happening right now. Jump in while it is live.'
+                  : 'A ticket unlocks this live session. Register or sign in to join.')}
+              joinState={!userAlreadyRegistered && !isUserAuthenticated
+                ? { from: { pathname: `/events/${slug}/join` } }
+                : undefined}
+            />
 
             {event.organizer_name && (
               <div className="bg-white rounded-2xl border border-navy-100 p-6 sm:p-8 shadow-sm">
