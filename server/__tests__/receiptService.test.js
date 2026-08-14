@@ -173,9 +173,8 @@ describe('maybeSendRegistrationReceiptOnSettlement', () => {
     });
     expect(result.status).toBe('sent');
     const htmlArgs = buildBrandedEmailHtml.mock.calls.at(-1)[0];
-    expect(htmlArgs.buttonText).toBe('Add to Google Calendar');
-    expect(htmlArgs.buttonUrl).toContain('https://calendar.google.com/calendar/render');
-    expect(htmlArgs.buttonUrl).toContain('20260815T090000');
+    expect(htmlArgs.buttonText).toBe('Add to Calendar');
+    expect(htmlArgs.buttonUrl).toBe('https://mutalemubanga.org/events/interview-masterclass/calendar');
     const mailArgs = sendEmailNotification.mock.calls.at(-1)[0];
     expect(mailArgs.templateVars.calendar_url).toBe(htmlArgs.buttonUrl);
   });

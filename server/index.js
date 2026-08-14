@@ -137,7 +137,7 @@ import {
   ALL_PERMISSION_KEYS,
 } from './rbacService.js';
 import { getBundledReceiptLogoPath } from '../shared/receiptLogoAsset.js';
-import { buildGoogleCalendarLink } from '../shared/googleCalendar.js';
+import { buildGoogleCalendarLink, buildCalendarChooserUrl } from '../shared/googleCalendar.js';
 import { isValidPdfBuffer } from '../shared/receiptPdf.js';
 import {
   ONTECH_SMS_BASE_URL,
@@ -5899,6 +5899,39 @@ app.get('/api/events', async (req, res) => {
   }
 });
 
+app.get('/api/events/:eventId/calendar', async (req, res) => {
+  try {
+    const key = String(req.params.eventId || '').trim();
+    if (!key) return res.status(400).json({ ok: false, message: 'Event is required.' });
+    const [[row]] = await pool.query(
+      `SELECT id, slug, title, start_date, start_time, end_date, end_time, timezone, location, venue, short_description
+       FROM events
+       WHERE id = ? OR slug = ?
+       LIMIT 1`,
+      [key, key],
+    );
+    if (!row) return res.status(404).json({ ok: false, message: 'Event not found.' });
+    return res.json({
+      ok: true,
+      data: {
+        id: row.id,
+        slug: row.slug,
+        title: row.title,
+        start_date: row.start_date,
+        start_time: row.start_time,
+        end_date: row.end_date,
+        end_time: row.end_time,
+        timezone: row.timezone || 'Africa/Lusaka',
+        location: row.location || '',
+        venue: row.venue || '',
+        short_description: String(row.short_description || '').slice(0, 800),
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: 'Failed to load calendar details.', error: error.message });
+  }
+});
+
 app.post('/api/events/:eventId/coupon-preview', async (req, res) => {
   try {
     const auth = getJwtAuth(req);
@@ -10275,7 +10308,8 @@ app.post('/api/registrations', async (req, res) => {
         const registrationTypeLabel = (isFreeCatalog || dueZmw <= 0.005)
           ? 'Complimentary'
           : `Paid — ZMW ${dueZmw.toFixed(2)}`;
-        const addToCalendarUrl = buildGoogleCalendarLink(event, eventUrl);
+        const addToCalendarUrl = buildCalendarChooserUrl(appUrl, event.slug)
+          || buildGoogleCalendarLink(event, eventUrl);
         const emailCfg = settings?.email || {};
         const brandFooter = {
           name: 'Mutale Mubanga',

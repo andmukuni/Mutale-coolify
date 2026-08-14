@@ -11,7 +11,7 @@ import {
 } from '../shared/receiptHelpers.js';
 import { loadReceiptLogoDataUrl } from '../shared/receiptLogoAsset.js';
 import { buildPersonTemplateVars } from '../shared/notificationTemplates.js';
-import { buildGoogleCalendarUrl } from '../shared/googleCalendar.js';
+import { buildCalendarChooserUrl, buildGoogleCalendarUrl } from '../shared/googleCalendar.js';
 
 export { isReceiptEligible, formatReceiptDisplayNumber } from '../shared/receiptPdf.js';
 export { loadReceiptLogoDataUrl };
@@ -360,15 +360,20 @@ export async function sendReceiptEmail({
 
   const filename = buildReceiptFilename(registration);
   const detailsUrl = eventPageUrl(appOrigin, event, registration);
-  const calendarUrl = resolveReceiptType(registration) === 'event'
+  const slug = String(event.slug || registration.event_slug || '').trim();
+  const chooserUrl = resolveReceiptType(registration) === 'event'
+    ? buildCalendarChooserUrl(appOrigin, slug)
+    : '';
+  const googleUrl = resolveReceiptType(registration) === 'event'
     ? buildGoogleCalendarUrl(calendarEventFromReceipt(registration, event), { detailsUrl })
     : '';
+  const calendarUrl = chooserUrl || googleUrl;
   const text = [
     `Hi ${user.name || 'there'},`,
     '',
     copy.thankYouLine,
     'Your payment receipt is attached to this email.',
-    calendarUrl ? 'Add this event to Google Calendar:' : '',
+    calendarUrl ? 'Add this event to Google, Outlook, Yahoo, or Apple Calendar:' : '',
     calendarUrl || '',
     refCode ? `Reference: ${refCode}` : '',
     '',
@@ -383,10 +388,10 @@ export async function sendReceiptEmail({
     bodyLines: [
       copy.thankYouLine,
       'Your payment receipt is attached to this email.',
-      calendarUrl ? 'Add the event to your Google Calendar so you do not miss the date.' : '',
+      calendarUrl ? 'Add the event to Google, Outlook, Yahoo, or Apple Calendar so you do not miss the date.' : '',
       refCode ? `Reference: ${refCode}` : '',
     ].filter(Boolean),
-    buttonText: calendarUrl ? 'Add to Google Calendar' : '',
+    buttonText: calendarUrl ? 'Add to Calendar' : '',
     buttonUrl: calendarUrl,
     footerLines: ['Best regards,', 'Mutale Mubanga'],
   });

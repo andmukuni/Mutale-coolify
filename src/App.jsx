@@ -19,6 +19,7 @@ const GuestTicketJoinPage = lazy(() => import('./pages/GuestTicketJoinPage'));
 const GateCheckInPage = lazy(() => import('./pages/GateCheckInPage'));
 const EventForumPage = lazy(() => import('./pages/EventForumPage'));
 const EventJoinPage = lazy(() => import('./pages/EventJoinPage'));
+const AddToCalendarPage = lazy(() => import('./pages/AddToCalendarPage'));
 const BlogPage = lazy(() => import('./pages/BlogPage'));
 const BlogPostPage = lazy(() => import('./pages/BlogPostPage'));
 const PublicationsPage = lazy(() => import('./pages/PublicationsPage'));
@@ -143,6 +144,7 @@ export default function App() {
         <Route path="/events" element={<EventsPage />} />
         <Route path="/events/:slug" element={<EventDetailPage />} />
         <Route path="/events/:slug/register" element={<EventRegisterPage />} />
+        <Route path="/events/:slug/calendar" element={<AddToCalendarPage />} />
         <Route path="/events/:slug/forum" element={<EventForumPage />} />
         <Route
           path="/events/:slug/join"
