@@ -18,6 +18,7 @@ export const TEMPLATE_PLACEHOLDERS = [
   { key: 'access_code', label: 'Guest access code' },
   { key: 'certificate_code', label: 'Certificate ID' },
   { key: 'portal_url', label: 'Ticket portal link' },
+  { key: 'calendar_url', label: 'Add to Google Calendar link' },
   { key: 'subject', label: 'Message subject' },
   { key: 'message', label: 'Message body' },
 ];
@@ -35,6 +36,7 @@ export const SAMPLE_TEMPLATE_VARS = {
   access_code: '482193',
   certificate_code: 'CERT-DEMO',
   portal_url: 'https://mutalemubanga.org/tickets/REG-DEMO',
+  calendar_url: 'https://calendar.google.com/calendar/render?action=TEMPLATE',
   subject: 'Registration update',
   message: 'We look forward to seeing you.',
 };
@@ -102,7 +104,7 @@ export const SYSTEM_NOTIFICATION_TEMPLATES = [
     name: 'Payment receipt',
     description: 'Email subject for payment receipts.',
     subject: 'Receipt: {{event_title}}',
-    body: 'Hi {{first_name}},\n\nThank you for registering for "{{event_title}}".\nYour payment receipt is attached to this email.\nReference: {{reference}}',
+    body: 'Hi {{first_name}},\n\nThank you for registering for "{{event_title}}".\nYour payment receipt is attached to this email.\nAdd this event to Google Calendar: {{calendar_url}}\nReference: {{reference}}',
   },
   {
     slug: 'certificate',

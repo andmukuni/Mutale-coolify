@@ -11,6 +11,7 @@ import {
 } from '../shared/receiptHelpers.js';
 import { loadReceiptLogoDataUrl } from '../shared/receiptLogoAsset.js';
 import { buildPersonTemplateVars } from '../shared/notificationTemplates.js';
+import { buildGoogleCalendarUrl } from '../shared/googleCalendar.js';
 
 export { isReceiptEligible, formatReceiptDisplayNumber } from '../shared/receiptPdf.js';
 export { loadReceiptLogoDataUrl };
@@ -88,6 +89,26 @@ function buildReceiptEmailCopy(registration = {}, event = {}) {
     subject: `Receipt: ${title}`,
     previewText: 'Your registration receipt is attached.',
     thankYouLine: `Thank you for registering for "${title}".`,
+  };
+}
+
+function eventPageUrl(appOrigin = '', event = {}, registration = {}) {
+  const origin = String(appOrigin || '').replace(/\/$/, '');
+  const slug = String(event.slug || registration.event_slug || '').trim();
+  if (!origin || !slug) return '';
+  return `${origin}/events/${slug}`;
+}
+
+function calendarEventFromReceipt(registration = {}, event = {}) {
+  return {
+    title: registration.event_title || event.title || 'Event',
+    start_date: event.start_date || event.date || registration.start_date || registration.event_start_date,
+    start_time: event.start_time || event.time || registration.start_time,
+    end_date: event.end_date || registration.end_date,
+    end_time: event.end_time || registration.end_time,
+    timezone: event.timezone || registration.timezone || 'Africa/Lusaka',
+    location: event.location || event.venue || registration.location || registration.venue || '',
+    short_description: event.short_description || registration.short_description || '',
   };
 }
 
@@ -338,11 +359,17 @@ export async function sendReceiptEmail({
   }
 
   const filename = buildReceiptFilename(registration);
+  const detailsUrl = eventPageUrl(appOrigin, event, registration);
+  const calendarUrl = resolveReceiptType(registration) === 'event'
+    ? buildGoogleCalendarUrl(calendarEventFromReceipt(registration, event), { detailsUrl })
+    : '';
   const text = [
     `Hi ${user.name || 'there'},`,
     '',
     copy.thankYouLine,
     'Your payment receipt is attached to this email.',
+    calendarUrl ? 'Add this event to Google Calendar:' : '',
+    calendarUrl || '',
     refCode ? `Reference: ${refCode}` : '',
     '',
     'Best regards,',
@@ -356,8 +383,11 @@ export async function sendReceiptEmail({
     bodyLines: [
       copy.thankYouLine,
       'Your payment receipt is attached to this email.',
+      calendarUrl ? 'Add the event to your Google Calendar so you do not miss the date.' : '',
       refCode ? `Reference: ${refCode}` : '',
     ].filter(Boolean),
+    buttonText: calendarUrl ? 'Add to Google Calendar' : '',
+    buttonUrl: calendarUrl,
     footerLines: ['Best regards,', 'Mutale Mubanga'],
   });
 
@@ -384,6 +414,8 @@ export async function sendReceiptEmail({
       ...buildPersonTemplateVars(user.name),
       event_title: registration.event_title || event.title || copy.subject.replace(/^Receipt:\s*/i, ''),
       reference: refCode,
+      calendar_url: calendarUrl,
+      event_url: detailsUrl,
     },
   });
 

@@ -138,6 +138,47 @@ describe('maybeSendRegistrationReceiptOnSettlement', () => {
     expect(call.attachments[0].filename).toContain('Receipt-');
     expect(Buffer.isBuffer(call.attachments[0].content)).toBe(true);
   });
+
+  it('adds a Google Calendar button for event receipts', async () => {
+    const result = await maybeSendRegistrationReceiptOnSettlement({
+      previousRegistration: { payment_status: 'pending' },
+      currentRegistration: {
+        payment_status: 'paid',
+        user_email: 'user@example.com',
+        user_name: 'User',
+        reference_code: 'MM-EVT-CAL-1',
+        event_title: 'Interview Masterclass',
+        event_slug: 'interview-masterclass',
+        amount_zmw: 30,
+        currency: 'ZMW',
+        registered_at: '2026-05-27T10:00:00.000Z',
+        registration_type: 'subscription',
+        payment_method: 'mobile_money',
+      },
+      event: {
+        title: 'Interview Masterclass',
+        slug: 'interview-masterclass',
+        start_date: '2026-08-15',
+        start_time: '09:00:00',
+        end_date: '2026-08-15',
+        end_time: '11:00:00',
+        timezone: 'Africa/Lusaka',
+        location: 'Online',
+      },
+      settings: { email: { fromEmail: 'noreply@test.com', fromName: 'Test' } },
+      sendEmailNotification,
+      buildBrandedEmailHtml,
+      appRoot,
+      appOrigin: 'https://mutalemubanga.org',
+    });
+    expect(result.status).toBe('sent');
+    const htmlArgs = buildBrandedEmailHtml.mock.calls.at(-1)[0];
+    expect(htmlArgs.buttonText).toBe('Add to Google Calendar');
+    expect(htmlArgs.buttonUrl).toContain('https://calendar.google.com/calendar/render');
+    expect(htmlArgs.buttonUrl).toContain('20260815T090000');
+    const mailArgs = sendEmailNotification.mock.calls.at(-1)[0];
+    expect(mailArgs.templateVars.calendar_url).toBe(htmlArgs.buttonUrl);
+  });
 });
 
 describe('maybeSendReceiptOnSettlement alias', () => {

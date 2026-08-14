@@ -137,6 +137,7 @@ import {
   ALL_PERMISSION_KEYS,
 } from './rbacService.js';
 import { getBundledReceiptLogoPath } from '../shared/receiptLogoAsset.js';
+import { buildGoogleCalendarLink } from '../shared/googleCalendar.js';
 import { isValidPdfBuffer } from '../shared/receiptPdf.js';
 import {
   ONTECH_SMS_BASE_URL,
@@ -3219,51 +3220,6 @@ function buildBrandedEmailHtml({ title, previewText = '', greeting = 'Hi there,'
     </div>
   </body>
 </html>`;
-}
-
-// Build a Google Calendar "add event" link from event date/time fields.
-function buildGoogleCalendarLink(event = {}, fallbackUrl = '') {
-  try {
-    const startDate = event.start_date || event.date;
-    if (!startDate) return fallbackUrl;
-    const startTime = String(event.start_time || event.time || '').trim();
-    const endDate = event.end_date || startDate;
-    const endTime = String(event.end_time || '').trim();
-    const allDay = !startTime;
-    const pad = (n) => String(n).padStart(2, '0');
-    const compact = (d) => (allDay
-      ? `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`
-      : `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`);
-
-    const start = new Date(`${String(startDate).slice(0, 10)}T${(startTime || '00:00').slice(0, 5)}:00`);
-    if (Number.isNaN(start.getTime())) return fallbackUrl;
-
-    let end;
-    if (allDay) {
-      end = new Date(start);
-      end.setDate(end.getDate() + 1);
-    } else if (endTime) {
-      end = new Date(`${String(endDate).slice(0, 10)}T${endTime.slice(0, 5)}:00`);
-      if (Number.isNaN(end.getTime()) || end <= start) {
-        end = new Date(start);
-        end.setHours(end.getHours() + 2);
-      }
-    } else {
-      end = new Date(start);
-      end.setHours(end.getHours() + 2);
-    }
-
-    const params = new URLSearchParams({
-      action: 'TEMPLATE',
-      text: String(event.title || 'Event'),
-      dates: `${compact(start)}/${compact(end)}`,
-      location: String(event.location || event.venue || ''),
-      details: fallbackUrl ? `More details: ${fallbackUrl}` : '',
-    });
-    return `https://calendar.google.com/calendar/render?${params.toString()}`;
-  } catch {
-    return fallbackUrl;
-  }
 }
 
 /**
