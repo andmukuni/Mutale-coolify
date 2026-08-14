@@ -7,6 +7,7 @@ import {
   formatFirstNameSentenceCase,
   sendTicketEmailsForRegistration,
   isTicketEmailAlreadySent,
+  willSendTicketNotifications,
 } from '../ticketService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -154,10 +155,41 @@ describe('sendTicketEmailsForRegistration', () => {
     expect(sendEmailNotification.mock.calls[0][0].smsMessage).toBe(
       'Thank you, Buyer. Summit. View your ticket here: https://example.com/tickets/MM-TKT-1',
     );
+    expect(sendEmailNotification.mock.calls[1][0].skipSms).toBeFalsy();
     expect(pool.query).toHaveBeenCalledWith(
       expect.stringContaining('ticket_email_sent_at'),
       expect.any(Array),
     );
+  });
+
+  it('sends only one ticket SMS when guest and buyer share a phone', async () => {
+    const pool = {
+      query: vi.fn().mockResolvedValue([[{ ticket_email_sent_at: null }]]),
+    };
+    const result = await sendTicketEmailsForRegistration({
+      registration: {
+        id: 'reg-same-phone',
+        reference_code: 'MM-TKT-9',
+        payment_status: 'paid',
+        user_email: 'buyer@example.com',
+        user_name: 'Buyer',
+        user_phone: '0971234567',
+        booked_for_name: 'Guest',
+        booked_for_email: 'guest@example.com',
+        booked_for_phone: '0971234567',
+        attendee_slot_key: 'guest-guest',
+      },
+      event: inPersonEvent,
+      settings,
+      sendEmailNotification,
+      appRoot,
+      appOrigin: 'https://example.com',
+      pool,
+    });
+    expect(result.status).toBe('sent');
+    expect(sendEmailNotification).toHaveBeenCalledTimes(2);
+    expect(sendEmailNotification.mock.calls[0][0].skipSms).toBeFalsy();
+    expect(sendEmailNotification.mock.calls[1][0].skipSms).toBe(true);
   });
 
   it('dedupes when guest email equals buyer email', async () => {
@@ -205,6 +237,29 @@ describe('sendTicketEmailsForRegistration', () => {
     expect(result.status).toBe('skipped');
     expect(result.reason).toContain('already sent');
     expect(sendEmailNotification).not.toHaveBeenCalled();
+  });
+});
+
+describe('willSendTicketNotifications', () => {
+  it('is true for a paid in-person ticket with a buyer email', () => {
+    expect(willSendTicketNotifications({
+      registration: { payment_status: 'paid', user_email: 'a@b.com' },
+      event: { event_mode: 'in_person' },
+    })).toBe(true);
+  });
+
+  it('is false for unpaid registrations', () => {
+    expect(willSendTicketNotifications({
+      registration: { payment_status: 'pending', user_email: 'a@b.com' },
+      event: { event_mode: 'in_person' },
+    })).toBe(false);
+  });
+
+  it('is false for virtual events without a guest email', () => {
+    expect(willSendTicketNotifications({
+      registration: { payment_status: 'paid', user_email: 'a@b.com' },
+      event: { event_mode: 'virtual' },
+    })).toBe(false);
   });
 });
 

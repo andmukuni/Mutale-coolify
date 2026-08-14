@@ -10,6 +10,7 @@ import {
   renderTemplate,
 } from '../shared/notificationTemplates.js';
 import { applyNotificationTemplates } from './notificationTemplateService.js';
+import { uniqueSmsRecipients } from './emailSmsCompanion.js';
 
 export { formatFirstNameSentenceCase };
 
@@ -87,6 +88,17 @@ export function buildTicketEmailCopy({
   };
 }
 
+export function willSendTicketNotifications({ registration = {}, event = {} } = {}) {
+  if (!isTicketPaymentEligible(registration)) return false;
+  const isVirtual = !isInPersonEventRecord(event, registration);
+  const guestEmail = isGuestTicket(registration)
+    ? normalizeEmail(registration.booked_for_email)
+    : '';
+  if (isVirtual && !guestEmail) return false;
+  const buyerEmail = normalizeEmail(registration.user_email);
+  return Boolean(guestEmail || buyerEmail);
+}
+
 export async function isTicketEmailAlreadySent(registrationId, pool) {
   const id = String(registrationId || '').trim();
   if (!id || !pool) return false;
@@ -141,6 +153,7 @@ export async function sendTicketEmail({
   appRoot = '',
   appOrigin = '',
   pool = null,
+  skipSms = false,
 }) {
   const recipient = normalizeEmail(to);
   if (!recipient) {
@@ -211,6 +224,7 @@ export async function sendTicketEmail({
     smsTo,
     smsMessage: applied.smsMessage,
     kind: 'ticket',
+    skipSms,
   });
 
   return result?.status === 'sent'
@@ -261,6 +275,10 @@ export async function sendTicketEmailsForRegistration({
   const guestName = resolveAttendeeName(registration);
 
   const sends = [];
+  const attendeePhone = resolveAttendeePhone(registration);
+  const buyerPhone = String(registration.user_phone || '').trim();
+  const sharedTicketPhones = uniqueSmsRecipients([attendeePhone, buyerPhone]);
+  const sameTicketSmsPhone = sharedTicketPhones.length === 1;
 
   if (guestEmailResolved) {
     sends.push(sendTicketEmail({
@@ -289,6 +307,7 @@ export async function sendTicketEmailsForRegistration({
       appRoot,
       appOrigin,
       pool,
+      skipSms: Boolean(guestEmailResolved && sameTicketSmsPhone),
     }));
   } else if (buyerEmail && !guestEmailResolved) {
     sends.push(sendTicketEmail({

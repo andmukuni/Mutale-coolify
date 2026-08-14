@@ -30,6 +30,17 @@ export async function fetchTemplatePlaceholders() {
   return json.data || { placeholders: [], sampleVars: {} };
 }
 
+export async function sendNotificationTemplateTest(payload) {
+  const res = await fetch(`${API_BASE}/admin/notification-templates/test`, {
+    method: 'POST',
+    headers: getAdminAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  });
+  const json = await parseJson(res);
+  if (!res.ok || !json?.ok) throw new Error(json?.message || 'Failed to send test.');
+  return json.data;
+}
+
 export async function previewNotificationTemplate(payload) {
   const res = await fetch(`${API_BASE}/admin/notification-templates/preview`, {
     method: 'POST',

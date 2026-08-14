@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Mail, MessageSquare, Pencil, Plus, RefreshCw, RotateCcw, Trash2 } from 'lucide-react';
+import { Mail, MessageSquare, Pencil, Plus, RefreshCw, RotateCcw, Send, Trash2 } from 'lucide-react';
 import {
   PageHeader,
   Card,
@@ -11,6 +11,7 @@ import {
   Spinner,
 } from '../../components/ui';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 import {
   SAMPLE_TEMPLATE_VARS,
   SMS_TEMPLATE_MAX_LENGTH,
@@ -22,6 +23,7 @@ import {
   deleteNotificationTemplate,
   fetchNotificationTemplates,
   resetNotificationTemplate,
+  sendNotificationTemplateTest,
   updateNotificationTemplate,
 } from '../../utils/notificationTemplatesApi';
 
@@ -61,12 +63,15 @@ function insertPlaceholder(body, key) {
 
 export default function NotificationTemplatesPage() {
   const toast = useToast();
+  const { user } = useAuth();
   const [channel, setChannel] = useState('sms');
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testRecipient, setTestRecipient] = useState('');
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState('');
   const [confirm, setConfirm] = useState({ open: false, row: null, busy: false });
@@ -92,15 +97,17 @@ export default function NotificationTemplatesPage() {
   const openCreate = () => {
     setForm({ ...emptyForm, channel });
     setFormError('');
+    setTestRecipient(channel === 'email' ? (user?.email || '') : '');
     setModalOpen(true);
   };
 
   const openEdit = (row) => {
+    const nextChannel = row.channel || channel;
     setForm({
       id: row.id,
       name: row.name || '',
       slug: row.slug || '',
-      channel: row.channel || channel,
+      channel: nextChannel,
       description: row.description || '',
       subject: row.subject || '',
       body: row.body || '',
@@ -108,6 +115,7 @@ export default function NotificationTemplatesPage() {
       is_system: Boolean(row.is_system),
     });
     setFormError('');
+    setTestRecipient(nextChannel === 'email' ? (user?.email || '') : '');
     setModalOpen(true);
   };
 
@@ -139,6 +147,28 @@ export default function NotificationTemplatesPage() {
       setFormError(err?.message || 'Could not save template.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSendTest = async () => {
+    setTesting(true);
+    setFormError('');
+    try {
+      await sendNotificationTemplateTest({
+        channel: form.channel,
+        recipient: testRecipient,
+        subject: form.subject,
+        body: form.body,
+      });
+      toast.success(form.channel === 'email'
+        ? `Test email sent to ${testRecipient.trim()}.`
+        : `Test SMS sent to ${testRecipient.trim()}.`);
+    } catch (err) {
+      const message = err?.message || 'Could not send test.';
+      setFormError(message);
+      toast.error(message);
+    } finally {
+      setTesting(false);
     }
   };
 
@@ -306,7 +336,7 @@ export default function NotificationTemplatesPage() {
 
       <Modal
         isOpen={modalOpen}
-        onClose={() => !saving && setModalOpen(false)}
+        onClose={() => !saving && !testing && setModalOpen(false)}
         title={form.id ? 'Edit template' : 'New template'}
         subtitle={form.is_system ? 'System template — slug and channel stay fixed.' : 'Use placeholders so each send is personalized.'}
         size="xl"
@@ -315,7 +345,7 @@ export default function NotificationTemplatesPage() {
             <button
               type="button"
               onClick={() => setModalOpen(false)}
-              disabled={saving}
+              disabled={saving || testing}
               className="px-4 py-2 rounded-lg border border-navy-200 text-navy-600 hover:bg-navy-50 text-sm font-medium"
             >
               Cancel
@@ -359,7 +389,13 @@ export default function NotificationTemplatesPage() {
               name="channel"
               type="select"
               value={form.channel}
-              onChange={(e) => setForm((prev) => ({ ...prev, channel: e.target.value }))}
+              onChange={(e) => {
+                const nextChannel = e.target.value;
+                setForm((prev) => ({ ...prev, channel: nextChannel }));
+                if (nextChannel === 'email' && !testRecipient) {
+                  setTestRecipient(user?.email || '');
+                }
+              }}
               options={[
                 { value: 'sms', label: 'SMS' },
                 { value: 'email', label: 'Email' },
@@ -424,6 +460,41 @@ export default function NotificationTemplatesPage() {
               <p className="text-sm font-medium text-navy-900 mb-1">{preview.subject}</p>
             )}
             <p className="text-sm text-navy-700 whitespace-pre-wrap">{preview.body || 'Add copy to see a sample send.'}</p>
+          </div>
+          <div className="rounded-xl border border-cyan-100 bg-cyan-50/40 p-3 space-y-3">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-cyan-800">Send a test</p>
+              <p className="text-xs text-navy-500 mt-0.5">
+                {form.channel === 'email'
+                  ? 'Sends a branded test email with sample names so you can see how it looks in the inbox.'
+                  : 'Sends this SMS to a phone number using the sample preview values.'}
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <div className="flex-1">
+                <FormField
+                  label={form.channel === 'email' ? 'Test email' : 'Test phone'}
+                  name="testRecipient"
+                  type="text"
+                  value={testRecipient}
+                  onChange={(e) => setTestRecipient(e.target.value)}
+                  placeholder={form.channel === 'email' ? 'you@example.com' : '0970000000'}
+                />
+              </div>
+              <div className="sm:pt-7">
+                <LoadingButton
+                  type="button"
+                  icon={Send}
+                  loading={testing}
+                  loadingLabel="Sending…"
+                  disabled={saving || !form.body.trim() || !testRecipient.trim()}
+                  onClick={() => void handleSendTest()}
+                  className="w-full sm:w-auto px-4 py-2.5 text-sm font-medium bg-navy-900 hover:bg-navy-800 text-white rounded-xl"
+                >
+                  {form.channel === 'email' ? 'Send test email' : 'Send test SMS'}
+                </LoadingButton>
+              </div>
+            </div>
           </div>
         </form>
       </Modal>

@@ -66,6 +66,7 @@ import {
   sendTicketEmailsForRegistration,
   maybeSendTicketEmailsOnSettlement,
   generateRegistrationTicketBuffer,
+  willSendTicketNotifications,
 } from './ticketService.js';
 import { registerGuestTicketRoutes } from './guestTicketRoutes.js';
 import { registerNotificationTemplateRoutes } from './notificationTemplateRoutes.js';
@@ -10310,6 +10311,7 @@ app.post('/api/registrations', async (req, res) => {
             ticketUrl || eventUrl,
           ].filter(Boolean).join(' '),
           kind: 'registration',
+          skipSms: willSendTicketNotifications({ registration: enriched, event }),
           templateSlug: 'registration',
           templateVars: {
             ...buildPersonTemplateVars(recipientName),
@@ -10781,7 +10783,12 @@ registerGuestTicketRoutes(app, {
   __appRoot,
 });
 
-registerNotificationTemplateRoutes(app, { pool });
+registerNotificationTemplateRoutes(app, {
+  pool,
+  sendEmailNotification,
+  sendSmsNotification,
+  getSystemSettings,
+});
 
 app.post('/api/registrations/check-in', async (req, res) => {
   try {

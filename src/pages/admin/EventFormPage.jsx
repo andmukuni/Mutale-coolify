@@ -113,6 +113,27 @@ const emptyEvent = {
   certificate_requires_all_sessions: false,
 };
 
+const EVENT_FORM_FLAGS = [
+  'is_free',
+  'featured',
+  'forum_enabled',
+  'forum_pre_moderated',
+  'volume_discount_enabled',
+  'certificate_requires_all_sessions',
+];
+
+function asBool(value) {
+  return value === true || value === 1 || value === '1';
+}
+
+function withEventFormFlags(event = {}) {
+  const next = { ...event };
+  for (const key of EVENT_FORM_FLAGS) {
+    if (key in next) next[key] = asBool(next[key]);
+  }
+  return next;
+}
+
 function buildCloneForm(sourceEvent = {}) {
   const defaults = createDefaultEvent();
   const copyStamp = Date.now().toString().slice(-6);
@@ -120,9 +141,11 @@ function buildCloneForm(sourceEvent = {}) {
   const clonedTitle = sourceTitle ? `${sourceTitle} (Copy)` : 'Untitled Event (Copy)';
 
   return {
-    ...emptyEvent,
-    ...sourceEvent,
-    ...defaults,
+    ...withEventFormFlags({
+      ...emptyEvent,
+      ...sourceEvent,
+      ...defaults,
+    }),
     id: '',
     title: clonedTitle,
     slug: generateSlug(`${sourceEvent.slug || generateSlug(clonedTitle)}-copy-${copyStamp}`),
@@ -140,7 +163,7 @@ function getInitialForm(events, id, cloneId) {
     return createDefaultEvent();
   }
   const event = events.find((e) => e.id === id);
-  return event ? { ...emptyEvent, ...event } : null;
+  return event ? withEventFormFlags({ ...emptyEvent, ...event }) : null;
 }
 
 export default function EventFormPage() {
@@ -228,7 +251,7 @@ export default function EventFormPage() {
     if (!isEditing) return;
     if (initialForm && !hasHydratedEditForm) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setForm({ ...emptyEvent, ...initialForm });
+      setForm(withEventFormFlags({ ...emptyEvent, ...initialForm }));
       setHasHydratedEditForm(true);
     }
   }, [isEditing, initialForm, hasHydratedEditForm]);
@@ -749,7 +772,7 @@ export default function EventFormPage() {
                     <input
                       type="checkbox"
                       name="is_free"
-                      checked={form.is_free}
+                      checked={Boolean(form.is_free)}
                       onChange={handleChange}
                       className="h-4 w-4 rounded border-navy-300 text-cyan-600 focus:ring-cyan-500"
                     />
@@ -789,7 +812,7 @@ export default function EventFormPage() {
                 Registered attendees can discuss this event in a dedicated forum.
               </p>
 
-              {form.forum_enabled && (
+              {Boolean(form.forum_enabled) && (
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="checkbox"
@@ -814,7 +837,7 @@ export default function EventFormPage() {
                     />
                     <span className="text-sm font-medium text-navy-700">Group volume discount</span>
                   </label>
-                  {form.volume_discount_enabled && (
+                  {Boolean(form.volume_discount_enabled) && (
                     <div className="grid sm:grid-cols-3 gap-3">
                       <FormField
                         label="Minimum tickets"
