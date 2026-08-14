@@ -326,6 +326,13 @@ export function registerGuestTicketRoutes(app, deps) {
       const meetingUrl = String(session.meeting_url || '').trim()
         || String(event?.zoom_join_url || event?.daily_room_url || event?.meeting_link || '').trim();
 
+      if (!meetingUrl) {
+        return res.status(409).json({
+          ok: false,
+          message: 'Zoom meeting link is not available for this session yet. Ask the organizer to create the Zoom room.',
+        });
+      }
+
       return res.json({
         ok: true,
         data: {

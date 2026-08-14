@@ -68,7 +68,10 @@ export default function TicketSessionsPanel({
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json?.ok) throw new Error(json?.message || 'Could not join session.');
       const meetingUrl = String(json?.data?.meeting_url || '').trim();
-      if (meetingUrl) window.open(meetingUrl, '_blank', 'noopener,noreferrer');
+      if (!meetingUrl) {
+        throw new Error('Zoom meeting link is not available for this session yet.');
+      }
+      window.open(meetingUrl, '_blank', 'noopener,noreferrer');
     } catch (err) {
       setError(err?.message || 'Could not join session.');
     } finally {

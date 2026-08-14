@@ -108,6 +108,14 @@ import {
   MAX_GENERAL_UPLOAD_BYTES,
   isCatalogAdminMutation,
 } from './securityHelpers.js';
+import {
+  buildZoomMeetingPayload,
+  formatZoomApiError,
+  isZoomUserMissingError,
+  resolveZoomHostEmail,
+  toEventDurationMinutes,
+  toZoomDateTime,
+} from './zoomMeetingHelpers.js';
 import { sanitizeBlogHtml } from '../shared/blogSanitize.js';
 import { DEFAULT_PARTNER_LOGOS } from '../shared/partnerLogos.js';
 import { DEFAULT_MENU_ITEMS, MENU_LOCATIONS } from '../shared/menuItems.js';
@@ -1250,53 +1258,6 @@ function verifyJwtHmacSha256(token, secret) {
   }
 }
 
-function toZoomDateTime(event = {}) {
-  const datePart = String(event.start_date || '').trim();
-  if (!datePart) return null;
-  const timePart = String(event.start_time || '00:00:00').trim() || '00:00:00';
-  const normalizedTime = timePart.length === 5 ? `${timePart}:00` : timePart;
-  const timezone = String(event.timezone || 'Africa/Lusaka').trim();
-
-  // Parse date+time as UTC first (appending Z), then correct for the event's timezone.
-  const asIfUtc = new Date(`${datePart}T${normalizedTime}Z`);
-  if (Number.isNaN(asIfUtc.getTime())) return null;
-
-  try {
-    // Ask Intl what the local wall-clock reads in the event timezone for this UTC instant.
-    const fmt = new Intl.DateTimeFormat('en-CA', {
-      timeZone: timezone,
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', second: '2-digit',
-      hour12: false,
-    });
-    const parts = fmt.formatToParts(asIfUtc).reduce((m, p) => { m[p.type] = p.value; return m; }, {});
-    // What UTC instant corresponds to that wall-clock time? Build it as UTC.
-    const wallAsUtc = new Date(`${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}Z`);
-    // offsetMs > 0 means the timezone is ahead of UTC (e.g. UTC+2 → +7200000 ms)
-    const offsetMs = wallAsUtc.getTime() - asIfUtc.getTime();
-    // Subtract offset to turn local event time into UTC
-    return new Date(asIfUtc.getTime() - offsetMs);
-  } catch {
-    // Fallback: treat as local time without adjustment
-    return new Date(`${datePart}T${normalizedTime}`);
-  }
-}
-
-function toZoomDurationMinutes(event = {}) {
-  const start = toZoomDateTime(event);
-  if (!start) return 90;
-
-  const endDatePart = String(event.end_date || event.start_date || '').trim();
-  const endTimePart = String(event.end_time || '').trim();
-  if (!endDatePart || !endTimePart) return 90;
-
-  const normalizedEndTime = endTimePart.length === 5 ? `${endTimePart}:00` : endTimePart;
-  const end = new Date(`${endDatePart}T${normalizedEndTime}`);
-  if (Number.isNaN(end.getTime())) return 90;
-
-  const duration = Math.round((end.getTime() - start.getTime()) / 60000);
-  return Number.isFinite(duration) && duration > 0 ? duration : 90;
-}
 
 let zoomAccessTokenCache = {
   token: '',
@@ -1363,11 +1324,56 @@ async function zoomRequest({ zoomConfig, method = 'GET', path: endpointPath = ''
   }
 
   if (!response.ok) {
-    const message = parsed?.message || parsed?.reason || `Zoom request failed (${response.status}).`;
-    throw new Error(message);
+    throw new Error(formatZoomApiError(parsed, response.status));
   }
 
   return parsed;
+}
+
+async function createZoomMeetingForAccount({ zoomConfig, hostEmail, meetingPayload }) {
+  const tried = new Set();
+  const candidates = [hostEmail, zoomConfig.defaultHostEmail].map((value) => String(value || '').trim()).filter(Boolean);
+  let lastError = null;
+
+  for (const email of candidates) {
+    const key = email.toLowerCase();
+    if (tried.has(key)) continue;
+    tried.add(key);
+    try {
+      const meeting = await zoomRequest({
+        zoomConfig,
+        method: 'POST',
+        path: `/users/${encodeURIComponent(email)}/meetings`,
+        body: meetingPayload,
+      });
+      return { meeting, hostEmail: email };
+    } catch (error) {
+      lastError = error;
+      if (!isZoomUserMissingError(error)) throw error;
+    }
+  }
+
+  try {
+    const listed = await zoomRequest({
+      zoomConfig,
+      method: 'GET',
+      path: '/users?status=active&page_size=1',
+    });
+    const fallbackEmail = String(listed?.users?.[0]?.email || '').trim();
+    if (fallbackEmail && !tried.has(fallbackEmail.toLowerCase())) {
+      const meeting = await zoomRequest({
+        zoomConfig,
+        method: 'POST',
+        path: `/users/${encodeURIComponent(fallbackEmail)}/meetings`,
+        body: meetingPayload,
+      });
+      return { meeting, hostEmail: fallbackEmail };
+    }
+  } catch (error) {
+    lastError = lastError || error;
+  }
+
+  throw lastError || new Error('Unable to create a Zoom meeting. Set a Zoom host email in Settings → Video Meetings.');
 }
 
 function timingSafeCompare(a = '', b = '') {
@@ -2545,7 +2551,7 @@ function getJoinWindowForEvent(event = {}) {
   if (!start) return { allowed: false, reason: 'Event start time is not configured.' };
 
   const joinFrom = new Date(start.getTime() - 60 * 60 * 1000);  // open 60 min before start
-  const durationMinutes = toZoomDurationMinutes(event);
+  const durationMinutes = toEventDurationMinutes(event);
   const eventEnd = new Date(start.getTime() + durationMinutes * 60 * 1000);
   const joinUntil = new Date(eventEnd.getTime() + 30 * 60 * 1000);
   const now = new Date();
@@ -6807,6 +6813,13 @@ app.post('/api/registrations/:registrationId/sessions/:sessionId/join', async (r
     const meetingUrl = String(session.meeting_url || '').trim()
       || String(event?.zoom_join_url || event?.daily_room_url || event?.meeting_link || '').trim();
 
+    if (!meetingUrl) {
+      return res.status(409).json({
+        ok: false,
+        message: 'Zoom meeting link is not available for this session yet. Ask the organizer to create the Zoom room.',
+      });
+    }
+
     return res.json({
       ok: true,
       data: {
@@ -8278,39 +8291,35 @@ app.post('/api/admin/events/:eventId/zoom/create', async (req, res) => {
     }
 
     const zoomConfig = await getZoomConfig();
-    const hostEmail = String(req.body?.hostEmail || event.zoom_host_email || event.organizer_email || zoomConfig.defaultHostEmail || '').trim();
-    if (!hostEmail) {
-      return res.status(400).json({ ok: false, message: 'Host email is required. Set organizer email or ZOOM_DEFAULT_HOST_EMAIL.' });
+    const requestedHostEmail = resolveZoomHostEmail({
+      bodyHostEmail: req.body?.hostEmail,
+      event,
+      zoomConfig,
+    });
+    if (!requestedHostEmail) {
+      return res.status(400).json({
+        ok: false,
+        message: 'Host email is required. Set the Zoom default host in Settings → Video Meetings.',
+      });
     }
 
-    const startTime = toZoomDateTime(event);
-    if (!startTime) {
+    const meetingPayload = buildZoomMeetingPayload(event, {
+      password: req.body?.password,
+      waitingRoom: parseBoolean(req.body?.waitingRoom, true),
+      joinBeforeHost: parseBoolean(req.body?.joinBeforeHost, false),
+    });
+    if (!meetingPayload) {
       return res.status(400).json({ ok: false, message: 'Event start date/time is required before scheduling Zoom.' });
     }
 
-    const duration = toZoomDurationMinutes(event);
-    const meetingPayload = {
-      topic: String(event.title || 'Mutale Event').trim(),
-      type: 2,
-      agenda: String(event.short_description || event.description || '').slice(0, 1500),
-      start_time: startTime.toISOString(),
-      duration,
-      timezone: String(event.timezone || 'Africa/Lusaka'),
-      password: String(req.body?.password || '').trim() || undefined,
-      settings: {
-        waiting_room: parseBoolean(req.body?.waitingRoom, true),
-        join_before_host: parseBoolean(req.body?.joinBeforeHost, false),
-      },
-    };
-
-    const zoomMeeting = await zoomRequest({
+    const { meeting: zoomMeeting, hostEmail } = await createZoomMeetingForAccount({
       zoomConfig,
-      method: 'POST',
-      path: `/users/${encodeURIComponent(hostEmail)}/meetings`,
-      body: meetingPayload,
+      hostEmail: requestedHostEmail,
+      meetingPayload,
     });
 
     const nowSql = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    const joinUrl = zoomMeeting.join_url || event.meeting_link || '';
     await pool.query(
       `UPDATE events SET
         delivery_mode = ?,
@@ -8331,7 +8340,7 @@ app.post('/api/admin/events/:eventId/zoom/create', async (req, res) => {
         String(event.delivery_mode || (event.event_mode === 'in_person' ? 'physical' : 'virtual')),
         'zoom',
         'zoom',
-        zoomMeeting.join_url || event.meeting_link || '',
+        joinUrl,
         String(zoomMeeting.id || ''),
         zoomMeeting.uuid || null,
         zoomMeeting.join_url || null,
@@ -8345,6 +8354,19 @@ app.post('/api/admin/events/:eventId/zoom/create', async (req, res) => {
       ],
     );
 
+    if (joinUrl) {
+      try {
+        await pool.query(
+          `UPDATE event_sessions
+           SET meeting_url = ?, updated_at = NOW()
+           WHERE event_id = ? AND (meeting_url IS NULL OR meeting_url = '')`,
+          [joinUrl, eventId],
+        );
+      } catch (sessionError) {
+        console.warn(`[zoom] meeting created but session links were not updated: ${sessionError.message}`);
+      }
+    }
+
     const [[updatedEvent]] = await pool.query('SELECT * FROM events WHERE id = ?', [eventId]);
     await createIntegrationLog({
       provider: 'zoom',
@@ -8356,9 +8378,11 @@ app.post('/api/admin/events/:eventId/zoom/create', async (req, res) => {
       responsePayload: {
         zoom_meeting_id: zoomMeeting?.id,
         status: zoomMeeting?.status,
+        host_email: hostEmail,
       },
     });
 
+    console.log(`[zoom] ✓ created meeting ${zoomMeeting?.id || ''} for event ${eventId} (host: ${hostEmail})`);
     return res.status(201).json({
       ok: true,
       message: 'Zoom meeting created and linked to event.',
@@ -8366,16 +8390,22 @@ app.post('/api/admin/events/:eventId/zoom/create', async (req, res) => {
       zoom: zoomMeeting,
     });
   } catch (error) {
+    const eventId = String(req.params.eventId || '').trim() || null;
+    console.error(`[zoom] ✗ failed to create meeting for event ${eventId || '?'}: ${error.message}`);
     await createIntegrationLog({
       provider: 'zoom',
       action: 'meeting_create',
       relatedType: 'event',
-      relatedId: String(req.params.eventId || '').trim() || null,
+      relatedId: eventId,
       status: 'failed',
       requestPayload: req.body || null,
       errorMessage: error.message,
     });
-    return res.status(502).json({ ok: false, message: 'Failed to create Zoom meeting', error: error.message });
+    return res.status(502).json({
+      ok: false,
+      message: `Failed to create Zoom meeting: ${error.message}`,
+      error: error.message,
+    });
   }
 });
 
