@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useCallback, useEffect, useRef } f
 import { useLocation, useNavigate } from 'react-router-dom';
 import { getApiBase } from '../utils/apiBase';
 import { getAdminAuthHeaders, buildPublicUserSession, dispatchUserSessionSync, purgeInvalidAuthState, clearAllAuthStorage, clearAdminAuthStorage } from '../utils/authHeaders';
-import { permissionMatches } from '../../shared/rbacPermissions.js';
+import { isFullAdminAccess, permissionMatches } from '../../shared/rbacPermissions.js';
 
 const AuthContext = createContext();
 const API_BASE = getApiBase();
@@ -76,6 +76,7 @@ export function AuthProvider({ children }) {
       }
 
       const permissions = Array.isArray(userData.admin_permissions) ? userData.admin_permissions : [];
+      const adminRoles = Array.isArray(userData.admin_roles) ? userData.admin_roles : [];
       const session = {
         id: userData.id,
         email: userData.email,
@@ -83,6 +84,7 @@ export function AuthProvider({ children }) {
         role: userData.role,
         permissions,
         admin_permissions: permissions,
+        admin_roles: adminRoles,
         loggedInAt: Date.now(),
         expiresAt: Date.now() + 24 * 60 * 60 * 1000,
       };
@@ -185,7 +187,7 @@ export function AuthProvider({ children }) {
 
   const hasPermission = useCallback((key) => {
     if (!user) return false;
-    if (String(user.role || '').toLowerCase() === 'admin') return true;
+    if (isFullAdminAccess({ role: user.role, roles: user.admin_roles || user.roles })) return true;
     return permissionMatches(permissions, key);
   }, [user, permissions]);
 
@@ -199,10 +201,12 @@ export function AuthProvider({ children }) {
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json?.ok) return;
       const nextPerms = json.data?.permissions || [];
+      const nextRoles = Array.isArray(json.data?.roles) ? json.data.roles : (user.admin_roles || []);
       const nextSession = {
         ...user,
         permissions: nextPerms,
         admin_permissions: nextPerms,
+        admin_roles: nextRoles,
       };
       localStorage.setItem('mm_auth_session', JSON.stringify(nextSession));
       setUser(nextSession);

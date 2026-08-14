@@ -94,7 +94,6 @@ const SYSTEM_NAVIGATION = [
   { key: 'menu', name: 'Menu Management', to: '/admin/menu', icon: Navigation },
   { key: 'users', name: 'Users Table', to: '/admin/users', icon: Users },
   { key: 'messages', name: 'Messages', to: '/admin/messages', icon: MessageSquare },
-  { key: 'templates', name: 'Templates', to: '/admin/templates', icon: Mail },
   { key: 'ledger', name: 'Transaction Ledger', to: '/admin/finance/ledger', icon: ReceiptText },
   { key: 'receipts', name: 'Receipts', to: '/admin/receipts', icon: Receipt },
   { key: 'cv', name: 'CVs', to: '/admin/cv', icon: FileUser },
@@ -299,6 +298,7 @@ export default function AdminLayout() {
   const contentNavigation = filterContentNav(CONTENT_NAVIGATION, hasPermission);
   const systemNavigation = SYSTEM_NAVIGATION.filter((item) => navItemAllowed(item.key, hasPermission));
   const canManageSettings = navItemAllowed('settings', hasPermission);
+  const canManageTemplates = navItemAllowed('templates', hasPermission);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -533,22 +533,40 @@ export default function AdminLayout() {
           </div>
         </nav>
 
-        {canManageSettings && (
-          <div className="shrink-0 border-t border-navy-800 p-4">
-            <NavLink
-              to="/admin/settings"
-              onClick={() => setSidebarOpen(false)}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'bg-cyan-600/10 text-cyan-400'
-                    : 'text-navy-300 hover:bg-navy-800 hover:text-white'
-                }`
-              }
-            >
-              <Settings size={18} />
-              System Settings
-            </NavLink>
+        {(canManageTemplates || canManageSettings) && (
+          <div className="shrink-0 border-t border-navy-800 p-4 space-y-1">
+            {canManageTemplates && (
+              <NavLink
+                to="/admin/templates"
+                onClick={() => setSidebarOpen(false)}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                    isActive
+                      ? 'bg-cyan-600/10 text-cyan-400'
+                      : 'text-navy-300 hover:bg-navy-800 hover:text-white'
+                  }`
+                }
+              >
+                <Mail size={18} />
+                Templates
+              </NavLink>
+            )}
+            {canManageSettings && (
+              <NavLink
+                to="/admin/settings"
+                onClick={() => setSidebarOpen(false)}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                    isActive
+                      ? 'bg-cyan-600/10 text-cyan-400'
+                      : 'text-navy-300 hover:bg-navy-800 hover:text-white'
+                  }`
+                }
+              >
+                <Settings size={18} />
+                System Settings
+              </NavLink>
+            )}
           </div>
         )}
       </aside>

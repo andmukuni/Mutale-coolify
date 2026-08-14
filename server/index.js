@@ -5741,6 +5741,7 @@ app.post('/api/auth/login', rateLimitAuth({ windowMs: 15 * 60 * 1000, max: 10 })
     const sessionUser = {
       ...mapAuthSessionUser(user, req),
       admin_permissions: canAccessAdmin ? adminPermissions : [],
+      admin_roles: canAccessAdmin ? await loadUserAdminRoles(pool, user.id) : [],
       admin_access: canAccessAdmin,
     };
 
@@ -5776,6 +5777,7 @@ app.get('/api/auth/me', async (req, res) => {
     const sessionUser = {
       ...mapAuthSessionUser(user, req),
       admin_permissions: canAccessAdmin ? adminPermissions : [],
+      admin_roles: canAccessAdmin ? await loadUserAdminRoles(pool, user.id) : [],
       admin_access: canAccessAdmin,
     };
 
@@ -7280,6 +7282,7 @@ async function issueSiteChatAuth(user, req) {
   const sessionUser = {
     ...mapAuthSessionUser(user, req),
     admin_permissions: canAccessAdmin ? adminPermissions : [],
+    admin_roles: canAccessAdmin ? await loadUserAdminRoles(pool, user.id) : [],
     admin_access: canAccessAdmin,
   };
   const iat = Math.floor(Date.now() / 1000);

@@ -118,6 +118,11 @@ export async function loadUserAdminPermissions(pool, userId, { legacyRole = '' }
   const uid = String(userId || '').trim();
   if (!uid) return [];
 
+  const roles = await loadUserAdminRoles(pool, userId);
+  if (roles.some((role) => String(role.slug || '') === RBAC_SUPER_ADMIN_SLUG)) {
+    return [...ALL_PERMISSION_KEYS];
+  }
+
   const [rows] = await pool.query(
     `SELECT DISTINCT arp.permission_key
      FROM user_admin_roles uar

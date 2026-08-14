@@ -125,6 +125,12 @@ export const NAV_PERMISSION_MAP = {
   'access-control': 'rbac.manage',
 };
 
+export function isFullAdminAccess({ role = '', roles = [] } = {}) {
+  if (String(role || '').toLowerCase() === 'admin') return true;
+  const list = Array.isArray(roles) ? roles : [];
+  return list.some((item) => String(item?.slug || item || '').toLowerCase() === RBAC_SUPER_ADMIN_SLUG);
+}
+
 export function permissionMatches(have = [], need = '') {
   const required = String(need || '').trim();
   if (!required) return true;
