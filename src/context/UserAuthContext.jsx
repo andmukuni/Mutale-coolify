@@ -16,6 +16,8 @@ import {
   clearUserAuthStorage,
   dispatchUserSessionSync,
 } from '../utils/authHeaders';
+import { useIdleSessionLogout } from '../hooks/useIdleSessionLogout';
+import { clearLastActivityAt, writeLastActivityAt } from '../utils/idleSession';
 
 const UserAuthContext = createContext();
 
@@ -71,7 +73,6 @@ export function UserAuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(() => getStoredUserSession());
   const [authError, setAuthError] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
-  const idleTimerRef = useRef(null);
 
   const isUserAuthenticated = Boolean(currentUser);
 
@@ -120,6 +121,7 @@ export function UserAuthProvider({ children }) {
         return { ok: false, unverified: json.unverified || false };
       }
       const session = saveSessionWithToken(json.data, json.token);
+      writeLastActivityAt();
       setCurrentUser(session);
       dispatchUserSessionSync(session);
       return { ok: true };
@@ -134,34 +136,27 @@ export function UserAuthProvider({ children }) {
   /** Logout public user */
   const userLogout = useCallback(() => {
     clearUserAuthStorage();
-    if (idleTimerRef.current) {
-      window.clearTimeout(idleTimerRef.current);
-      idleTimerRef.current = null;
-    }
+    clearLastActivityAt();
     setCurrentUser(null);
-  }, [idleTimerRef]);
+  }, []);
 
-  const resetIdleTimer = useCallback(() => {
-    if (!currentUser) return;
-    if (idleTimerRef.current) {
-      window.clearTimeout(idleTimerRef.current);
+  const handleIdleTimeout = useCallback(() => {
+    clearAllAuthStorage();
+    clearLastActivityAt();
+    dispatchUserSessionSync(null);
+    setCurrentUser(null);
+    setAuthError('Your session ended due to inactivity. Please log in again.');
+    const pathname = locationRef.current?.pathname || '';
+    if (!pathname.startsWith('/account/login') && !pathname.startsWith('/admin')) {
+      navigate('/account/login', { replace: true });
     }
-    idleTimerRef.current = window.setTimeout(() => {
-      clearAllAuthStorage();
-      dispatchUserSessionSync(null);
-      setCurrentUser(null);
-      setAuthError('Your session ended due to inactivity. Please log in again.');
-      const from = locationRef.current;
-      if (!from.pathname.startsWith('/account/login') && !from.pathname.startsWith('/admin')) {
-        navigate('/account/login', { replace: true, state: { from } });
-      }
-    }, USER_IDLE_TIMEOUT_MS);
-  }, [currentUser, idleTimerRef, navigate]);
+  }, [navigate]);
 
-  const recordUserActivity = useCallback(() => {
-    if (!currentUser) return;
-    resetIdleTimer();
-  }, [currentUser, resetIdleTimer]);
+  useIdleSessionLogout({
+    enabled: Boolean(currentUser),
+    timeoutMs: USER_IDLE_TIMEOUT_MS,
+    onTimeout: handleIdleTimeout,
+  });
 
   useEffect(() => {
     purgeInvalidAuthState();
@@ -195,43 +190,10 @@ export function UserAuthProvider({ children }) {
     };
   }, []);
 
-  useEffect(() => {
-    if (!currentUser) {
-      if (idleTimerRef.current) {
-        window.clearTimeout(idleTimerRef.current);
-        idleTimerRef.current = null;
-      }
-      return;
-    }
-
-    const activityEvents = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        recordUserActivity();
-      }
-    };
-
-    activityEvents.forEach((eventName) => {
-      window.addEventListener(eventName, recordUserActivity);
-    });
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    resetIdleTimer();
-
-    return () => {
-      activityEvents.forEach((eventName) => {
-        window.removeEventListener(eventName, recordUserActivity);
-      });
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-      if (idleTimerRef.current) {
-        window.clearTimeout(idleTimerRef.current);
-        idleTimerRef.current = null;
-      }
-    };
-  }, [currentUser, idleTimerRef, recordUserActivity, resetIdleTimer]);
-
   const applySessionUser = useCallback((user, token) => {
     const session = saveSessionWithToken(user, token);
     if (!session) return null;
+    writeLastActivityAt();
     setCurrentUser(session);
     dispatchUserSessionSync(session);
     return session;

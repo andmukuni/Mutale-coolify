@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, User, ArrowLeft, UserPlus, RefreshCw } from 'lucide-react';
 import { useUserAuth } from '../../context/UserAuthContext';
@@ -20,6 +20,7 @@ export default function UserLoginPage() {
 
   const [form, setForm] = useState({ email: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
+  const lastCredsRef = useRef({ email: '', password: '' });
   const [unverified, setUnverified] = useState(false);
   const [resendStatus, setResendStatus] = useState('');
   const [resendLoading, setResendLoading] = useState(false);
@@ -35,10 +36,13 @@ export default function UserLoginPage() {
   }, [isUserAuthenticated, navigate, from]);
 
   useEffect(() => {
+    const changed = lastCredsRef.current.email !== form.email || lastCredsRef.current.password !== form.password;
+    lastCredsRef.current = { email: form.email, password: form.password };
+    if (!changed) return;
     if (authError) clearAuthError();
     setUnverified(false);
     setResendStatus('');
-  }, [form.email, form.password]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [form.email, form.password, authError, clearAuthError]);
 
   const handleChange = (e) => setForm(p => ({ ...p, [e.target.name]: e.target.value }));
 

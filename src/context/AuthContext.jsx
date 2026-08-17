@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { getApiBase } from '../utils/apiBase';
 import { getAdminAuthHeaders, buildPublicUserSession, dispatchUserSessionSync, purgeInvalidAuthState, clearAllAuthStorage, clearAdminAuthStorage } from '../utils/authHeaders';
 import { isFullAdminAccess, permissionMatches } from '../../shared/rbacPermissions.js';
+import { useIdleSessionLogout } from '../hooks/useIdleSessionLogout';
+import { clearLastActivityAt, writeLastActivityAt } from '../utils/idleSession';
 
 const AuthContext = createContext();
 const API_BASE = getApiBase();
@@ -47,7 +49,6 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => getStoredSession());
   const [loginError, setLoginError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const idleTimerRef = useRef(null);
 
   const isAuthenticated = Boolean(user);
 
@@ -90,6 +91,7 @@ export function AuthProvider({ children }) {
       };
       localStorage.setItem('mm_auth_session', JSON.stringify(session));
       localStorage.setItem('mm_admin_token', String(json.token));
+      writeLastActivityAt();
 
       const publicSession = buildPublicUserSession(userData);
       if (publicSession) {
@@ -110,74 +112,30 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(() => {
     clearAllAuthStorage();
+    clearLastActivityAt();
     dispatchUserSessionSync(null);
-    if (idleTimerRef.current) {
-      window.clearTimeout(idleTimerRef.current);
-      idleTimerRef.current = null;
-    }
     setUser(null);
   }, []);
 
-  const resetIdleTimer = useCallback(() => {
-    if (!user) return;
-    if (idleTimerRef.current) {
-      window.clearTimeout(idleTimerRef.current);
+  const handleIdleTimeout = useCallback(() => {
+    logout();
+    setLoginError('Admin session ended due to inactivity. Please log in again.');
+    const pathname = locationRef.current?.pathname || '';
+    if (!pathname.startsWith('/admin/login')) {
+      navigate('/admin/login', { replace: true });
     }
-    idleTimerRef.current = window.setTimeout(() => {
-      clearAllAuthStorage();
-      dispatchUserSessionSync(null);
-      setUser(null);
-      setLoginError('Admin session ended due to inactivity. Please log in again.');
-      const from = locationRef.current;
-      if (!from.pathname.startsWith('/admin/login')) {
-        navigate('/admin/login', { replace: true, state: { from } });
-      }
-    }, ADMIN_IDLE_TIMEOUT_MS);
-  }, [user, navigate]);
+  }, [logout, navigate]);
 
-  const recordUserActivity = useCallback(() => {
-    if (!user) return;
-    resetIdleTimer();
-  }, [user, resetIdleTimer]);
+  useIdleSessionLogout({
+    enabled: Boolean(user),
+    timeoutMs: ADMIN_IDLE_TIMEOUT_MS,
+    onTimeout: handleIdleTimeout,
+  });
 
   useEffect(() => {
     purgeInvalidAuthState();
     setUser(getStoredSession());
   }, []);
-
-  useEffect(() => {
-    if (!user) {
-      if (idleTimerRef.current) {
-        window.clearTimeout(idleTimerRef.current);
-        idleTimerRef.current = null;
-      }
-      return;
-    }
-
-    const activityEvents = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        recordUserActivity();
-      }
-    };
-
-    activityEvents.forEach((eventName) => {
-      window.addEventListener(eventName, recordUserActivity);
-    });
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    resetIdleTimer();
-
-    return () => {
-      activityEvents.forEach((eventName) => {
-        window.removeEventListener(eventName, recordUserActivity);
-      });
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-      if (idleTimerRef.current) {
-        window.clearTimeout(idleTimerRef.current);
-        idleTimerRef.current = null;
-      }
-    };
-  }, [user, recordUserActivity, resetIdleTimer]);
 
   const clearLoginError = useCallback(() => {
     setLoginError('');

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Lock, Mail, Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -18,6 +18,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const lastCredsRef = useRef({ email: '', password: '' });
 
   useEffect(() => {
     purgeInvalidAuthState();
@@ -30,10 +31,12 @@ export default function LoginPage() {
     }
   }, [isAuthenticated, navigate, from]);
 
-  // Clear errors when inputs change
+  // Clear errors when the person edits the form — not on the idle-logout landing.
   useEffect(() => {
-    if (loginError) clearLoginError();
-  }, [email, password]); // eslint-disable-line react-hooks/exhaustive-deps
+    const changed = lastCredsRef.current.email !== email || lastCredsRef.current.password !== password;
+    lastCredsRef.current = { email, password };
+    if (changed && loginError) clearLoginError();
+  }, [email, password, loginError, clearLoginError]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

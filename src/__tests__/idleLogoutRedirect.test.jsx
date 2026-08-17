@@ -3,6 +3,7 @@ import { act, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from '../context/AuthContext';
 import { UserAuthProvider } from '../context/UserAuthContext';
+import { LAST_ACTIVITY_STORAGE_KEY } from '../utils/idleSession';
 
 vi.mock('../utils/apiBase', () => ({ getApiBase: () => 'http://test.api' }));
 
@@ -48,6 +49,10 @@ function seedAdminSession() {
   }));
 }
 
+function typeInForm() {
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }));
+}
+
 describe('idle session logout redirect', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -70,6 +75,7 @@ describe('idle session logout redirect', () => {
 
     expect(screen.getByText('Account login')).toBeInTheDocument();
     expect(localStorage.getItem('mm_user_session')).toBeNull();
+    expect(localStorage.getItem('mm_user_token')).toBeNull();
   });
 
   it('sends an admin to the admin login page after idle timeout', () => {
@@ -83,5 +89,64 @@ describe('idle session logout redirect', () => {
 
     expect(screen.getByText('Admin login')).toBeInTheDocument();
     expect(localStorage.getItem('mm_auth_session')).toBeNull();
+    expect(localStorage.getItem('mm_admin_token')).toBeNull();
+  });
+
+  it('does not log the person out while they are filling in a form', () => {
+    seedUserSession();
+    renderAt('/events');
+
+    act(() => {
+      vi.advanceTimersByTime(THIRTY_MINUTES_MS - 1000);
+      typeInForm();
+      vi.advanceTimersByTime(THIRTY_MINUTES_MS - 1000);
+    });
+
+    expect(screen.getByText('Events page')).toBeInTheDocument();
+    expect(localStorage.getItem('mm_user_session')).toBeTruthy();
+  });
+
+  it('still logs the person out after they stop filling the form', () => {
+    seedUserSession();
+    renderAt('/events');
+
+    act(() => {
+      vi.advanceTimersByTime(THIRTY_MINUTES_MS - 1000);
+      typeInForm();
+      vi.advanceTimersByTime(THIRTY_MINUTES_MS);
+    });
+
+    expect(screen.getByText('Account login')).toBeInTheDocument();
+    expect(localStorage.getItem('mm_user_session')).toBeNull();
+  });
+
+  it('logs the person out when they return to a tab after the idle window', () => {
+    seedAdminSession();
+    renderAt('/admin/events');
+    expect(screen.getByText('Admin events')).toBeInTheDocument();
+
+    localStorage.setItem(LAST_ACTIVITY_STORAGE_KEY, String(Date.now() - THIRTY_MINUTES_MS - 1000));
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'visible',
+    });
+
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    expect(screen.getByText('Admin login')).toBeInTheDocument();
+    expect(localStorage.getItem('mm_auth_session')).toBeNull();
+    expect(localStorage.getItem('mm_admin_token')).toBeNull();
+  });
+
+  it('logs the person out on load when the stored idle window has already passed', () => {
+    seedUserSession();
+    localStorage.setItem(LAST_ACTIVITY_STORAGE_KEY, String(Date.now() - THIRTY_MINUTES_MS - 1000));
+
+    renderAt('/events');
+
+    expect(screen.getByText('Account login')).toBeInTheDocument();
+    expect(localStorage.getItem('mm_user_session')).toBeNull();
   });
 });
