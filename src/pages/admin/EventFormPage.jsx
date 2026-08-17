@@ -9,7 +9,7 @@ import EventPublicQrCard from '../../components/admin/EventPublicQrCard';
 import { formatPrice, isEventPast } from '../../utils/eventServices';
 import { getApiBase } from '../../utils/apiBase';
 import { getAdminAuthHeaders } from '../../utils/authHeaders';
-import { prepareEventCoverImage } from '../../utils/prepareEventCoverImage';
+import { prepareEventCoverImage, compactEventFormImages, preparePersonPhotoSource, preparePartnerLogoSource } from '../../utils/prepareEventCoverImage';
 import EventSessionsPanel from '../../components/admin/event/EventSessionsPanel';
 import VenueMapPicker from '../../components/admin/VenueMapPicker';
 
@@ -339,6 +339,22 @@ export default function EventFormPage() {
     }
   };
 
+  const handlePeopleImageUpload = async (file, key, idx, field) => {
+    if (!file?.type?.startsWith('image/')) return;
+    try {
+      const prepare = field === 'logo' ? preparePartnerLogoSource : preparePersonPhotoSource;
+      const value = await prepare(file);
+      setForm((prev) => {
+        const arr = [...(prev[key] || [])];
+        if (!arr[idx]) return prev;
+        arr[idx] = { ...arr[idx], [field]: value };
+        return { ...prev, [key]: arr };
+      });
+    } catch (err) {
+      toast.error(err?.message || 'Could not process that photo. Try a JPG or PNG.');
+    }
+  };
+
   const validateStep = (stepIndex) => {
     if (stepIndex === 0) {
       if (!form.title.trim()) return 'Event title is required.';
@@ -486,6 +502,35 @@ export default function EventFormPage() {
     }
     if (payload.is_free) payload.price = 0;
 
+    try {
+      setSubmitting(true);
+      setCoverUploadProgress(0);
+      const compacted = await compactEventFormImages(payload, {
+        onProgress: setCoverUploadProgress,
+      });
+      payload.cover_image = compacted.cover_image;
+      payload.featured_speakers = compacted.featured_speakers;
+      payload.featured_guests = compacted.featured_guests;
+      payload.partners = compacted.partners;
+      setForm((prev) => ({
+        ...prev,
+        cover_image: compacted.cover_image,
+        featured_speakers: compacted.featured_speakers,
+        featured_guests: compacted.featured_guests,
+        partners: compacted.partners,
+      }));
+    } catch (error) {
+      const msg = error?.message || 'Could not shrink the event photos. Try a JPG or PNG.';
+      setPhotoError(msg);
+      setSaveError(msg);
+      setCurrentStep(0);
+      setCoverUploadProgress(null);
+      setSubmitting(false);
+      return;
+    } finally {
+      setCoverUploadProgress(null);
+    }
+
     // Avoid re-sending very large unchanged cover images on edit updates.
     // This helps prevent backend/DB packet size errors.
     if (isEditing && initialForm && payload.cover_image === initialForm.cover_image) {
@@ -619,7 +664,7 @@ export default function EventFormPage() {
                   className="block w-full text-sm text-navy-600 file:mr-4 file:rounded-lg file:border-0 file:bg-cyan-600 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-cyan-500 disabled:opacity-60"
                 />
                 <p className="mt-1 text-xs text-navy-400">
-                  Any size accepted — we optimize to <span className="font-medium">1200 × 630 px</span> (16:9) · JPG · under 2 MB automatically.
+                  Any size accepted — we shrink it to <span className="font-medium">1200 × 630 px</span> JPG for fast loading.
                 </p>
                 {coverUploadProgress != null && (
                   <div className="mt-2.5" aria-live="polite">
@@ -987,14 +1032,8 @@ export default function EventFormPage() {
                           {speaker.photo ? 'Change' : 'Upload'}
                           <input type="file" accept="image/*" className="hidden" onChange={(e) => {
                             const file = e.target.files?.[0];
-                            if (!file || !file.type.startsWith('image/')) return;
-                            const reader = new FileReader();
-                            reader.onload = () => {
-                              const arr = [...form.featured_speakers];
-                              arr[idx] = { ...arr[idx], photo: String(reader.result || '') };
-                              setForm(prev => ({ ...prev, featured_speakers: arr }));
-                            };
-                            reader.readAsDataURL(file);
+                            e.target.value = '';
+                            void handlePeopleImageUpload(file, 'featured_speakers', idx, 'photo');
                           }} />
                         </label>
                         {speaker.photo && (
@@ -1051,14 +1090,8 @@ export default function EventFormPage() {
                           {guest.photo ? 'Change' : 'Upload'}
                           <input type="file" accept="image/*" className="hidden" onChange={(e) => {
                             const file = e.target.files?.[0];
-                            if (!file || !file.type.startsWith('image/')) return;
-                            const reader = new FileReader();
-                            reader.onload = () => {
-                              const arr = [...form.featured_guests];
-                              arr[idx] = { ...arr[idx], photo: String(reader.result || '') };
-                              setForm(prev => ({ ...prev, featured_guests: arr }));
-                            };
-                            reader.readAsDataURL(file);
+                            e.target.value = '';
+                            void handlePeopleImageUpload(file, 'featured_guests', idx, 'photo');
                           }} />
                         </label>
                         {guest.photo && (
@@ -1108,14 +1141,8 @@ export default function EventFormPage() {
                           {partner.logo ? 'Change' : 'Upload'}
                           <input type="file" accept="image/*" className="hidden" onChange={(e) => {
                             const file = e.target.files?.[0];
-                            if (!file || !file.type.startsWith('image/')) return;
-                            const reader = new FileReader();
-                            reader.onload = () => {
-                              const arr = [...form.partners];
-                              arr[idx] = { ...arr[idx], logo: String(reader.result || '') };
-                              setForm(prev => ({ ...prev, partners: arr }));
-                            };
-                            reader.readAsDataURL(file);
+                            e.target.value = '';
+                            void handlePeopleImageUpload(file, 'partners', idx, 'logo');
                           }} />
                         </label>
                         {partner.logo && (
