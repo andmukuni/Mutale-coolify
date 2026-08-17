@@ -161,6 +161,8 @@ import {
   processEventChatTurn,
   resetChatSession,
 } from './eventChatService.js';
+import { searchPlaces } from './geoSearchService.js';
+import { normalizeEventMapFields } from '../shared/eventMaps.js';
 import { buildPublicEventPageUrl, generateReceiptQrDataUrl } from '../shared/receiptQr.js';
 
 // Load `.env` from the app root (parent of server/), not relying on cwd — cPanel Passenger often starts with cwd ≠ project root.
@@ -269,6 +271,9 @@ const EVENT_FIELDS = [
   'meeting_link',
   'venue',
   'location',
+  'location_lat',
+  'location_lng',
+  'location_place',
   'start_date',
   'end_date',
   'start_time',
@@ -2037,6 +2042,7 @@ function normalizeEventPayload(payload = {}, fallbackId = null) {
     meeting_link: payload.meeting_link || '',
     venue: payload.venue || '',
     location: payload.location || '',
+    ...normalizeEventMapFields(payload),
     start_date: toDateOnly(payload.start_date),
     end_date: toDateOnly(payload.end_date),
     start_time: payload.start_time || null,
@@ -4191,12 +4197,20 @@ function safeParseJson(val) {
   return val ?? [];
 }
 
+function toNullableNumber(value) {
+  if (value === '' || value == null) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 function mapDbEvent(row) {
   return {
     ...row,
     featured_speakers: safeParseJson(row.featured_speakers),
     featured_guests: safeParseJson(row.featured_guests),
     partners: safeParseJson(row.partners),
+    location_lat: toNullableNumber(row.location_lat),
+    location_lng: toNullableNumber(row.location_lng),
   };
 }
 
@@ -4251,6 +4265,9 @@ async function ensureSchema() {
       meeting_link LONGTEXT,
       venue VARCHAR(255),
       location VARCHAR(255),
+      location_lat DECIMAL(10,7) NULL,
+      location_lng DECIMAL(10,7) NULL,
+      location_place VARCHAR(255) NULL,
       start_date DATE,
       end_date DATE,
       start_time TIME,
@@ -4321,6 +4338,9 @@ async function ensureSchema() {
     ['volume_discount_type', "VARCHAR(20) DEFAULT 'percent'"],
     ['volume_discount_value', 'DECIMAL(10,2) NOT NULL DEFAULT 0'],
     ['certificate_requires_all_sessions', 'TINYINT(1) NOT NULL DEFAULT 0'],
+    ['location_lat', 'DECIMAL(10,7) NULL'],
+    ['location_lng', 'DECIMAL(10,7) NULL'],
+    ['location_place', 'VARCHAR(255) NULL'],
   ];
 
   for (const [name, sqlType] of eventColumnsToAdd) {
@@ -5904,7 +5924,8 @@ app.get('/api/events/:eventId/calendar', async (req, res) => {
     const key = String(req.params.eventId || '').trim();
     if (!key) return res.status(400).json({ ok: false, message: 'Event is required.' });
     const [[row]] = await pool.query(
-      `SELECT id, slug, title, start_date, start_time, end_date, end_time, timezone, location, venue, short_description
+      `SELECT id, slug, title, start_date, start_time, end_date, end_time, timezone, location, venue,
+              location_lat, location_lng, location_place, event_mode, short_description
        FROM events
        WHERE id = ? OR slug = ?
        LIMIT 1`,
@@ -5924,6 +5945,10 @@ app.get('/api/events/:eventId/calendar', async (req, res) => {
         timezone: row.timezone || 'Africa/Lusaka',
         location: row.location || '',
         venue: row.venue || '',
+        location_lat: row.location_lat == null ? null : Number(row.location_lat),
+        location_lng: row.location_lng == null ? null : Number(row.location_lng),
+        location_place: row.location_place || '',
+        event_mode: row.event_mode || '',
         short_description: String(row.short_description || '').slice(0, 800),
       },
     });
@@ -9417,6 +9442,19 @@ app.post('/api/webhooks/zoom', async (req, res) => {
       errorMessage: error.message,
     });
     return res.status(500).json({ ok: false, message: 'Failed to process Zoom webhook', error: error.message });
+  }
+});
+
+app.get('/api/admin/geo/search', async (req, res) => {
+  try {
+    const results = await searchPlaces(req.query?.q);
+    return res.json({ ok: true, data: results });
+  } catch (error) {
+    return res.status(502).json({
+      ok: false,
+      message: 'Could not look up that location.',
+      error: error.message,
+    });
   }
 });
 

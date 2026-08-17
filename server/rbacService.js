@@ -206,6 +206,7 @@ export function resolveRouteAdminPermission(req) {
   if (path.startsWith('/api/contact-messages')) return 'messages.view';
   if (path.startsWith('/api/users')) return method === 'GET' ? 'users.view' : 'users.manage';
   if (path.startsWith('/api/registrations')) return method === 'GET' ? 'events.view' : 'events.manage';
+  if (path.startsWith('/api/admin/geo')) return 'events.manage';
   if (path.startsWith('/api/events')) return method === 'GET' ? 'events.view' : 'events.manage';
   if (path.startsWith('/api/blog')) return method === 'GET' ? 'blog.view' : 'blog.manage';
   if (path.startsWith('/api/publications')) return method === 'GET' ? 'publications.view' : 'publications.manage';

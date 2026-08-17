@@ -8,6 +8,7 @@ import {
   buildIcsContent,
   buildIcsFilename,
 } from '../../shared/googleCalendar.js';
+import EventVenueMap from '../components/EventVenueMap';
 
 const API_BASE = getApiBase();
 
@@ -109,6 +110,9 @@ export default function AddToCalendarPage() {
                   {event.location || event.venue}
                 </p>
               )}
+              <div className="mt-3">
+                <EventVenueMap event={event} compact />
+              </div>
             </div>
 
             {options.length === 0 ? (

@@ -75,6 +75,20 @@ describe('other calendar providers', () => {
     expect(ics).toContain('SUMMARY:Interview Masterclass');
   });
 
+  it('adds GEO and a richer LOCATION when the event has a map pin', () => {
+    const ics = buildIcsContent({
+      ...event,
+      event_mode: 'in_person',
+      venue: 'Mulungushi Conference Centre',
+      location: 'Lusaka',
+      location_place: 'Mulungushi International Conference Centre, Lusaka, Zambia',
+      location_lat: -15.4167,
+      location_lng: 28.2833,
+    });
+    expect(ics).toContain('GEO:-15.4167;28.2833');
+    expect(ics).toContain('LOCATION:Mulungushi International Conference Centre\\, Lusaka\\, Zambia');
+  });
+
   it('lists chooser options and a site calendar page URL', () => {
     const options = buildCalendarOptions(event);
     expect(options.map((item) => item.id)).toEqual(['google', 'outlook', 'office365', 'yahoo', 'ics']);

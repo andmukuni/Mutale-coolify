@@ -1,3 +1,5 @@
+import { eventMapLabel, parseEventCoords } from './eventMaps.js';
+
 const DEFAULT_TIMEZONE = 'Africa/Lusaka';
 
 function normalizeDatePart(value) {
@@ -95,7 +97,13 @@ function eventTitle(event = {}) {
 }
 
 function eventLocation(event = {}) {
-  return String(event.location || event.venue || '').trim();
+  return eventMapLabel(event) || String(event.location || event.venue || '').trim();
+}
+
+function eventGeoLine(event = {}) {
+  const coords = parseEventCoords(event);
+  if (!coords) return '';
+  return `GEO:${coords.lat};${coords.lng}`;
 }
 
 /**
@@ -224,6 +232,7 @@ export function buildIcsContent(event = {}, { detailsUrl = '', uid = '' } = {}) 
     `SUMMARY:${escapeIcsText(eventTitle(event))}`,
     `DESCRIPTION:${escapeIcsText(eventDetails(event, detailsUrl))}`,
     `LOCATION:${escapeIcsText(eventLocation(event))}`,
+    eventGeoLine(event),
     detailsUrl ? `URL:${detailsUrl}` : '',
     'END:VEVENT',
     'END:VCALENDAR',

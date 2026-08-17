@@ -32,6 +32,7 @@ import { formatDate, formatTime } from '../utils/helpers';
 import { getApiBase, getAppOrigin } from '../utils/apiBase';
 import { getSessionAuthHeaders } from '../utils/authHeaders';
 import { runLencoCardWidget } from '../utils/lencoCardPayment';
+import EventVenueMap from './EventVenueMap';
 
 const API_BASE = getApiBase();
 
@@ -1231,9 +1232,12 @@ export default function EventRegistrationFlow({
               {formatDate(event.start_date || event.date)}
               {event.start_time && ` · ${formatTime(event.start_time)}`}
             </div>
-            <div className="flex items-center gap-2 text-xs text-navy-500">
-              <MapPin size={12} />
-              {event.venue ? `${event.venue}, ${event.location}` : event.location}
+            <div className="flex items-start gap-2 text-xs text-navy-500">
+              <MapPin size={12} className="mt-0.5 shrink-0" />
+              <div className="min-w-0 space-y-1.5">
+                <p>{event.venue ? `${event.venue}, ${event.location}` : event.location}</p>
+                <EventVenueMap event={event} compact />
+              </div>
             </div>
             {spotsLeft !== null && (
               <div className="flex items-center gap-2 text-xs text-navy-500">

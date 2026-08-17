@@ -19,7 +19,9 @@ import { resolveUserBearerToken } from '../utils/authHeaders';
 import EventMerchStrip from '../components/EventMerchStrip';
 import EventSessionsSchedule from '../components/EventSessionsSchedule';
 import EventForumPanel from '../components/EventForumPanel';
+import EventVenueMap from '../components/EventVenueMap';
 import StatusBadge from '../components/ui/StatusBadge';
+import { hasEventMapPin } from '../utils/eventMaps';
 import { getEventTimeBounds } from '../../shared/eventRegistration.js';
 import { nowInZoneStamp } from '../utils/eventSessions';
 
@@ -190,6 +192,13 @@ export default function EventDetailPage() {
                 ))}
               </div>
             </div>
+
+            {hasEventMapPin(event) && (
+              <div className="bg-white rounded-2xl border border-navy-100 p-6 sm:p-8 shadow-sm">
+                <h2 className="text-xl font-bold text-navy-900 mb-4">Venue</h2>
+                <EventVenueMap event={event} />
+              </div>
+            )}
 
             <EventSessionsSchedule
               eventId={event.id}

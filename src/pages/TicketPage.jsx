@@ -7,6 +7,7 @@ import TicketSessionsPanel from '../components/TicketSessionsPanel';
 import GuestTicketJoinPanel from '../components/GuestTicketJoinPanel';
 import GuestTicketForumPanel from '../components/GuestTicketForumPanel';
 import GuestCertificatePanel from '../components/GuestCertificatePanel';
+import EventVenueMap from '../components/EventVenueMap';
 import { RECEIPT_LIGHT_FILL } from '../../shared/receiptTheme.js';
 
 const API_BASE = getApiBase();
@@ -160,6 +161,7 @@ export default function TicketPage() {
                     {eventInfo.location}
                   </p>
                 )}
+                <EventVenueMap event={eventInfo} compact />
                 {eventInfo.description && (
                   <p className="text-xs text-navy-600 leading-relaxed">{eventInfo.description}</p>
                 )}

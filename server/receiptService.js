@@ -108,6 +108,11 @@ function calendarEventFromReceipt(registration = {}, event = {}) {
     end_time: event.end_time || registration.end_time,
     timezone: event.timezone || registration.timezone || 'Africa/Lusaka',
     location: event.location || event.venue || registration.location || registration.venue || '',
+    venue: event.venue || registration.venue || '',
+    location_lat: event.location_lat ?? registration.location_lat ?? null,
+    location_lng: event.location_lng ?? registration.location_lng ?? null,
+    location_place: event.location_place || registration.location_place || '',
+    event_mode: event.event_mode || registration.event_mode || '',
     short_description: event.short_description || registration.short_description || '',
   };
 }

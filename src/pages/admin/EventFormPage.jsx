@@ -11,6 +11,7 @@ import { getApiBase } from '../../utils/apiBase';
 import { getAdminAuthHeaders } from '../../utils/authHeaders';
 import { prepareEventCoverImage } from '../../utils/prepareEventCoverImage';
 import EventSessionsPanel from '../../components/admin/event/EventSessionsPanel';
+import VenueMapPicker from '../../components/admin/VenueMapPicker';
 
 const API_BASE = getApiBase();
 
@@ -83,6 +84,9 @@ const emptyEvent = {
   meeting_link: '',
   venue: '',
   location: '',
+  location_lat: '',
+  location_lng: '',
+  location_place: '',
   start_date: '',
   end_date: '',
   start_time: '',
@@ -284,6 +288,9 @@ export default function EventFormPage() {
         ...(name === 'start_time' ? { time: value } : {}),
         ...(name === 'end_time' ? { endTime: value } : {}),
         ...(name === 'event_mode' && value === 'in_person' ? { meeting_platform: '', meeting_link: '' } : {}),
+        ...(name === 'event_mode' && value === 'virtual'
+          ? { location_lat: '', location_lng: '', location_place: '' }
+          : {}),
       };
 
       if (name === 'start_date') {
@@ -417,6 +424,8 @@ export default function EventFormPage() {
     const tag = String(e.target?.tagName || '').toLowerCase();
     // Let Enter work normally inside textareas (new line).
     if (tag === 'textarea') return;
+    // Map lookup uses its own form — Enter should search, not skip the step.
+    if (e.target?.closest?.('form')) return;
     // Prevent any default browser action (there's no <form>, but just in case).
     e.preventDefault();
     e.stopPropagation();
@@ -468,6 +477,11 @@ export default function EventFormPage() {
     if (payload.event_mode === 'in_person') {
       payload.meeting_platform = '';
       payload.meeting_link = '';
+    }
+    if (payload.event_mode === 'virtual') {
+      payload.location_lat = '';
+      payload.location_lng = '';
+      payload.location_place = '';
     }
     if (payload.is_free) payload.price = 0;
 
@@ -721,6 +735,34 @@ export default function EventFormPage() {
                   <FormField label="Location / City" name="location" value={form.location} onChange={handleChange} required placeholder="e.g., Lusaka, Zambia" />
                 )}
               </div>
+
+              {form.event_mode !== 'virtual' && (
+                <VenueMapPicker
+                  searchHint={[form.venue, form.location].filter(Boolean).join(', ')}
+                  locationLat={form.location_lat}
+                  locationLng={form.location_lng}
+                  locationPlace={form.location_place}
+                  onSelect={(result) => {
+                    setForm((prev) => ({
+                      ...prev,
+                      location_lat: result.lat,
+                      location_lng: result.lng,
+                      location_place: result.label || '',
+                      location: result.city || prev.location,
+                      venue: String(prev.venue || '').trim() ? prev.venue : (result.venue || prev.venue),
+                    }));
+                    if (stepError) setStepError('');
+                  }}
+                  onClear={() => {
+                    setForm((prev) => ({
+                      ...prev,
+                      location_lat: '',
+                      location_lng: '',
+                      location_place: '',
+                    }));
+                  }}
+                />
+              )}
 
               <div className="grid sm:grid-cols-2 gap-4">
                 <FormField label="Start Date" name="start_date" type="date" value={form.start_date} onChange={handleChange} required />
@@ -1102,6 +1144,9 @@ export default function EventFormPage() {
                 <SummaryItem label="Mode" value={form.event_mode} />
                 {form.event_mode !== 'virtual' && (
                   <SummaryItem label="Location" value={form.location || '—'} />
+                )}
+                {form.event_mode !== 'virtual' && form.location_place && (
+                  <SummaryItem label="Map pin" value={form.location_place} />
                 )}
                 <SummaryItem label="Start Date" value={form.start_date} />
                 <SummaryItem label="Start Time" value={form.start_time || '—'} />
