@@ -351,7 +351,7 @@ export default function EventFormPage() {
     }
 
     if (stepIndex === 1) {
-      if (!form.location.trim()) return 'Location / City is required.';
+      if (form.event_mode !== 'virtual' && !form.location.trim()) return 'Location / City is required.';
       if (!form.start_date) return 'Start date is required.';
       if (!form.end_date) return 'End date is required.';
       if (form.end_date < form.start_date) return 'End date cannot be earlier than start date.';
@@ -717,7 +717,9 @@ export default function EventFormPage() {
 
               <div className="grid sm:grid-cols-2 gap-4">
                 <FormField label="Venue" name="venue" value={form.venue} onChange={handleChange} placeholder="e.g., Conference Centre" />
-                <FormField label="Location / City" name="location" value={form.location} onChange={handleChange} required placeholder="e.g., Lusaka, Zambia" />
+                {form.event_mode !== 'virtual' && (
+                  <FormField label="Location / City" name="location" value={form.location} onChange={handleChange} required placeholder="e.g., Lusaka, Zambia" />
+                )}
               </div>
 
               <div className="grid sm:grid-cols-2 gap-4">
@@ -1098,7 +1100,9 @@ export default function EventFormPage() {
                 <SummaryItem label="Visibility" value={form.visibility} />
                 <SummaryItem label="Event forum" value={form.forum_enabled ? 'Enabled' : 'Disabled'} />
                 <SummaryItem label="Mode" value={form.event_mode} />
-                <SummaryItem label="Location" value={form.location} />
+                {form.event_mode !== 'virtual' && (
+                  <SummaryItem label="Location" value={form.location || '—'} />
+                )}
                 <SummaryItem label="Start Date" value={form.start_date} />
                 <SummaryItem label="Start Time" value={form.start_time || '—'} />
                 <SummaryItem label="End Date" value={form.end_date || '—'} />

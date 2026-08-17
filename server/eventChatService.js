@@ -18,7 +18,6 @@ export const EVENT_CHAT_CATEGORIES = [
 export const REQUIRED_EVENT_DRAFT_FIELDS = [
   'title',
   'description',
-  'location',
   'start_date',
   'end_date',
   'registration_deadline',
@@ -235,6 +234,9 @@ export function listMissingEventFields(draft = {}) {
     if (!String(next[field] || '').trim()) missing.push(field);
   }
   if (next.is_free === false && !(Number(next.price) > 0)) missing.push('price');
+  if (String(next.event_mode || 'virtual') !== 'virtual' && !String(next.location || '').trim()) {
+    missing.push('location');
+  }
   if (next.event_mode === 'in_person' && !String(next.venue || '').trim() && !String(next.location || '').trim()) {
     missing.push('venue');
   }
@@ -333,11 +335,11 @@ export const EVENT_CREATE_PLAYBOOK = [
   'This is the live mutalemubanga.org event-creation form (Admin → Events → New). Treat it as source of truth.',
   'Wizard steps: 1 Basic Details, 2 Schedule & Venue, 3 Registration Setup, 4 Speakers & Partners, 5 Review & Publish.',
   'Chat always saves status=draft. The admin publishes later from the form.',
-  'Required before save: title, slug (from title), description, location/city, start_date, end_date, registration_deadline + registration_deadline_time.',
+  'Required before save: title, slug (from title), description, start_date, end_date, registration_deadline + registration_deadline_time.',
   'Cover image is required on the form; chat may omit it and a category Unsplash placeholder is applied at create.',
   'Categories: Workshop, Seminar, Training, Conference, Masterclass, Review, Webinar, Meeting, Other.',
   'Modes: virtual | in_person | hybrid. Virtual/hybrid may use meeting_platform zoom|daily|teams|google_meet|webex|other. Never invent a join URL.',
-  'In-person needs a city and preferably a venue. Location examples: Lusaka, Zambia.',
+  'Virtual events do not need Location / City. In-person and hybrid need a city and preferably a venue. Location examples: Lusaka, Zambia.',
   'Dates YYYY-MM-DD, times HH:MM. End cannot be before start. Deadline cannot be after the event ends. Default timezone Africa/Lusaka.',
   'Registration: capacity blank = unlimited. booking_type is always subscription. visibility public|private.',
   'Price is ZMW. Free events set is_free=true and price=0. Paid events need a price > 0.',

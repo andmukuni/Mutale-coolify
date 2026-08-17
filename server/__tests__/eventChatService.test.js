@@ -60,17 +60,16 @@ describe('event chat draft helpers', () => {
     expect(listMissingEventFields(createEmptyDraft())).toEqual(expect.arrayContaining([
       'title',
       'description',
-      'location',
       'start_date',
       'end_date',
       'registration_deadline',
       'registration_deadline_time',
     ]));
+    expect(listMissingEventFields(createEmptyDraft())).not.toContain('location');
 
     const ready = applyDraftDefaults({
       title: 'Lab Workshop',
       description: 'A one-day readiness workshop.',
-      location: 'Lusaka, Zambia',
       start_date: '2026-09-01',
       end_date: '2026-09-01',
       registration_deadline: '2026-08-28',
@@ -78,6 +77,30 @@ describe('event chat draft helpers', () => {
       is_free: true,
     });
     expect(listMissingEventFields(ready)).toEqual([]);
+  });
+
+  it('requires a city for in-person events, not virtual ones', () => {
+    expect(listMissingEventFields({
+      title: 'Summit',
+      description: 'Leadership day.',
+      event_mode: 'in_person',
+      start_date: '2026-09-01',
+      end_date: '2026-09-01',
+      registration_deadline: '2026-08-28',
+      registration_deadline_time: '17:00',
+      is_free: true,
+    })).toContain('location');
+
+    expect(listMissingEventFields({
+      title: 'Webinar',
+      description: 'Online session.',
+      event_mode: 'virtual',
+      start_date: '2026-09-01',
+      end_date: '2026-09-01',
+      registration_deadline: '2026-08-28',
+      registration_deadline_time: '17:00',
+      is_free: true,
+    })).not.toContain('location');
   });
 
   it('requires a price on paid events', () => {
