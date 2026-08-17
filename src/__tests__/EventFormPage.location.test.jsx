@@ -37,7 +37,7 @@ function goToScheduleStep() {
 }
 
 describe('EventFormPage physical location', () => {
-  it('hides Location / City and the map picker for virtual events', async () => {
+  it('hides Venue, Location / City, and the map picker for virtual events', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ ok: true, data: { video: {} } }),
@@ -54,19 +54,23 @@ describe('EventFormPage physical location', () => {
     goToScheduleStep();
 
     expect(screen.getByLabelText(/event mode/i)).toHaveValue('virtual');
+    expect(screen.queryByLabelText(/^venue$/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/location \/ city/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/look up venue on map/i)).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/event mode/i), { target: { value: 'in_person' } });
 
+    expect(screen.getByLabelText(/^venue$/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/location \/ city/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/look up venue on map/i)).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/event mode/i), { target: { value: 'hybrid' } });
+    expect(screen.getByLabelText(/^venue$/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/look up venue on map/i)).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/event mode/i), { target: { value: 'virtual' } });
 
+    expect(screen.queryByLabelText(/^venue$/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/location \/ city/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/look up venue on map/i)).not.toBeInTheDocument();
   });

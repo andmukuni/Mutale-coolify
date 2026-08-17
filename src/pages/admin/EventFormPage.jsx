@@ -289,7 +289,7 @@ export default function EventFormPage() {
         ...(name === 'end_time' ? { endTime: value } : {}),
         ...(name === 'event_mode' && value === 'in_person' ? { meeting_platform: '', meeting_link: '' } : {}),
         ...(name === 'event_mode' && value === 'virtual'
-          ? { location_lat: '', location_lng: '', location_place: '' }
+          ? { venue: '', location_lat: '', location_lng: '', location_place: '' }
           : {}),
       };
 
@@ -479,6 +479,7 @@ export default function EventFormPage() {
       payload.meeting_link = '';
     }
     if (payload.event_mode === 'virtual') {
+      payload.venue = '';
       payload.location_lat = '';
       payload.location_lng = '';
       payload.location_place = '';
@@ -729,12 +730,12 @@ export default function EventFormPage() {
                 />
               </div>
 
-              <div className="grid sm:grid-cols-2 gap-4">
-                <FormField label="Venue" name="venue" value={form.venue} onChange={handleChange} placeholder="e.g., Conference Centre" />
-                {form.event_mode !== 'virtual' && (
+              {form.event_mode !== 'virtual' && (
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <FormField label="Venue" name="venue" value={form.venue} onChange={handleChange} placeholder="e.g., Conference Centre" />
                   <FormField label="Location / City" name="location" value={form.location} onChange={handleChange} required placeholder="e.g., Lusaka, Zambia" />
-                )}
-              </div>
+                </div>
+              )}
 
               {form.event_mode !== 'virtual' && (
                 <VenueMapPicker
