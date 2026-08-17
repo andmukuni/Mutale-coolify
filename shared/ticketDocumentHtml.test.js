@@ -23,9 +23,10 @@ const baseViewModel = {
 };
 
 describe('renderTicketDocumentHtml', () => {
-  it('includes entry ticket header and reference', () => {
+  it('includes ticket header and reference', () => {
     const html = renderTicketDocumentHtml(baseViewModel);
-    expect(html).toContain('ENTRY TICKET');
+    expect(html).toContain('TICKET');
+    expect(html).not.toContain('ENTRY TICKET');
     expect(html).toContain('MM-TKT-TEST');
     expect(html).toContain('Jane Guest');
   });
@@ -40,7 +41,8 @@ describe('renderTicketDocumentHtml', () => {
     const html = renderTicketDocumentHtml(baseViewModel);
     expect(html).toContain('Digital Summit');
     expect(html).toContain('Lusaka Convention Centre');
-    expect(html).toContain('ENTRY TICKET');
+    expect(html).toContain('TICKET');
+    expect(html).not.toContain('ENTRY TICKET');
     expect(html).toContain('www.mutalemubanga.org');
   });
 

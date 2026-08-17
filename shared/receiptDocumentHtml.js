@@ -34,7 +34,7 @@ function detailRowsHtml(detailRows) {
 }
 
 /**
- * Branded portrait RECEIPT — same shell as ENTRY TICKET for email/PDF/print consistency.
+ * Branded portrait RECEIPT — same shell as TICKET for email/PDF/print consistency.
  *
  * @param {object} viewModel
  * @param {{ outerPadding?: boolean }} [opts]

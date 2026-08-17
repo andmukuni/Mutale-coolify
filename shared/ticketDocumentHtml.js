@@ -40,7 +40,7 @@ function buildEventMeta(detailRows = []) {
 }
 
 /**
- * Branded portrait ENTRY TICKET — shared by web preview, email PDF, and print.
+ * Branded portrait TICKET — shared by web preview, email PDF, and print.
  * Layout matches mobile TicketDocumentCard (orientation=portrait).
  *
  * @param {object} viewModel
@@ -97,7 +97,7 @@ export function renderTicketDocumentHtml(viewModel, { outerPadding = true } = {}
         </div>
       </div>
       <div style="text-align:right;flex-shrink:0;max-width:46%;">
-        <p style="margin:0;color:#ffffff;font-weight:700;font-size:14px;letter-spacing:0.02em;">ENTRY TICKET</p>
+        <p style="margin:0;color:#ffffff;font-weight:700;font-size:14px;letter-spacing:0.02em;">TICKET</p>
         <p style="margin:2px 0 0;color:rgba(255,255,255,0.72);font-size:9px;font-family:ui-monospace,monospace;word-break:break-all;">${escapeHtml(ticketNo || refCode)}</p>
       </div>
     </div>
