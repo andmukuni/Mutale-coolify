@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   getEventRegistrationGateReason,
+  getEventTimeBounds,
   isEventEnded,
   isEventOngoing,
 } from './eventRegistration.js';
@@ -14,6 +15,23 @@ const tomorrow = new Date();
 tomorrow.setDate(tomorrow.getDate() + 1);
 const TOMORROW = tomorrow.toISOString().split('T')[0];
 
+function wallClockInZone(date, timeZone = 'Africa/Lusaka') {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date);
+  const get = (type) => parts.find((part) => part.type === type)?.value || '';
+  return {
+    date: `${get('year')}-${get('month')}-${get('day')}`,
+    time: `${get('hour')}:${get('minute')}`,
+  };
+}
+
 function makeEvent(overrides = {}) {
   return {
     id: 'evt-1',
@@ -23,27 +41,42 @@ function makeEvent(overrides = {}) {
     booking_type: 'booking',
     start_date: TOMORROW,
     end_date: TOMORROW,
+    timezone: 'Africa/Lusaka',
     capacity: null,
     registration_deadline: null,
     ...overrides,
   };
 }
 
+describe('getEventTimeBounds', () => {
+  it('treats stored clock times as Africa/Lusaka, not the server timezone', () => {
+    const { start, end } = getEventTimeBounds({
+      start_date: '2026-08-17',
+      end_date: '2026-08-17',
+      start_time: '19:30',
+      end_time: '21:00',
+      timezone: 'Africa/Lusaka',
+    });
+    expect(start.toISOString()).toBe('2026-08-17T17:30:00.000Z');
+    expect(end.toISOString()).toBe('2026-08-17T19:00:00.000Z');
+  });
+});
+
 describe('getEventRegistrationGateReason', () => {
   it('allows registration during an ongoing event even after the pre-start deadline', () => {
     const now = new Date();
-    const today = now.toISOString().split('T')[0];
-    const start = new Date(now.getTime() - 60 * 60 * 1000);
-    const end = new Date(now.getTime() + 60 * 60 * 1000);
-    const deadline = new Date(now.getTime() - 30 * 60 * 1000);
+    const start = wallClockInZone(new Date(now.getTime() - 60 * 60 * 1000));
+    const end = wallClockInZone(new Date(now.getTime() + 60 * 60 * 1000));
+    const deadline = wallClockInZone(new Date(now.getTime() - 30 * 60 * 1000));
 
     const event = makeEvent({
-      start_date: today,
-      end_date: today,
-      start_time: start.toTimeString().slice(0, 5),
-      end_time: end.toTimeString().slice(0, 5),
-      registration_deadline: today,
-      registration_deadline_time: deadline.toTimeString().slice(0, 5),
+      start_date: start.date,
+      end_date: end.date,
+      start_time: start.time,
+      end_time: end.time,
+      timezone: 'Africa/Lusaka',
+      registration_deadline: deadline.date,
+      registration_deadline_time: deadline.time,
     });
 
     expect(isEventOngoing(event, now)).toBe(true);

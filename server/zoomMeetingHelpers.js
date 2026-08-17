@@ -1,7 +1,9 @@
+import { DEFAULT_EVENT_TIMEZONE, zonedWallTimeToUtc } from '../shared/eventRegistration.js';
+
 /** Zoom scheduled meetings reject durations over 24 hours. */
 export const ZOOM_MAX_MEETING_DURATION_MINUTES = 1440;
 const DEFAULT_DURATION_MINUTES = 90;
-const DEFAULT_TIMEZONE = 'Africa/Lusaka';
+const DEFAULT_TIMEZONE = DEFAULT_EVENT_TIMEZONE;
 
 export function normalizeDatePart(value) {
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
@@ -26,34 +28,7 @@ export function normalizeTimePart(value, fallback = '00:00:00') {
 }
 
 function zonedDateTimeToUtc(datePart, timePart, timezone = DEFAULT_TIMEZONE) {
-  if (!datePart) return null;
-  const normalizedTime = normalizeTimePart(timePart);
-  const tz = String(timezone || DEFAULT_TIMEZONE).trim() || DEFAULT_TIMEZONE;
-  const asIfUtc = new Date(`${datePart}T${normalizedTime}Z`);
-  if (Number.isNaN(asIfUtc.getTime())) return null;
-
-  try {
-    const fmt = new Intl.DateTimeFormat('en-CA', {
-      timeZone: tz,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    });
-    const parts = fmt.formatToParts(asIfUtc).reduce((map, part) => {
-      map[part.type] = part.value;
-      return map;
-    }, {});
-    if (parts.hour === '24') parts.hour = '00';
-    const wallAsUtc = new Date(`${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}Z`);
-    const offsetMs = wallAsUtc.getTime() - asIfUtc.getTime();
-    return new Date(asIfUtc.getTime() - offsetMs);
-  } catch {
-    return new Date(`${datePart}T${normalizedTime}`);
-  }
+  return zonedWallTimeToUtc(datePart, timePart, timezone, '00:00:00');
 }
 
 export function toZoomDateTime(event = {}) {

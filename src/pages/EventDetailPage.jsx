@@ -20,6 +20,8 @@ import EventMerchStrip from '../components/EventMerchStrip';
 import EventSessionsSchedule from '../components/EventSessionsSchedule';
 import EventForumPanel from '../components/EventForumPanel';
 import StatusBadge from '../components/ui/StatusBadge';
+import { getEventTimeBounds } from '../../shared/eventRegistration.js';
+import { nowInZoneStamp } from '../utils/eventSessions';
 
 export default function EventDetailPage() {
   const { slug } = useParams();
@@ -497,13 +499,7 @@ function DetailRow({ icon: Icon, label, children }) {
 }
 
 function getEventStartDateTime(event) {
-  const datePart = event?.start_date || event?.date;
-  if (!datePart) return null;
-
-  const timePart = event?.start_time || event?.time || '00:00';
-  const normalizedTime = timePart.length === 5 ? `${timePart}:00` : timePart;
-  const dt = new Date(`${datePart}T${normalizedTime}`);
-  return Number.isNaN(dt.getTime()) ? null : dt;
+  return getEventTimeBounds(event).start;
 }
 
 function getCountdown(startAt, now) {
@@ -520,13 +516,11 @@ function getCountdown(startAt, now) {
 }
 
 function isOnEventDay(now, event) {
-  const start = new Date(event?.start_date || event?.date);
-  const end = new Date(event?.end_date || event?.start_date || event?.date);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false;
-
-  start.setHours(0, 0, 0, 0);
-  end.setHours(23, 59, 59, 999);
-  return now >= start && now <= end;
+  const start = String(event?.start_date || event?.date || '').slice(0, 10);
+  const end = String(event?.end_date || start).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(start)) return false;
+  const today = nowInZoneStamp(now, event?.timezone).slice(0, 10);
+  return today >= start && today <= (end || start);
 }
 
 function TimeChip({ label, value }) {

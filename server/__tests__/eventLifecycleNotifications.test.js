@@ -74,6 +74,23 @@ describe('event lifecycle notifications', () => {
     expect(shouldNotifyKind({ ...liveEvent, status: 'cancelled' }, 'started', now)).toBe(false);
   });
 
+  it('fires the started notice at 19:30 Africa/Lusaka, not two hours later at 19:30 UTC', () => {
+    const eveningEvent = {
+      ...liveEvent,
+      start_time: '19:30:00',
+      end_time: '21:00:00',
+      timezone: 'Africa/Lusaka',
+    };
+    const atLusakaStart = new Date('2026-08-13T17:30:00.000Z');
+    const oneMinuteEarly = new Date('2026-08-13T17:29:00.000Z');
+    const twoHoursLateUtc = new Date('2026-08-13T19:30:00.000Z');
+
+    expect(shouldNotifyKind(eveningEvent, 'started', atLusakaStart)).toBe(true);
+    expect(shouldNotifyKind(eveningEvent, 'started', oneMinuteEarly)).toBe(false);
+    expect(shouldNotifyKind(eveningEvent, 'started', twoHoursLateUtc)).toBe(false);
+    expect(shouldNotifyKind(eveningEvent, 'ended', twoHoursLateUtc)).toBe(true);
+  });
+
   it('builds client email and SMS copy with ticket and event links', () => {
     const started = buildLifecycleMessages({
       event: liveEvent,

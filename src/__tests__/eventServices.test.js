@@ -42,6 +42,7 @@ function makeEvent(overrides = {}) {
     booking_type: 'booking',
     start_date: TOMORROW,
     end_date: TOMORROW,
+    timezone: 'Africa/Lusaka',
     capacity: null,
     registration_deadline: null,
     is_free: true,
@@ -303,15 +304,28 @@ describe('getEventDisplayStatus', () => {
 
   it('returns "upcoming" for events later today before start time', () => {
     const now = new Date();
-    const today = now.toISOString().split('T')[0];
-    const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
-    const twoHoursLater = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+    const parts = (date) => {
+      const formatted = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Africa/Lusaka',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      }).formatToParts(date);
+      const get = (type) => formatted.find((part) => part.type === type)?.value || '';
+      return { date: `${get('year')}-${get('month')}-${get('day')}`, time: `${get('hour')}:${get('minute')}` };
+    };
+    const oneHourLater = parts(new Date(now.getTime() + 60 * 60 * 1000));
+    const twoHoursLater = parts(new Date(now.getTime() + 2 * 60 * 60 * 1000));
 
     const event = makeEvent({
-      start_date: today,
-      end_date: today,
-      start_time: oneHourLater.toTimeString().slice(0, 5),
-      end_time: twoHoursLater.toTimeString().slice(0, 5),
+      start_date: oneHourLater.date,
+      end_date: twoHoursLater.date,
+      start_time: oneHourLater.time,
+      end_time: twoHoursLater.time,
+      timezone: 'Africa/Lusaka',
     });
 
     expect(getEventDisplayStatus(event)).toBe('upcoming');

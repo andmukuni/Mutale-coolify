@@ -21,7 +21,7 @@ describe('getEventTimeBounds', () => {
   it('falls back to date field and end of day', () => {
     const { end } = getEventTimeBounds({ date: '2026-03-01' });
     expect(end).toBeInstanceOf(Date);
-    expect(end.getHours()).toBe(23);
+    expect(end.toISOString()).toBe('2026-03-01T21:59:59.000Z');
   });
 });
 
