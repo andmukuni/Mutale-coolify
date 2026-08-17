@@ -49,7 +49,7 @@ export default function FormField({
       );
     }
 
-    if (textarea) {
+    if (textarea || type === 'textarea') {
       return (
         <textarea
           id={name}
@@ -60,7 +60,7 @@ export default function FormField({
           rows={rows}
           placeholder={placeholder}
           disabled={disabled}
-          className={`${baseClass} resize-none`}
+          className={`${baseClass} min-h-[6.5rem] resize-y overflow-auto`}
         />
       );
     }

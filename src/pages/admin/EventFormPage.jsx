@@ -970,7 +970,7 @@ export default function EventFormPage() {
                       onChange={(e) => { const arr = [...form.featured_speakers]; arr[idx] = { ...arr[idx], organisation: e.target.value }; setForm(prev => ({ ...prev, featured_speakers: arr })); }}
                       placeholder="Company or institution"
                     />
-                    <FormField label="Short Bio" value={speaker.bio} onChange={(e) => { const arr = [...form.featured_speakers]; arr[idx] = { ...arr[idx], bio: e.target.value }; setForm(prev => ({ ...prev, featured_speakers: arr })); }} placeholder="Brief description..." type="textarea" />
+                    <FormField label="Short Bio" value={speaker.bio} onChange={(e) => { const arr = [...form.featured_speakers]; arr[idx] = { ...arr[idx], bio: e.target.value }; setForm(prev => ({ ...prev, featured_speakers: arr })); }} placeholder="Brief description..." textarea rows={4} />
                     <div>
                       <label className="block text-sm font-medium text-navy-700 mb-1.5">Speaker Photo</label>
                       <div className="flex items-center gap-3">
@@ -1034,7 +1034,7 @@ export default function EventFormPage() {
                       onChange={(e) => { const arr = [...form.featured_guests]; arr[idx] = { ...arr[idx], organisation: e.target.value }; setForm(prev => ({ ...prev, featured_guests: arr })); }}
                       placeholder="Company or institution"
                     />
-                    <FormField label="Short Bio" value={guest.bio} onChange={(e) => { const arr = [...form.featured_guests]; arr[idx] = { ...arr[idx], bio: e.target.value }; setForm(prev => ({ ...prev, featured_guests: arr })); }} placeholder="Brief description..." type="textarea" />
+                    <FormField label="Short Bio" value={guest.bio} onChange={(e) => { const arr = [...form.featured_guests]; arr[idx] = { ...arr[idx], bio: e.target.value }; setForm(prev => ({ ...prev, featured_guests: arr })); }} placeholder="Brief description..." textarea rows={4} />
                     <div>
                       <label className="block text-sm font-medium text-navy-700 mb-1.5">Guest Photo</label>
                       <div className="flex items-center gap-3">
