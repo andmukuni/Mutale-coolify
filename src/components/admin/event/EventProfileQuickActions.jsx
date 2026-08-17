@@ -9,6 +9,7 @@ import {
   PlayCircle,
   ExternalLink,
   Loader2,
+  IdCard,
 } from 'lucide-react';
 
 function ActionButton({
@@ -56,14 +57,18 @@ function ActionButton({
 export default function EventProfileQuickActions({
   eventId,
   isPastLocked,
+  supportsBadges = false,
   certConfigured,
   certBusy,
+  badgeConfigured = false,
+  badgeBusy = false,
   hasVideoMeeting,
   videoProvider,
   zoomStartUrl,
   meetingLink,
   onActivateCertificate,
   onPreviewCertificate,
+  onActivateBadge,
   onCreateVideoMeeting,
   onNavigateDesigner,
   videoLoading = false,
@@ -104,6 +109,22 @@ export default function EventProfileQuickActions({
               disabled={certBusy}
             />
           </>
+        )}
+        {supportsBadges && (
+          !badgeConfigured ? (
+            <ActionButton
+              icon={IdCard}
+              label="Set up badges"
+              onClick={onActivateBadge}
+              disabled={badgeBusy}
+            />
+          ) : (
+            <ActionButton
+              icon={IdCard}
+              label="Badge design"
+              to={`/admin/events/${eventId}/badge-designer`}
+            />
+          )
         )}
         <ActionButton
           icon={Video}

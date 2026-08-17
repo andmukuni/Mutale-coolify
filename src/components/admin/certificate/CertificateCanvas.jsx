@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Move } from 'lucide-react';
-import { PLACEHOLDER_LABELS, resolveCertificateFont } from '../../../../shared/certificateDesign.js';
+import { PLACEHOLDER_LABELS, resolveCertificateFont, resolvePlaceholders } from '../../../../shared/certificateDesign.js';
 import { DEFAULT_BACKGROUND_THEME } from '../../../../shared/certificateBackgrounds.js';
 import CertificateBackgroundLayer from './CertificateBackgroundLayer.jsx';
 import CertificateTransformHandles from './CertificateTransformHandles.jsx';
@@ -15,19 +15,22 @@ import {
 const SAMPLE_VALUES = {
   attendee_name: 'Jane M. Sample',
   event_name: 'Sample Event',
-  event_date: '1 June 2026',
+  event_date: 'Fri, 24 Jul 2026 - 20:00',
+  event_location: 'Lusaka, Zambia',
+  purchaser_name: 'MUTALE MUBANGA',
   certificate_number: 'MM-CERT-SAMPLE01',
   issue_date: '3 June 2026',
   reference_code: 'MM-20260813-4821',
 };
 
 function resolveElementText(element, sampleData = null) {
+  const data = sampleData || SAMPLE_VALUES;
   if (element.type === 'placeholder') {
     const key = element.key || 'attendee_name';
-    if (sampleData?.[key]) return sampleData[key];
+    if (data[key]) return data[key];
     return SAMPLE_VALUES[key] || PLACEHOLDER_LABELS[key] || `{{${key}}}`;
   }
-  return element.content || '';
+  return resolvePlaceholders(element.content || '', { ...SAMPLE_VALUES, ...data });
 }
 
 function clamp(value, min, max) {

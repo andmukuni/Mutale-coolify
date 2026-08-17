@@ -16,6 +16,7 @@
     "server:start": "node server/index.js",
     "server:seed": "node server/seed.js",
     "seed:demo-cert": "node server/scripts/seed-demo-certificate.js",
+    "seed:badges": "node server/scripts/seed-badge-templates.js",
     "seed:admin-cv-profile": "node server/scripts/seed-admin-cv-profile.js",
     "seed:rbac": "node server/scripts/seed-rbac.js",
     "seed:partner-logos": "node server/scripts/seed-partner-logos.js",

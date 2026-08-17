@@ -1,10 +1,11 @@
-import { Type, User, Calendar, Hash, QrCode, ImagePlus } from 'lucide-react';
+import { Type, User, Calendar, Hash, QrCode, ImagePlus, MapPin } from 'lucide-react';
 import {
   createDesignElement,
   PLACEHOLDER_KEYS,
 } from '../../../../shared/certificateDesign.js';
 import CertificateBackgroundPicker from './CertificateBackgroundPicker.jsx';
 import CertificatePresetPicker from './CertificatePresetPicker.jsx';
+import BadgePresetPicker from './BadgePresetPicker.jsx';
 import CertificateSealPicker from './CertificateSealPicker.jsx';
 
 const PLACEHOLDER_BUTTONS = [
@@ -19,6 +20,8 @@ const BADGE_PLACEHOLDER_BUTTONS = [
   { key: 'attendee_name', label: 'Attendee Name', icon: User },
   { key: 'event_name', label: 'Event Title', icon: Type },
   { key: 'event_date', label: 'Event Date', icon: Calendar },
+  { key: 'event_location', label: 'Location', icon: MapPin },
+  { key: 'purchaser_name', label: 'Purchased By', icon: User },
   { key: 'reference_code', label: 'Ticket Reference', icon: Hash },
 ];
 
@@ -76,7 +79,12 @@ export default function CertificateToolbar({
 
   return (
     <div className="space-y-5">
-      {!isBadgeMode && (
+      {isBadgeMode ? (
+        <BadgePresetPicker
+          value={presetId}
+          onChange={onPresetChange}
+        />
+      ) : (
         <CertificatePresetPicker
           value={presetId}
           onChange={onPresetChange}
@@ -99,7 +107,7 @@ export default function CertificateToolbar({
         <p className="text-xs font-semibold text-navy-500 uppercase tracking-wide mb-2">Page</p>
         {isBadgeMode ? (
           <p className="text-sm px-3 py-2 rounded-lg border border-navy-200 bg-navy-50 text-navy-700">
-            6×8 in · Portrait
+            6×8 in portrait · 2 badges per A4 landscape sheet
           </p>
         ) : (
           <select
@@ -161,7 +169,10 @@ export default function CertificateToolbar({
           </label>
         </div>
         <p className="text-[11px] text-navy-400 mt-2">
-          Placeholders: {PLACEHOLDER_KEYS.map((k) => `{{${k}}}`).join(', ')}
+          Placeholders: {(isBadgeMode
+            ? ['attendee_name', 'event_name', 'event_date', 'event_location', 'purchaser_name', 'reference_code', 'qr_code']
+            : PLACEHOLDER_KEYS
+          ).map((k) => `{{${k}}}`).join(', ')}
         </p>
       </div>
     </div>

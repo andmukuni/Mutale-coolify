@@ -18,6 +18,10 @@ import {
   CERTIFICATE_PRESET_ACHIEVEMENT,
   inferCertificatePresetId,
   CERTIFICATE_PRESETS,
+  buildDefaultBadgeDesign,
+  formatBadgeEventDate,
+  isBadgeDesign,
+  BADGE_PAPER_SIZE,
 } from './certificateDesign.js';
 
 describe('certificateDesign', () => {
@@ -179,5 +183,42 @@ describe('certificateDesign', () => {
 
   it('exposes attendance and achievement presets', () => {
     expect(CERTIFICATE_PRESETS.map((p) => p.id)).toEqual(['attendance', 'achievement']);
+  });
+
+  it('returns 6x8 portrait canvas for badges', () => {
+    const dims = getCanvasDimensions('portrait', BADGE_PAPER_SIZE);
+    expect(dims.widthMm).toBe(152.4);
+    expect(dims.heightMm).toBe(203.2);
+  });
+
+  it('builds a 6x8 ticket-style badge design per event', () => {
+    const design = buildDefaultBadgeDesign({
+      title: 'Zambia Digital Business Summit 2026',
+      location: 'Lusaka, Zambia',
+      start_date: '2026-07-24',
+      start_time: '20:00',
+    });
+    expect(design.presetId).toBe('badge-ticket');
+    expect(design.canvas.widthMm).toBe(152.4);
+    expect(design.canvas.heightMm).toBe(203.2);
+    expect(design.background.theme).toBe('badge-ticket');
+    expect(design.elements.some((el) => el.id === 'el_badge_qr')).toBe(true);
+    expect(design.elements.some((el) => el.id === 'el_badge_name' && el.key === 'attendee_name')).toBe(true);
+    expect(validateDesignForPublish(design, { title: 'Name Badge' }).ok).toBe(true);
+  });
+
+  it('does not merge certificate elements into badge designs', () => {
+    const badge = buildDefaultBadgeDesign({ title: 'Summit' });
+    const upgraded = upgradeCertificateDesign(badge, { title: 'Summit' });
+    expect(isBadgeDesign(upgraded)).toBe(true);
+    expect(upgraded.presetId).toBe('badge-ticket');
+    expect(upgraded.elements.some((el) => el.id === 'el_attendee')).toBe(false);
+    expect(upgraded.elements.some((el) => el.id === 'el_subtitle')).toBe(false);
+  });
+
+  it('formats badge dates with time when present', () => {
+    const label = formatBadgeEventDate({ start_date: '2026-07-24', start_time: '20:00' });
+    expect(label).toMatch(/2026/);
+    expect(label).toContain('20:00');
   });
 });

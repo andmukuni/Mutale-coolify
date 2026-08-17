@@ -178,7 +178,7 @@ export default function EventCheckInPage() {
       anchor.download = `badges-${event?.slug || id}.pdf`;
       anchor.click();
       URL.revokeObjectURL(url);
-      toast.success('Badge print sheet downloaded (2 per tabloid page).');
+      toast.success('Badge print sheet downloaded (2 per A4 page).');
     } catch (error) {
       toast.error(error.message || 'Badge export failed.');
     } finally {
@@ -279,7 +279,7 @@ export default function EventCheckInPage() {
               onClick={() => { void handleBadgeExport(); }}
               disabled={badgeExportLoading}
               className="inline-flex items-center gap-1.5 text-sm font-medium text-navy-700 hover:text-cyan-800 bg-white border border-navy-200 px-3 py-2 rounded-xl disabled:opacity-60"
-              title="Tabloid / 11×17 landscape — 2 badges per sheet"
+              title="A4 landscape — 2 badges per sheet"
             >
               <Printer size={15} />
               {badgeExportLoading ? 'Exporting…' : 'Print badges'}

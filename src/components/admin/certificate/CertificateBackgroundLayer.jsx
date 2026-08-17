@@ -47,6 +47,14 @@ export default function CertificateBackgroundLayer({ themeId }) {
         style={{ background: preview.background }}
       />
 
+      {id === 'badge-ticket' && (
+        <>
+          <div className="absolute inset-x-0 top-0 h-[18%] bg-[#0B132B]" />
+          <div className="absolute inset-x-0 top-[18%] h-[2px] bg-[#36B3D1]" />
+          <div className="absolute inset-x-0 bottom-0 h-[9%] bg-[#F8FAFC]" />
+        </>
+      )}
+
       {id === 'classic-navy' && (
         <>
           <div className="absolute inset-[2%] border-2 border-cyan-500/80 rounded-sm" />

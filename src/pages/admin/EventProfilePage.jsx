@@ -20,6 +20,9 @@ import {
   FileDown,
   Ticket,
   CalendarDays,
+  IdCard,
+  Printer,
+  Palette,
 } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { useBooking } from '../../context/BookingContext';
@@ -45,6 +48,13 @@ import {
   publishEventCertificateTemplate,
   generateEventCertificates,
 } from '../../utils/certificateApi';
+import {
+  fetchEventBadgeTemplate,
+  activateEventBadgeTemplate,
+  previewEventBadgeTemplate,
+  publishEventBadgeTemplate,
+  downloadEventBadgePrintPdf,
+} from '../../utils/badgeApi';
 
 const API_BASE = getApiBase();
 
@@ -52,6 +62,7 @@ const PROFILE_TABS = [
   { id: 'overview', label: 'Overview', icon: LayoutGrid },
   { id: 'sessions', label: 'Sessions', icon: CalendarDays },
   { id: 'certificates', label: 'Certificates', icon: Award },
+  { id: 'badges', label: 'Badges', icon: IdCard },
   { id: 'attendees', label: 'Attendees', icon: Users },
   { id: 'tickets', label: 'Tickets', icon: Ticket },
   { id: 'forum', label: 'Forum', icon: MessageSquare },
@@ -90,6 +101,12 @@ export default function EventProfilePage() {
   const [certBusy, setCertBusy] = useState(false);
   const [certPreviewUrl, setCertPreviewUrl] = useState('');
   const [certPreviewBlob, setCertPreviewBlob] = useState(null);
+  const [badgeTemplate, setBadgeTemplate] = useState(null);
+  const [badgeConfigured, setBadgeConfigured] = useState(false);
+  const [badgeLoading, setBadgeLoading] = useState(true);
+  const [badgeBusy, setBadgeBusy] = useState(false);
+  const [badgePreviewUrl, setBadgePreviewUrl] = useState('');
+  const [badgePreviewBlob, setBadgePreviewBlob] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
 
   const event = events.find((e) => e.id === id);
@@ -108,6 +125,16 @@ export default function EventProfilePage() {
     : certTemplate?.is_active
       ? 'Eligible attendees can receive certificates after the event ends.'
       : 'Publish the design to enable certificate issuance.';
+  const badgeStatus = !badgeConfigured
+    ? 'draft'
+    : badgeTemplate?.is_active
+      ? 'published'
+      : 'draft';
+  const badgeStatusMessage = !badgeConfigured
+    ? 'No badge template for this event yet. Design a 6×8 inch badge, then print 2 per A4 sheet.'
+    : badgeTemplate?.is_active
+      ? 'Published — print 2 name badges per A4 landscape sheet.'
+      : 'Draft — publish to enable batch printing.';
 
   const videoProvider = (() => {
     const platform = String(event?.meeting_platform || event?.provider || '').toLowerCase();
@@ -193,6 +220,28 @@ export default function EventProfilePage() {
   }, [id]);
 
   useEffect(() => {
+    let cancelled = false;
+    const loadBadgeTemplate = async () => {
+      setBadgeLoading(true);
+      try {
+        const data = await fetchEventBadgeTemplate(id || '');
+        if (cancelled) return;
+        setBadgeConfigured(Boolean(data?.configured));
+        setBadgeTemplate(data?.template || null);
+      } catch {
+        if (!cancelled) {
+          setBadgeConfigured(false);
+          setBadgeTemplate(null);
+        }
+      } finally {
+        if (!cancelled) setBadgeLoading(false);
+      }
+    };
+    void loadBadgeTemplate();
+    return () => { cancelled = true; };
+  }, [id]);
+
+  useEffect(() => {
     const hash = window.location.hash.replace('#', '');
     if (PROFILE_TABS.some((tab) => tab.id === hash)) {
       setActiveTab(hash);
@@ -214,9 +263,10 @@ export default function EventProfilePage() {
     () => PROFILE_TABS.filter((tab) => {
       if (tab.id === 'marketing') return showMarketingTab;
       if (tab.id === 'forum') return showForumTab;
+      if (tab.id === 'badges') return event ? resolveEventMode(event) !== 'virtual' : false;
       return true;
     }),
-    [showForumTab, showMarketingTab],
+    [event, showForumTab, showMarketingTab],
   );
 
   useEffect(() => {
@@ -450,6 +500,70 @@ export default function EventProfilePage() {
     }
   };
 
+  const handleActivateBadge = async () => {
+    setBadgeBusy(true);
+    try {
+      await activateEventBadgeTemplate(event.id);
+      navigate(`/admin/events/${event.id}/badge-designer`);
+    } catch (error) {
+      toast.error(error.message || 'Failed to activate badge designer.');
+    } finally {
+      setBadgeBusy(false);
+    }
+  };
+
+  const handlePreviewBadge = async () => {
+    setBadgeBusy(true);
+    try {
+      const blob = await previewEventBadgeTemplate(event.id, {});
+      const url = URL.createObjectURL(blob);
+      setBadgePreviewBlob(blob);
+      setBadgePreviewUrl(url);
+    } catch (error) {
+      toast.error(error.message || 'Badge preview failed.');
+    } finally {
+      setBadgeBusy(false);
+    }
+  };
+
+  const closeBadgePreview = () => {
+    if (badgePreviewUrl) URL.revokeObjectURL(badgePreviewUrl);
+    setBadgePreviewUrl('');
+    setBadgePreviewBlob(null);
+  };
+
+  const handlePublishBadge = async () => {
+    setBadgeBusy(true);
+    try {
+      const updated = await publishEventBadgeTemplate(event.id, {});
+      setBadgeTemplate(updated);
+      setBadgeConfigured(true);
+      toast.success('Badge template published.');
+    } catch (error) {
+      toast.error(error.message || 'Publish failed.');
+    } finally {
+      setBadgeBusy(false);
+    }
+  };
+
+  const handlePrintBadges = async () => {
+    setBadgeBusy(true);
+    try {
+      const blob = await downloadEventBadgePrintPdf(event.id);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `badges-a4-${event.slug || event.id}.pdf`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      toast.success('Badge print sheet downloaded (2 per A4 page).');
+    } catch (error) {
+      toast.error(error.message || 'Badge export failed.');
+    } finally {
+      setBadgeBusy(false);
+    }
+  };
+
   return (
     <div className="-mx-4 sm:-mx-6 lg:-mx-8 min-h-full bg-navy-50">
       <EventProfileSummaryHero
@@ -464,14 +578,18 @@ export default function EventProfilePage() {
       <EventProfileQuickActions
         eventId={event.id}
         isPastLocked={isPastLocked}
+        supportsBadges={resolveEventMode(event) !== 'virtual'}
         certConfigured={certConfigured}
         certBusy={certBusy || certLoading}
+        badgeConfigured={badgeConfigured}
+        badgeBusy={badgeBusy || badgeLoading}
         hasVideoMeeting={hasVideoMeeting}
         videoProvider={videoProvider}
         zoomStartUrl={videoProvider === 'zoom' ? event.zoom_start_url : ''}
         meetingLink={event.meeting_link || event.zoom_join_url || event.daily_room_url || ''}
         onActivateCertificate={handleActivateCertificate}
         onPreviewCertificate={handlePreviewCertificate}
+        onActivateBadge={handleActivateBadge}
         onCreateVideoMeeting={handleCreateVideoMeeting}
         onNavigateDesigner={() => navigate(`/admin/events/${event.id}/certificate-designer`)}
         videoLoading={zoomLoading}
@@ -917,6 +1035,88 @@ export default function EventProfilePage() {
       </FeedCard>
           )}
 
+          {activeTab === 'badges' && (
+      <FeedCard
+        title="Name badges"
+        subtitle="6×8 inch badges for this event — printed 2 per A4 landscape sheet"
+        actions={!badgeLoading ? <StatusBadge status={badgeStatus} size="md" /> : null}
+      >
+        {badgeLoading ? (
+          <div className="py-6 flex justify-center"><Spinner /></div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-1.5">
+                {!badgeConfigured ? (
+                  <CertIconButton
+                    icon={IdCard}
+                    label="Set up badges"
+                    onClick={handleActivateBadge}
+                    loading={badgeBusy}
+                    variant="primary"
+                  />
+                ) : (
+                  <>
+                    <CertIconButton
+                      icon={Palette}
+                      label="Edit badge design"
+                      onClick={() => navigate(`/admin/events/${event.id}/badge-designer`)}
+                      variant="primary"
+                    />
+                    {!badgeTemplate?.is_active && (
+                      <CertIconButton
+                        icon={Upload}
+                        label="Publish badge template"
+                        onClick={handlePublishBadge}
+                        loading={badgeBusy}
+                        variant="success"
+                      />
+                    )}
+                    <CertIconButton
+                      icon={FileDown}
+                      label="Preview A4 sheet"
+                      onClick={handlePreviewBadge}
+                      loading={badgeBusy}
+                    />
+                    {badgeTemplate?.is_active && (
+                      <CertIconButton
+                        icon={Printer}
+                        label="Print badges (2 per A4)"
+                        onClick={handlePrintBadges}
+                        loading={badgeBusy}
+                        variant="indigo"
+                      />
+                    )}
+                  </>
+                )}
+              </div>
+              <p className="text-xs text-navy-500 text-right leading-relaxed max-w-sm hidden sm:block">
+                {badgeStatusMessage}
+              </p>
+            </div>
+
+            <p className="text-xs text-navy-500 sm:hidden">{badgeStatusMessage}</p>
+
+            {badgeConfigured && badgeTemplate?.design_json && (
+              <CertificateTemplateThumbnail
+                design={badgeTemplate.design_json}
+                orientation={badgeTemplate.orientation || 'portrait'}
+                sampleData={certSampleData}
+                onClick={handlePreviewBadge}
+                loading={badgeBusy}
+              />
+            )}
+
+            {badgeConfigured && (
+              <p className="text-xs text-navy-500">
+                Each event has its own badge template. Export places two 6×8 designs on each A4 page for cutting.
+              </p>
+            )}
+          </div>
+        )}
+      </FeedCard>
+          )}
+
           {activeTab === 'sessions' && (
       <FeedCard
         title="Sessions"
@@ -1035,6 +1235,23 @@ export default function EventProfilePage() {
             const anchor = document.createElement('a');
             anchor.href = url;
             anchor.download = `Certificate-Preview-${event.id}.pdf`;
+            anchor.click();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+          }}
+        />
+      )}
+
+      {badgePreviewUrl && (
+        <CertificatePreviewModal
+          title="A4 badge sheet — 2 per page"
+          pdfUrl={badgePreviewUrl}
+          onClose={closeBadgePreview}
+          onDownload={() => {
+            if (!badgePreviewBlob) return;
+            const url = URL.createObjectURL(badgePreviewBlob);
+            const anchor = document.createElement('a');
+            anchor.href = url;
+            anchor.download = `Badges-A4-${event.id}.pdf`;
             anchor.click();
             setTimeout(() => URL.revokeObjectURL(url), 1000);
           }}

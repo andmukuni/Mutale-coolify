@@ -6,6 +6,16 @@ export const DEFAULT_BACKGROUND_THEME = 'elegant-gold';
 
 export const CERTIFICATE_BACKGROUND_THEMES = [
   {
+    id: 'badge-ticket',
+    name: 'Ticket Navy',
+    description: 'Navy header, white body, teal accents — 6×8 name badge',
+    preview: {
+      background: 'linear-gradient(180deg, #0B132B 0%, #0B132B 18%, #FFFFFF 18%, #FFFFFF 91%, #F8FAFC 91%, #F8FAFC 100%)',
+      borderColor: '#36B3D1',
+      accentColor: '#0B132B',
+    },
+  },
+  {
     id: 'elegant-gold',
     name: 'Elegant Gold',
     description: 'Cream parchment with ornate gold frame',
@@ -157,6 +167,18 @@ export function drawCertificateBackgroundPdf(doc, pageW, pageH, themeId, offsetX
   const ox = Number(offsetX) || 0;
   const oy = Number(offsetY) || 0;
   const rect = (x, y, w, h, op) => doc.rect(ox + x, oy + y, w, h, op);
+
+  if (id === 'badge-ticket') {
+    setFill(doc, '#FFFFFF');
+    rect(0, 0, pageW, pageH, 'F');
+    setFill(doc, '#0B132B');
+    rect(0, 0, pageW, pageH * 0.18, 'F');
+    setFill(doc, '#36B3D1');
+    rect(0, pageH * 0.18, pageW, 0.9, 'F');
+    setFill(doc, '#F8FAFC');
+    rect(0, pageH * 0.91, pageW, pageH * 0.09, 'F');
+    return;
+  }
 
   if (id === 'classic-navy') {
     setFill(doc, '#0B1D36');

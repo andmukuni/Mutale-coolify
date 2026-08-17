@@ -32,5 +32,6 @@ run_seed() {
 run_seed "Core seed (admin user, schema data)" "node server/seed.js"
 run_seed "RBAC permissions" "node server/scripts/seed-rbac.js"
 run_seed "Partner logos (demo SVGs)" "node server/scripts/seed-partner-logos.js"
+run_seed "Professional event badge templates" "node server/scripts/seed-badge-templates.js"
 
 echo "Done. Log in at /admin/login with DEFAULT_ADMIN_EMAIL / DEFAULT_ADMIN_PASSWORD from Coolify env vars."

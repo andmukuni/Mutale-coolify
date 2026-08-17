@@ -1,11 +1,15 @@
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Users, Download, CheckCircle2, Video, QrCode } from 'lucide-react';
+import { Users, Download, CheckCircle2, Video, QrCode, Printer } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { useBooking } from '../../context/BookingContext';
+import { useToast } from '../../context/ToastContext';
 import { PageHeader, Card } from '../../components/ui';
 import StatusBadge from '../../components/ui/StatusBadge';
 import EmptyState from '../../components/EmptyState';
 import { formatDate } from '../../utils/helpers';
+import { resolveEventMode } from '../../utils/eventServices';
+import { downloadEventBadgePrintPdf } from '../../utils/badgeApi';
+import { useState } from 'react';
 
 function formatJoinTimestamp(value) {
   if (!value) return null;
@@ -31,6 +35,8 @@ export default function EventAttendeesPage() {
 
   const event = events.find(e => e.id === id);
   const registrations = getEventRegistrations(id);
+  const toast = useToast();
+  const [badgeExportLoading, setBadgeExportLoading] = useState(false);
   const active = registrations.filter(r => r.status !== 'cancelled');
   const attendedRegs = active.filter(hasAttended);
 
@@ -73,6 +79,24 @@ export default function EventAttendeesPage() {
     URL.revokeObjectURL(url);
   };
 
+  const handlePrintBadges = async () => {
+    setBadgeExportLoading(true);
+    try {
+      const blob = await downloadEventBadgePrintPdf(id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `badges-a4-${event.slug || event.id}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Badge print sheet downloaded (2 per A4 page).');
+    } catch (error) {
+      toast.error(error.message || 'Badge export failed.');
+    } finally {
+      setBadgeExportLoading(false);
+    }
+  };
+
   const totalActive = active.length;
   const totalAttended = attendedRegs.length;
   const attendanceRate = totalActive > 0 ? Math.round((totalAttended / totalActive) * 100) : 0;
@@ -96,6 +120,18 @@ export default function EventAttendeesPage() {
               <QrCode size={15} />
               Gate check-in
             </Link>
+            {resolveEventMode(event) !== 'virtual' && (
+              <button
+                type="button"
+                onClick={() => { void handlePrintBadges(); }}
+                disabled={badgeExportLoading}
+                className="inline-flex items-center gap-2 text-sm font-medium bg-white border border-navy-200 text-navy-700 hover:border-cyan-400 hover:text-cyan-700 px-4 py-2 rounded-xl transition-colors disabled:opacity-60"
+                title="A4 landscape — 2 badges per sheet"
+              >
+                <Printer size={15} />
+                {badgeExportLoading ? 'Exporting…' : 'Print badges'}
+              </button>
+            )}
             {registrations.length > 0 && (
               <button
                 onClick={handleExport}

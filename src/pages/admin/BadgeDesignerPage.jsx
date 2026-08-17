@@ -11,14 +11,13 @@ import {
   buildSamplePreviewData,
   tightenOversizedTextElements,
   upgradeCertificateDesign,
-  inferCertificatePresetId,
   BADGE_PAPER_SIZE,
 } from '../../../shared/certificateDesign.js';
 import {
-  applyCertificateSeal,
-  inferCertificateSealId,
-} from '../../../shared/certificateSeals.js';
-import { DEFAULT_BACKGROUND_THEME } from '../../../shared/certificateBackgrounds.js';
+  buildBadgeDesignFromPreset,
+  getBadgePreset,
+  inferBadgePresetId,
+} from '../../../shared/badgePresets.js';
 import CertificateCanvas from '../../components/admin/certificate/CertificateCanvas';
 import CertificateToolbar from '../../components/admin/certificate/CertificateToolbar';
 import CertificateElementPanel from '../../components/admin/certificate/CertificateElementPanel';
@@ -75,15 +74,11 @@ export default function BadgeDesignerPage() {
       });
       const upgraded = upgradeCertificateDesign(loadedDesign, event || {});
       const tightened = tightenOversizedTextElements(upgraded, sampleData);
-      const withSeal = applyCertificateSeal(
-        {
-          ...tightened,
-          presetId: tightened.presetId || inferCertificatePresetId(tightened),
-          background: tightened.background || loadedDesign.background || { theme: DEFAULT_BACKGROUND_THEME },
-        },
-        inferCertificateSealId(tightened),
-      );
-      setDesign(withSeal);
+      setDesign({
+        ...tightened,
+        presetId: inferBadgePresetId(tightened),
+        background: tightened.background || loadedDesign.background || { theme: 'badge-ticket' },
+      });
       setIsActive(Boolean(template.is_active));
     } catch (error) {
       toast.error(error.message || 'Failed to load badge designer.');
@@ -96,13 +91,27 @@ export default function BadgeDesignerPage() {
     void loadTemplate();
   }, [loadTemplate]);
 
-  const backgroundTheme = design?.background?.theme || DEFAULT_BACKGROUND_THEME;
-  const sealId = inferCertificateSealId(design);
+  const backgroundTheme = design?.background?.theme || 'badge-ticket';
+  const presetId = inferBadgePresetId(design);
+  const samplePreviewData = useMemo(
+    () => buildSamplePreviewData(event || {}),
+    [event],
+  );
 
-  const handleSealChange = (nextSealId) => {
-    if (nextSealId === sealId) return;
-    setDesign((prev) => applyCertificateSeal(prev, nextSealId));
-    setSelectedId('el_seal_logo');
+  const handlePresetChange = (nextPresetId) => {
+    if (nextPresetId === presetId) return;
+    const preset = getBadgePreset(nextPresetId);
+    const confirmed = window.confirm(
+      `Switch to "${preset.name}"? This will replace the current layout with the template defaults.`,
+    );
+    if (!confirmed) return;
+    const nextDesign = tightenOversizedTextElements(
+      buildBadgeDesignFromPreset(nextPresetId, event || {}),
+      samplePreviewData,
+    );
+    setDesign(nextDesign);
+    setTitle(preset.defaultTitle);
+    setSelectedId(null);
   };
 
   const buildPayload = () => ({
@@ -112,6 +121,7 @@ export default function BadgeDesignerPage() {
     background_image: '',
     design_json: {
       ...design,
+      presetId,
       background: { theme: backgroundTheme },
     },
   });
@@ -145,7 +155,7 @@ export default function BadgeDesignerPage() {
 
   const handleDropNewElement = (payload, { x, y }) => {
     const canvas = design.canvas;
-    const sampleData = buildSamplePreviewData(event || {});
+    const sampleData = samplePreviewData;
     let element;
     if (payload.elementType === 'text') {
       element = createDesignElement('text', {
@@ -236,7 +246,7 @@ export default function BadgeDesignerPage() {
     const url = URL.createObjectURL(previewBlob);
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = `Badge-Preview-${eventId}.pdf`;
+    anchor.download = `Badges-A4-${eventId}.pdf`;
     anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
@@ -275,7 +285,7 @@ export default function BadgeDesignerPage() {
     <div className="space-y-6">
       <PageHeader
         title="Badge Designer"
-        subtitle={`6×8 inch name badges · ${event?.title || 'Loading event…'}`}
+        subtitle={`6×8 inch name badges for this event · prints 2 per A4 · ${event?.title || 'Loading event…'}`}
         breadcrumbs={[
           { label: 'Admin', to: '/admin' },
           { label: 'Events', to: '/admin/events' },
@@ -308,7 +318,7 @@ export default function BadgeDesignerPage() {
               className="inline-flex items-center gap-2 text-sm font-medium bg-white border border-cyan-200 text-cyan-700 px-4 py-2 rounded-xl"
             >
               <Eye size={15} />
-              Preview
+              Preview A4
             </LoadingButton>
             <LoadingButton
               onClick={handlePublish}
@@ -326,7 +336,7 @@ export default function BadgeDesignerPage() {
       <div className="flex items-center gap-3">
         <StatusBadge status={isActive ? 'published' : 'draft'} />
         <span className="text-sm text-navy-500">
-          {isActive ? 'Template is active — badges can be printed.' : 'Draft mode — publish to enable batch printing.'}
+          {isActive ? 'Template is active — print 2 badges per A4 sheet.' : 'Draft mode — publish to enable batch printing (2 per A4).'}
         </span>
       </div>
 
@@ -337,12 +347,14 @@ export default function BadgeDesignerPage() {
           <Card title="Tools" subtitle="Pick a background and drag fields onto the 6×8 badge">
             <CertificateToolbar
               mode="badge"
+              presetId={presetId}
+              onPresetChange={handlePresetChange}
               onAddElement={handleAddElement}
               backgroundTheme={backgroundTheme}
               onBackgroundThemeChange={handleBackgroundThemeChange}
               orientation={orientation}
               canvas={design.canvas}
-              sampleData={buildSamplePreviewData(event || {})}
+              sampleData={samplePreviewData}
             />
             <label className="block text-sm mt-4">
               <span className="text-xs text-navy-500">Badge title</span>
@@ -354,7 +366,7 @@ export default function BadgeDesignerPage() {
             </label>
           </Card>
 
-          <Card title="Design canvas" subtitle="Drag to move · Pull handles to resize (Photoshop-style)">
+          <Card title="Design canvas" subtitle="6×8 inch canvas · drag to move · pull handles to resize">
             <CertificateCanvas
               design={design}
               backgroundTheme={backgroundTheme}
@@ -364,6 +376,7 @@ export default function BadgeDesignerPage() {
               onMoveElement={handleMoveElement}
               onResizeElement={handleResizeElement}
               onDropNewElement={handleDropNewElement}
+              sampleData={samplePreviewData}
             />
           </Card>
 
@@ -371,11 +384,9 @@ export default function BadgeDesignerPage() {
             <CertificateElementPanel
               element={selectedElement}
               canvas={design.canvas}
-              sampleData={buildSamplePreviewData(event || {})}
+              sampleData={samplePreviewData}
               onChange={handleUpdateElement}
               onDelete={handleDeleteElement}
-              sealId={sealId}
-              onSealChange={handleSealChange}
             />
           </Card>
         </div>
@@ -383,6 +394,7 @@ export default function BadgeDesignerPage() {
 
       {previewUrl && (
         <CertificatePreviewModal
+          title="A4 preview — 2 badges per sheet"
           pdfUrl={previewUrl}
           onClose={closePreview}
           onDownload={handleDownloadPreview}

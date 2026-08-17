@@ -1,14 +1,15 @@
 import crypto from 'crypto';
 import {
-  buildDefaultBadgeDesign,
   parseDesignJson,
   validateDesignForPublish,
-  buildSamplePreviewData,
-  formatEventDateRange,
   syncDesignCanvas,
   BADGE_PAPER_SIZE,
 } from '../shared/certificateDesign.js';
-import { generateCertificatePdfFromTemplate } from '../shared/certificatePdf.js';
+import {
+  buildBadgeDesignFromPreset,
+  pickBadgePresetIdForEvent,
+  getBadgePreset,
+} from '../shared/badgePresets.js';
 import { generateBadgePrintSheetPdf } from '../shared/badgePdf.js';
 
 export function mapDbBadgeTemplate(row) {
@@ -44,11 +45,13 @@ export async function activateOrCreateBadgeTemplate(pool, eventId, adminUserId, 
   }
 
   const id = `badge-tpl-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
-  const design = buildDefaultBadgeDesign(eventRow || {}, {
+  const presetId = pickBadgePresetIdForEvent(eventRow || {});
+  const preset = getBadgePreset(presetId);
+  const design = buildBadgeDesignFromPreset(presetId, eventRow || {}, {
     orientation: 'portrait',
     paperSize: BADGE_PAPER_SIZE,
   });
-  const title = `Name Badge — ${String(eventRow?.title || 'Event')}`;
+  const title = `${preset.defaultTitle} — ${String(eventRow?.title || 'Event')}`;
 
   await pool.query(
     `INSERT INTO badge_templates (
@@ -134,13 +137,24 @@ export async function generateBadgeTemplatePreviewPdf(pool, eventId, appRoot, ap
   const template = await getBadgeTemplateForEvent(pool, eventId);
   if (!template) return { ok: false, message: 'Badge template not found.' };
 
-  const data = buildSamplePreviewData(event, {
-    event_date: formatEventDateRange(event),
-    event_name: String(event?.title || 'Sample Event'),
-    reference_code: 'MM-20260813-4821',
+  const samples = [
+    {
+      booked_for_name: 'Jane M. Sample',
+      user_name: 'MUTALE MUBANGA',
+      reference_code: 'MM-20260813-4821',
+    },
+    {
+      booked_for_name: 'Chile',
+      user_name: 'MUTALE MUBANGA',
+      reference_code: 'REG-SAMPLE-RB6JQ5',
+    },
+  ];
+  const buffer = await generateBadgePrintSheetPdf(template, samples, {
+    event,
+    appRoot,
+    appOrigin,
   });
-  const buffer = await generateCertificatePdfFromTemplate(template, data, { appRoot, appOrigin });
-  return { ok: true, buffer, filename: `Badge-Preview-${eventId}.pdf` };
+  return { ok: true, buffer, filename: `Badge-Preview-A4-${eventId}.pdf` };
 }
 
 export async function generateEventBadgePrintPdf(pool, eventId, appRoot, appOrigin, { registrationIds = [] } = {}) {

@@ -15,6 +15,8 @@ export const PLACEHOLDER_KEYS = [
   'attendee_name',
   'event_name',
   'event_date',
+  'event_location',
+  'purchaser_name',
   'certificate_number',
   'issue_date',
   'reference_code',
@@ -25,6 +27,8 @@ export const PLACEHOLDER_LABELS = {
   attendee_name: 'Attendee Name',
   event_name: 'Event Title',
   event_date: 'Event Date',
+  event_location: 'Location',
+  purchaser_name: 'Purchased By',
   certificate_number: 'Certificate Number',
   issue_date: 'Issue Date',
   reference_code: 'Ticket Reference',
@@ -261,7 +265,7 @@ export function resolveElementDisplayText(element, sampleData = {}) {
     const key = element.key || 'attendee_name';
     return sampleData[key] || PLACEHOLDER_LABELS[key] || element.content || '';
   }
-  return element.content || '';
+  return resolvePlaceholders(element.content || '', sampleData);
 }
 
 /**
@@ -644,6 +648,16 @@ export function inferCertificatePresetId(design) {
   return CERTIFICATE_PRESET_ATTENDANCE;
 }
 
+export function isBadgeDesign(design) {
+  const parsed = parseDesignJson(design);
+  if (!parsed) return false;
+  if (String(parsed.presetId || '').startsWith('badge')) return true;
+  const widthMm = Number(parsed.canvas?.widthMm);
+  const heightMm = Number(parsed.canvas?.heightMm);
+  return Math.abs(widthMm - BADGE_6X8_DIMENSIONS.portrait.widthMm) < 0.5
+    && Math.abs(heightMm - BADGE_6X8_DIMENSIONS.portrait.heightMm) < 0.5;
+}
+
 /**
  * @param {string} presetId
  * @param {object} event
@@ -671,6 +685,17 @@ export function buildDesignFromPreset(presetId, event = {}, opts = {}) {
  */
 export function upgradeCertificateDesign(design, event = {}) {
   const parsed = parseDesignJson(design) || { version: CERTIFICATE_DESIGN_VERSION, elements: [] };
+  if (isBadgeDesign(parsed)) {
+    const rawPreset = String(parsed.presetId || 'badge-ticket');
+    const presetId = rawPreset === 'badge' ? 'badge-ticket' : rawPreset;
+    return {
+      ...parsed,
+      version: CERTIFICATE_DESIGN_VERSION,
+      presetId,
+      canvas: getCanvasDimensions('portrait', BADGE_PAPER_SIZE),
+      elements: Array.isArray(parsed.elements) ? parsed.elements : [],
+    };
+  }
   const canvas = parsed.canvas || getCanvasDimensions('landscape', 'A4');
   const presetId = inferCertificatePresetId(parsed);
   const preset = getCertificatePreset(presetId);
@@ -727,67 +752,111 @@ export function buildDefaultBadgeDesign(event = {}, opts = {}) {
   const sampleData = buildSamplePreviewData(event, {
     event_name: String(event?.title || 'Event Name'),
     attendee_name: 'Jane M. Sample',
+    event_date: formatBadgeEventDate(event),
     reference_code: 'MM-20260813-4821',
   });
 
   return {
     version: CERTIFICATE_DESIGN_VERSION,
-    presetId: 'badge',
+    presetId: 'badge-ticket',
     canvas,
-    background: { theme: 'modern-teal' },
+    background: { theme: opts.backgroundTheme || 'badge-ticket' },
     elements: [
-      createDesignElement('image', {
-        id: 'el_badge_logo',
-        src: CERTIFICATE_BUNDLED_LOGO_SRC,
+      createDesignElement('text', {
+        id: 'el_badge_label',
+        content: 'NAME BADGE',
         x: 0.5,
-        y: 0.1,
-        width: 0.35,
-        height: 0.12,
+        y: 0.055,
+        width: 0.8,
+        height: 0.04,
+        canvas,
+        sampleData,
+        style: { fontSize: 9, fontFamily: 'helvetica', color: '#FFFFFF', align: 'center', bold: true },
+      }),
+      createDesignElement('placeholder', {
+        id: 'el_badge_event',
+        key: 'event_name',
+        x: 0.5,
+        y: 0.12,
+        width: 0.9,
+        height: 0.08,
+        canvas,
+        sampleData,
+        style: { fontSize: 15, fontFamily: 'helvetica', color: '#FFFFFF', align: 'center', bold: true },
+      }),
+      createDesignElement('qr', {
+        id: 'el_badge_qr',
+        x: 0.5,
+        y: 0.4,
+        width: 0.42,
+        height: 0.32,
         canvas,
       }),
       createDesignElement('placeholder', {
         id: 'el_badge_name',
         key: 'attendee_name',
         x: 0.5,
-        y: 0.34,
+        y: 0.62,
+        width: 0.9,
+        height: 0.07,
         canvas,
         sampleData,
-        style: { fontSize: 22, fontFamily: 'helvetica', color: '#102A43', align: 'center', bold: true },
+        style: { fontSize: 22, fontFamily: 'helvetica', color: '#0B132B', align: 'center', bold: true },
       }),
-      createDesignElement('placeholder', {
-        id: 'el_badge_event',
-        key: 'event_name',
-        x: 0.5,
-        y: 0.48,
-        canvas,
-        sampleData,
-        style: { fontSize: 12, fontFamily: 'helvetica', color: '#486581', align: 'center', bold: false },
-      }),
-      createDesignElement('placeholder', {
-        id: 'el_badge_date',
-        key: 'event_date',
-        x: 0.5,
-        y: 0.56,
-        canvas,
-        sampleData,
-        style: { fontSize: 10, fontFamily: 'helvetica', color: '#627D98', align: 'center', bold: false },
-      }),
-      createDesignElement('placeholder', {
+      createDesignElement('text', {
         id: 'el_badge_ref',
-        key: 'reference_code',
+        content: 'Reference: {{reference_code}}',
         x: 0.5,
-        y: 0.64,
+        y: 0.7,
+        width: 0.9,
+        height: 0.04,
         canvas,
-        sampleData: { ...sampleData, reference_code: sampleData.reference_code || 'MM-20260813-4821' },
-        style: { fontSize: 8, fontFamily: 'courier', color: '#94A3B8', align: 'center', bold: false },
+        sampleData,
+        style: { fontSize: 9, fontFamily: 'helvetica', color: '#0B132B', align: 'center', bold: false },
       }),
-      createDesignElement('qr', {
-        id: 'el_badge_qr',
+      createDesignElement('text', {
+        id: 'el_badge_date',
+        content: 'Date: {{event_date}}',
         x: 0.5,
-        y: 0.82,
-        width: 0.22,
-        height: 0.16,
+        y: 0.755,
+        width: 0.9,
+        height: 0.04,
         canvas,
+        sampleData,
+        style: { fontSize: 10, fontFamily: 'helvetica', color: '#36B3D1', align: 'center', bold: false },
+      }),
+      createDesignElement('text', {
+        id: 'el_badge_location',
+        content: 'Location: {{event_location}}',
+        x: 0.5,
+        y: 0.805,
+        width: 0.9,
+        height: 0.04,
+        canvas,
+        sampleData,
+        style: { fontSize: 10, fontFamily: 'helvetica', color: '#36B3D1', align: 'center', bold: false },
+      }),
+      createDesignElement('text', {
+        id: 'el_badge_purchaser',
+        content: 'Purchased by: {{purchaser_name}}',
+        x: 0.5,
+        y: 0.855,
+        width: 0.9,
+        height: 0.04,
+        canvas,
+        sampleData,
+        style: { fontSize: 10, fontFamily: 'helvetica', color: '#0B132B', align: 'center', bold: false },
+      }),
+      createDesignElement('text', {
+        id: 'el_badge_footer',
+        content: 'Show this QR code at the gate for entry',
+        x: 0.5,
+        y: 0.955,
+        width: 0.9,
+        height: 0.04,
+        canvas,
+        sampleData,
+        style: { fontSize: 9, fontFamily: 'helvetica', color: '#36B3D1', align: 'center', bold: false },
       }),
     ],
   };
@@ -845,6 +914,23 @@ export function formatEventDateRange(event = {}) {
   return formatDisplayDate(start);
 }
 
+/** Ticket-style date line for 6×8 name badges, e.g. "Fri, 24 Jul 2026 - 20:00". */
+export function formatBadgeEventDate(event = {}) {
+  const start = event.start_date || event.date;
+  if (!start) return '—';
+  const datePart = new Date(String(start).split('T')[0]);
+  if (Number.isNaN(datePart.getTime())) return formatEventDateRange(event);
+  const dateLabel = datePart.toLocaleDateString('en-ZM', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+  const timeRaw = String(event.start_time || event.time || '').trim();
+  const time = /^\d{1,2}:\d{2}/.test(timeRaw) ? timeRaw.slice(0, 5) : '';
+  return time ? `${dateLabel} - ${time}` : dateLabel;
+}
+
 /**
  * @param {object} event
  * @param {object} [overrides]
@@ -853,7 +939,9 @@ export function buildSamplePreviewData(event = {}, overrides = {}) {
   return {
     attendee_name: overrides.attendee_name || 'Jane M. Sample',
     event_name: overrides.event_name || String(event.title || 'Sample Event'),
-    event_date: overrides.event_date || formatEventDateRange(event),
+    event_date: overrides.event_date || formatBadgeEventDate(event),
+    event_location: overrides.event_location || String(event.location || event.venue || 'Lusaka, Zambia'),
+    purchaser_name: overrides.purchaser_name || 'MUTALE MUBANGA',
     certificate_number: overrides.certificate_number || 'MM-CERT-SAMPLE01',
     issue_date: overrides.issue_date || formatDisplayDate(new Date()),
     reference_code: overrides.reference_code || 'MM-20260813-4821',
