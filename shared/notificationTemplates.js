@@ -123,6 +123,22 @@ export const SYSTEM_NOTIFICATION_TEMPLATES = [
     body: 'Dear {{full_name}},\n\nThank you for attending "{{event_title}}".\nYour certificate of attendance is attached to this email.\nCertificate ID: {{certificate_code}}\nView your ticket portal: {{portal_url}}',
   },
   {
+    slug: 'event_starting_soon',
+    channel: 'sms',
+    name: 'Event starting soon',
+    description: 'SMS sent 15 minutes before the event starts.',
+    subject: '',
+    body: '{{event_title}} starts in 15 minutes. {{ticket_url}}',
+  },
+  {
+    slug: 'event_starting_soon',
+    channel: 'email',
+    name: 'Event starting soon',
+    description: 'Email sent 15 minutes before the event starts.',
+    subject: '{{event_title}} starts in 15 minutes',
+    body: 'Hi {{first_name}},\n\n"{{event_title}}" starts in 15 minutes.\nYour ticket: {{ticket_url}}\nEvent page: {{event_url}}',
+  },
+  {
     slug: 'event_started',
     channel: 'sms',
     name: 'Event started',

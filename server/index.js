@@ -64,6 +64,7 @@ import {
 } from './receiptService.js';
 import {
   sendTicketEmailsForRegistration,
+  sendRegistrationConfirmationIfNeeded,
   maybeSendTicketEmailsOnSettlement,
   generateRegistrationTicketBuffer,
   willSendTicketNotifications,
@@ -151,6 +152,7 @@ import {
   collectEmailSmsRecipients,
   hasExplicitSmsTo,
 } from './emailSmsCompanion.js';
+import { resolvePublicAppUrl } from './publicAppUrl.js';
 import {
   assertDraftReadyToCreate,
   exportChatSession,
@@ -2815,6 +2817,10 @@ async function dispatchTicketEmailsForRows({
   event = {},
   settings = null,
   appOrigin = '',
+  buyerPhone = '',
+  buyerEmail = '',
+  buyerName = '',
+  sendRegistrationSmsIfNoTicket = false,
 }) {
   if (!Array.isArray(registrations) || registrations.length === 0) return;
   const resolvedSettings = settings || await getSystemSettings();
@@ -2828,12 +2834,32 @@ async function dispatchTicketEmailsForRows({
         appRoot: __appRoot,
         appOrigin,
         pool,
+        buyerPhone,
       });
       if (result?.status === 'sent') {
         console.log(`[ticket] ✓ Sent ${result.sentCount || 0} ticket email(s) for ${registration.reference_code || registration.id}`);
       }
     } catch (err) {
       console.warn('[ticket] Ticket email failed:', err.message);
+    }
+
+    if (!sendRegistrationSmsIfNoTicket) continue;
+    try {
+      const confirmResult = await sendRegistrationConfirmationIfNeeded({
+        registration,
+        event,
+        settings: resolvedSettings,
+        sendEmailNotification,
+        appOrigin,
+        smsTo: buyerPhone,
+        recipientEmail: buyerEmail || registration.user_email,
+        recipientName: buyerName || registration.user_name,
+      });
+      if (confirmResult?.status === 'sent') {
+        console.log(`[registration] ✓ Confirmation email/SMS sent for ${registration.reference_code || registration.id}`);
+      }
+    } catch (err) {
+      console.warn('[registration] Confirmation SMS failed:', err.message);
     }
   }
 }
@@ -3153,19 +3179,6 @@ async function sendGreenApiWhatsApp({ settings, to, message }) {
   }
 }
 
-function resolvePublicAppUrl(req) {
-  const envUrl = String(process.env.APP_URL || '').trim();
-  if (envUrl) return envUrl.replace(/\/$/, '');
-
-  const origin = String(req?.headers?.origin || '').trim();
-  if (origin) return origin.replace(/\/$/, '');
-
-  const proto = String(req?.headers?.['x-forwarded-proto'] || req?.protocol || '').trim() || 'http';
-  const host = String(req?.headers?.['x-forwarded-host'] || req?.get?.('host') || '').trim();
-  if (host) return `${proto}://${host}`.replace(/\/$/, '');
-
-  return 'http://localhost:5173';
-}
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -7469,6 +7482,17 @@ async function createSiteChatSelfRegistration(req, authUser, event, extras = {})
       appRoot: __appRoot,
       appOrigin: resolvePublicAppUrl(req),
       pool,
+      buyerPhone: String(authUser.phone || authUser.whatsapp || '').trim(),
+    });
+    await sendRegistrationConfirmationIfNeeded({
+      registration: mapped,
+      event,
+      settings,
+      sendEmailNotification,
+      appOrigin: resolvePublicAppUrl(req),
+      smsTo: String(authUser.phone || authUser.whatsapp || '').trim(),
+      recipientEmail: String(authUser.email || mapped.user_email || '').trim(),
+      recipientName: String(authUser.name || mapped.user_name || '').trim(),
     });
   } catch (error) {
     console.warn('[site-chat] ticket email failed:', error.message);
@@ -10450,6 +10474,7 @@ app.post('/api/registrations', async (req, res) => {
         event,
         settings,
         appOrigin: appUrl,
+        buyerPhone: String(authUser.phone || authUser.whatsapp || '').trim(),
       });
     } catch (notifyErr) {
       console.warn('[registration] Confirmation notification failed:', notifyErr.message);
@@ -10738,6 +10763,10 @@ app.post('/api/registrations/batch', async (req, res) => {
         event,
         settings,
         appOrigin: appUrl,
+        buyerPhone: String(authUser.phone || authUser.whatsapp || '').trim(),
+        buyerEmail: String(authUser.email || '').trim(),
+        buyerName: String(authUser.name || '').trim(),
+        sendRegistrationSmsIfNoTicket: true,
       });
     } catch (ticketErr) {
       console.warn('[registration/batch] Ticket email dispatch failed:', ticketErr.message);
@@ -14907,9 +14936,7 @@ app.post('/api/admin/events/:eventId/certificates/generate', async (req, res) =>
 // ─── Certificate templates (per-event designer) ─────────────────────────────
 
 function getAppOriginFromRequest(req) {
-  const configured = String(process.env.APP_ORIGIN || process.env.VITE_APP_ORIGIN || '').trim().replace(/\/$/, '');
-  if (configured) return configured;
-  return `${req.protocol}://${req.get('host')}`;
+  return resolvePublicAppUrl(req);
 }
 
 async function persistCertificateImage(value, req) {

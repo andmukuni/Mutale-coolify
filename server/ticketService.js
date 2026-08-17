@@ -99,6 +99,88 @@ export function willSendTicketNotifications({ registration = {}, event = {} } = 
   return Boolean(guestEmail || buyerEmail);
 }
 
+/**
+ * Complimentary (free / not_required / waived) and paid registrations both post SMS.
+ * When ticket emails will carry the companion SMS, skip a second registration SMS.
+ */
+export function shouldSendRegistrationSms({ registration = {}, event = {} } = {}) {
+  if (!isTicketPaymentEligible(registration)) return false;
+  return !willSendTicketNotifications({ registration, event });
+}
+
+function withBuyerPhone(registration = {}, buyerPhone = '') {
+  const existing = String(registration.user_phone || '').trim();
+  const fallback = String(buyerPhone || '').trim();
+  if (existing || !fallback) return registration;
+  return { ...registration, user_phone: fallback };
+}
+
+export async function sendRegistrationConfirmationIfNeeded({
+  registration = {},
+  event = {},
+  settings,
+  sendEmailNotification,
+  appOrigin = '',
+  smsTo = '',
+  recipientEmail = '',
+  recipientName = '',
+} = {}) {
+  const row = withBuyerPhone(registration, smsTo);
+  if (!shouldSendRegistrationSms({ registration: row, event })) {
+    return { status: 'skipped', reason: 'Ticket SMS will be sent, or registration is not eligible.' };
+  }
+
+  const to = normalizeEmail(recipientEmail || row.user_email);
+  if (!to) {
+    return { status: 'skipped', reason: 'No valid recipient email.' };
+  }
+
+  const origin = String(appOrigin || '').replace(/\/$/, '');
+  const eventTitle = String(event.title || row.event_title || 'Event').trim();
+  const refCode = String(row.reference_code || '').trim();
+  const eventUrl = event.slug && origin
+    ? `${origin}/events/${encodeURIComponent(event.slug)}`
+    : origin;
+  const ticketUrl = refCode && origin
+    ? `${origin}/tickets/${encodeURIComponent(refCode)}`
+    : eventUrl;
+  const name = String(recipientName || row.user_name || '').trim() || 'there';
+  const phone = String(smsTo || row.user_phone || resolveAttendeePhone(row) || '').trim();
+
+  const result = await sendEmailNotification({
+    settings,
+    to,
+    subject: `Registration Confirmed: ${eventTitle}`,
+    text: [
+      `Hi ${name},`,
+      '',
+      `Thank you for registering for "${eventTitle}"! Your registration is confirmed.`,
+      refCode ? `Reference: ${refCode}` : '',
+      ticketUrl ? `View: ${ticketUrl}` : '',
+    ].filter(Boolean).join('\n'),
+    smsTo: phone,
+    smsMessage: [
+      `Registration confirmed: ${eventTitle}.`,
+      refCode ? `Ref: ${refCode}` : '',
+      ticketUrl,
+    ].filter(Boolean).join(' '),
+    kind: 'registration',
+    skipSms: false,
+    templateSlug: 'registration',
+    templateVars: {
+      ...buildPersonTemplateVars(name),
+      event_title: eventTitle,
+      reference: refCode,
+      ticket_url: ticketUrl || eventUrl,
+      event_url: eventUrl,
+    },
+  });
+
+  return result?.status === 'sent'
+    ? { status: 'sent' }
+    : { status: result?.status || 'failed', reason: result?.reason };
+}
+
 export async function isTicketEmailAlreadySent(registrationId, pool) {
   const id = String(registrationId || '').trim();
   if (!id || !pool) return false;
@@ -198,7 +280,7 @@ export async function sendTicketEmail({
   const filename = buildTicketFilename(registration);
 
   const smsTo = role === 'buyer_copy'
-    ? String(registration.user_phone || '').trim()
+    ? String(registration.user_phone || resolveAttendeePhone(registration) || '').trim()
     : resolveAttendeePhone(registration);
   const ticketUrl = String(copy.ticketUrl || '').trim();
   const slug = role === 'buyer_copy' ? 'ticket_buyer' : 'ticket';
@@ -244,14 +326,16 @@ export async function sendTicketEmailsForRegistration({
   appOrigin = '',
   pool = null,
   skipIdempotencyCheck = false,
+  buyerPhone = '',
 }) {
-  if (!isTicketPaymentEligible(registration)) {
+  const row = withBuyerPhone(registration, buyerPhone);
+  if (!isTicketPaymentEligible(row)) {
     return { status: 'skipped', reason: 'Ticket not eligible (cancelled or unpaid).' };
   }
 
-  const isVirtual = !isInPersonEventRecord(event, registration);
-  const guestEmail = isGuestTicket(registration)
-    ? normalizeEmail(registration.booked_for_email)
+  const isVirtual = !isInPersonEventRecord(event, row);
+  const guestEmail = isGuestTicket(row)
+    ? normalizeEmail(row.booked_for_email)
     : '';
 
   // In-person: send PDF ticket emails. Virtual: email guest portal link when guest email is set.
@@ -259,7 +343,7 @@ export async function sendTicketEmailsForRegistration({
     return { status: 'skipped', reason: 'Virtual event ticket email requires guest email.' };
   }
 
-  const regId = String(registration.id || '').trim();
+  const regId = String(row.id || '').trim();
   if (pool && !skipIdempotencyCheck && regId) {
     const alreadySent = await isTicketEmailAlreadySent(regId, pool);
     if (alreadySent) {
@@ -267,22 +351,22 @@ export async function sendTicketEmailsForRegistration({
     }
   }
 
-  const guestEmailResolved = isGuestTicket(registration)
-    ? normalizeEmail(registration.booked_for_email)
+  const guestEmailResolved = isGuestTicket(row)
+    ? normalizeEmail(row.booked_for_email)
     : '';
-  const buyerEmail = normalizeEmail(registration.user_email);
-  const buyerName = String(registration.user_name || '').trim() || 'there';
-  const guestName = resolveAttendeeName(registration);
+  const buyerEmail = normalizeEmail(row.user_email);
+  const buyerName = String(row.user_name || '').trim() || 'there';
+  const guestName = resolveAttendeeName(row);
 
   const sends = [];
-  const attendeePhone = resolveAttendeePhone(registration);
-  const buyerPhone = String(registration.user_phone || '').trim();
-  const sharedTicketPhones = uniqueSmsRecipients([attendeePhone, buyerPhone]);
+  const attendeePhone = resolveAttendeePhone(row);
+  const resolvedBuyerPhone = String(row.user_phone || '').trim();
+  const sharedTicketPhones = uniqueSmsRecipients([attendeePhone, resolvedBuyerPhone]);
   const sameTicketSmsPhone = sharedTicketPhones.length === 1;
 
   if (guestEmailResolved) {
     sends.push(sendTicketEmail({
-      registration,
+      registration: row,
       event,
       to: guestEmailResolved,
       recipientName: guestName,
@@ -297,7 +381,7 @@ export async function sendTicketEmailsForRegistration({
 
   if (buyerEmail && buyerEmail !== guestEmailResolved) {
     sends.push(sendTicketEmail({
-      registration,
+      registration: row,
       event,
       to: buyerEmail,
       recipientName: buyerName,
@@ -311,7 +395,7 @@ export async function sendTicketEmailsForRegistration({
     }));
   } else if (buyerEmail && !guestEmailResolved) {
     sends.push(sendTicketEmail({
-      registration,
+      registration: row,
       event,
       to: buyerEmail,
       recipientName: buyerName,
@@ -351,6 +435,7 @@ export async function maybeSendTicketEmailsOnSettlement({
   appRoot = '',
   appOrigin = '',
   pool = null,
+  buyerPhone = '',
 }) {
   return sendTicketEmailsForRegistration({
     registration,
@@ -360,6 +445,7 @@ export async function maybeSendTicketEmailsOnSettlement({
     appRoot,
     appOrigin,
     pool,
+    buyerPhone,
   });
 }
 

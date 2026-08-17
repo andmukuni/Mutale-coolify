@@ -6,12 +6,22 @@ import {
   resolveAttendeePhone,
 } from '../shared/ticketViewModel.js';
 import { buildPersonTemplateVars } from '../shared/notificationTemplates.js';
+import { resolvePublicAppUrl } from './publicAppUrl.js';
 
 export const LIFECYCLE_LOOKBACK_MS = 48 * 60 * 60 * 1000;
+export const REMINDER_LEAD_MS = 15 * 60 * 1000;
 export const LIFECYCLE_KINDS = {
+  startingSoon: 'starting_soon',
   started: 'started',
   ended: 'ended',
 };
+
+function templateSlugForKind(kind) {
+  if (kind === LIFECYCLE_KINDS.startingSoon) return 'event_starting_soon';
+  if (kind === LIFECYCLE_KINDS.started) return 'event_started';
+  if (kind === LIFECYCLE_KINDS.ended) return 'event_ended';
+  return '';
+}
 
 function parseBoolean(value, fallback = true) {
   if (value === undefined || value === null || value === '') return fallback;
@@ -23,7 +33,7 @@ function parseBoolean(value, fallback = true) {
 }
 
 function resolveAppOrigin() {
-  return String(process.env.APP_ORIGIN || process.env.VITE_APP_ORIGIN || 'http://localhost:5173').replace(/\/$/, '');
+  return resolvePublicAppUrl();
 }
 
 export function remindersEnabled(settings = {}) {
@@ -35,6 +45,10 @@ export function shouldNotifyKind(event = {}, kind, now = new Date(), lookbackMs 
   if (status === 'cancelled' || status === 'draft') return false;
 
   const { start, end } = getEventTimeBounds(event);
+  if (kind === LIFECYCLE_KINDS.startingSoon) {
+    if (!start || now >= start) return false;
+    return start.getTime() - now.getTime() <= REMINDER_LEAD_MS;
+  }
   if (kind === LIFECYCLE_KINDS.started) {
     if (!start || now < start) return false;
     if (end && now > end) return false;
@@ -65,45 +79,67 @@ export function buildLifecycleMessages({ event = {}, registration = {}, kind, ap
   const name = resolveAttendeeName(registration);
   const title = String(event.title || 'the event').trim();
   const origin = String(appOrigin || resolveAppOrigin()).replace(/\/$/, '');
-  const eventUrl = event.slug ? `${origin}/events/${encodeURIComponent(event.slug)}` : origin;
+  const eventUrl = event.slug
+    ? `${origin}/events/${encodeURIComponent(event.slug)}`
+    : origin;
   const ref = String(registration.reference_code || '').trim();
-  const ticketUrl = ref ? `${origin}/tickets/${encodeURIComponent(ref)}` : '';
+  const ticketUrl = ref && origin
+    ? `${origin}/tickets/${encodeURIComponent(ref)}`
+    : '';
   const when = formatWhen(event);
-  const started = kind === LIFECYCLE_KINDS.started;
+  const link = ticketUrl || eventUrl;
 
-  const subject = started
-    ? `${title} has started`
-    : `Thank you for attending ${title}`;
+  let subject;
+  let text;
+  let smsMessage;
 
-  const text = started
-    ? [
+  if (kind === LIFECYCLE_KINDS.startingSoon) {
+    subject = `${title} starts in 15 minutes`;
+    text = [
+      `Hi ${name},`,
+      '',
+      `"${title}" starts in 15 minutes.`,
+      when ? `Schedule: ${when}` : '',
+      '',
+      ticketUrl ? `Your ticket: ${ticketUrl}` : '',
+      eventUrl ? `Event page: ${eventUrl}` : '',
+      '',
+      'We look forward to seeing you.',
+      '',
+      'Mutale Mubanga',
+    ].filter(Boolean).join('\n');
+    smsMessage = [`${title} starts in 15 minutes.`, link].filter(Boolean).join(' ');
+  } else if (kind === LIFECYCLE_KINDS.started) {
+    subject = `${title} has started`;
+    text = [
       `Hi ${name},`,
       '',
       `"${title}" has started.`,
       when ? `Schedule: ${when}` : '',
       '',
       ticketUrl ? `Your ticket: ${ticketUrl}` : '',
-      `Event page: ${eventUrl}`,
+      eventUrl ? `Event page: ${eventUrl}` : '',
       '',
       'We look forward to seeing you.',
       '',
       'Mutale Mubanga',
-    ].filter(Boolean).join('\n')
-    : [
+    ].filter(Boolean).join('\n');
+    smsMessage = [`${title} has started.`, link].filter(Boolean).join(' ');
+  } else {
+    subject = `Thank you for attending ${title}`;
+    text = [
       `Hi ${name},`,
       '',
       `"${title}" has now ended. Thank you for attending.`,
       when ? `Schedule: ${when}` : '',
       '',
-      ticketUrl ? `Your ticket and any certificates: ${ticketUrl}` : `Event page: ${eventUrl}`,
+      ticketUrl ? `Your ticket and any certificates: ${ticketUrl}` : (eventUrl ? `Event page: ${eventUrl}` : ''),
       '',
       'Best regards,',
       'Mutale Mubanga',
     ].filter(Boolean).join('\n');
-
-  const smsMessage = started
-    ? [`${title} has started.`, ticketUrl || eventUrl].filter(Boolean).join(' ')
-    : [`${title} has ended. Thank you for attending.`, ticketUrl || eventUrl].filter(Boolean).join(' ');
+    smsMessage = [`${title} has ended. Thank you for attending.`, link].filter(Boolean).join(' ');
+  }
 
   return {
     subject,
@@ -152,6 +188,7 @@ export async function processEventLifecycleNotifications(pool, deps = {}, now = 
     appOrigin = resolveAppOrigin(),
   } = deps;
   const summary = {
+    startingSoon: 0,
     started: 0,
     ended: 0,
     emailed: 0,
@@ -167,7 +204,7 @@ export async function processEventLifecycleNotifications(pool, deps = {}, now = 
 
   const [events] = await pool.query('SELECT * FROM events');
   for (const event of Array.isArray(events) ? events : []) {
-    const kinds = [LIFECYCLE_KINDS.started, LIFECYCLE_KINDS.ended]
+    const kinds = [LIFECYCLE_KINDS.startingSoon, LIFECYCLE_KINDS.started, LIFECYCLE_KINDS.ended]
       .filter((kind) => shouldNotifyKind(event, kind, now));
     if (!kinds.length) continue;
 
@@ -205,7 +242,7 @@ export async function processEventLifecycleNotifications(pool, deps = {}, now = 
             smsTo: message.smsTo,
             smsMessage: message.smsMessage,
             kind: 'event_reminder',
-            templateSlug: kind === LIFECYCLE_KINDS.started ? 'event_started' : 'event_ended',
+            templateSlug: templateSlugForKind(kind),
             templateVars: {
               ...buildPersonTemplateVars(resolveAttendeeName(registration)),
               event_title: event.title,
@@ -228,7 +265,8 @@ export async function processEventLifecycleNotifications(pool, deps = {}, now = 
 
           if (emailStatus === 'sent') {
             summary.emailed += 1;
-            if (kind === LIFECYCLE_KINDS.started) summary.started += 1;
+            if (kind === LIFECYCLE_KINDS.startingSoon) summary.startingSoon += 1;
+            else if (kind === LIFECYCLE_KINDS.started) summary.started += 1;
             else summary.ended += 1;
             if (smsSent) summary.sms += 1;
           } else if (emailStatus === 'skipped') {

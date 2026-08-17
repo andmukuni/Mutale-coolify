@@ -1,10 +1,15 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildLifecycleMessages,
+  LIFECYCLE_KINDS,
   processEventLifecycleNotifications,
   remindersEnabled,
   shouldNotifyKind,
 } from '../eventLifecycleNotifications.js';
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 const now = new Date('2026-08-13T16:00:00.000Z');
 
@@ -74,6 +79,19 @@ describe('event lifecycle notifications', () => {
     expect(shouldNotifyKind({ ...liveEvent, status: 'cancelled' }, 'started', now)).toBe(false);
   });
 
+  it('notifies starting soon only in the 15 minutes before start', () => {
+    const fifteenBefore = new Date('2026-08-13T12:45:00.000Z');
+    const sixteenBefore = new Date('2026-08-13T12:44:00.000Z');
+    const atStart = new Date('2026-08-13T13:00:00.000Z');
+
+    expect(shouldNotifyKind(liveEvent, LIFECYCLE_KINDS.startingSoon, fifteenBefore)).toBe(true);
+    expect(shouldNotifyKind(liveEvent, LIFECYCLE_KINDS.started, fifteenBefore)).toBe(false);
+    expect(shouldNotifyKind(liveEvent, LIFECYCLE_KINDS.startingSoon, sixteenBefore)).toBe(false);
+    expect(shouldNotifyKind(liveEvent, LIFECYCLE_KINDS.startingSoon, atStart)).toBe(false);
+    expect(shouldNotifyKind(liveEvent, LIFECYCLE_KINDS.started, atStart)).toBe(true);
+    expect(shouldNotifyKind({ ...liveEvent, status: 'draft' }, LIFECYCLE_KINDS.startingSoon, fifteenBefore)).toBe(false);
+  });
+
   it('fires the started notice at 19:30 Africa/Lusaka, not two hours later at 19:30 UTC', () => {
     const eveningEvent = {
       ...liveEvent,
@@ -87,6 +105,8 @@ describe('event lifecycle notifications', () => {
 
     expect(shouldNotifyKind(eveningEvent, 'started', atLusakaStart)).toBe(true);
     expect(shouldNotifyKind(eveningEvent, 'started', oneMinuteEarly)).toBe(false);
+    expect(shouldNotifyKind(eveningEvent, LIFECYCLE_KINDS.startingSoon, new Date('2026-08-13T17:15:00.000Z'))).toBe(true);
+    expect(shouldNotifyKind(eveningEvent, LIFECYCLE_KINDS.startingSoon, oneMinuteEarly)).toBe(true);
     expect(shouldNotifyKind(eveningEvent, 'started', twoHoursLateUtc)).toBe(false);
     expect(shouldNotifyKind(eveningEvent, 'ended', twoHoursLateUtc)).toBe(true);
   });
@@ -115,6 +135,38 @@ describe('event lifecycle notifications', () => {
     expect(ended.smsMessage).toContain('has ended');
   });
 
+  it('builds the 15-minute reminder SMS with the production event link', () => {
+    const reminder = buildLifecycleMessages({
+      event: liveEvent,
+      registration,
+      kind: LIFECYCLE_KINDS.startingSoon,
+      appOrigin: 'https://mutalemubanga.org',
+    });
+    expect(reminder.subject).toMatch(/starts in 15 minutes/i);
+    expect(reminder.smsMessage).toContain('starts in 15 minutes');
+    expect(reminder.smsMessage).toContain('https://mutalemubanga.org/tickets/MM-ABC123');
+    expect(reminder.smsTo).toBe('0971234567');
+  });
+
+  it('uses APP_URL for SMS event links when appOrigin is omitted', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('APP_URL', 'https://mutalemubanga.org');
+    vi.stubEnv('APP_ORIGIN', '');
+    vi.stubEnv('VITE_APP_ORIGIN', '');
+    vi.stubEnv('CORS_ORIGINS', 'https://mutalemubanga.org');
+
+    const started = buildLifecycleMessages({
+      event: liveEvent,
+      registration,
+      kind: 'started',
+    });
+
+    expect(started.smsMessage).toContain('https://mutalemubanga.org/tickets/MM-ABC123');
+    expect(started.smsMessage).not.toMatch(/localhost|127\.0\.0\.1/);
+    expect(started.eventUrl).toBe('https://mutalemubanga.org/events/qa-masterclass');
+    expect(started.text).toContain('https://mutalemubanga.org/events/qa-masterclass');
+  });
+
   it('sends email plus companion SMS when an event has started', async () => {
     const sendEmailNotification = vi.fn().mockResolvedValue({
       status: 'sent',
@@ -134,6 +186,30 @@ describe('event lifecycle notifications', () => {
       smsTo: '0971234567',
       kind: 'event_reminder',
       subject: 'QA Masterclass has started',
+    }));
+  });
+
+  it('posts start notices for complimentary (free) registrations too', async () => {
+    const sendEmailNotification = vi.fn().mockResolvedValue({
+      status: 'sent',
+      sms: [{ status: 'sent', recipient: '260971234567' }],
+    });
+    const pool = fakePool({
+      events: [liveEvent],
+      registrations: [{ ...registration, payment_status: 'not_required' }],
+    });
+
+    const summary = await processEventLifecycleNotifications(pool, {
+      getSystemSettings: async () => ({ notifications: { emailOnEventReminder: true } }),
+      sendEmailNotification,
+      appOrigin: 'https://mutalemubanga.org',
+    }, now);
+
+    expect(summary).toMatchObject({ started: 1, emailed: 1, sms: 1, errors: 0 });
+    expect(sendEmailNotification).toHaveBeenCalledWith(expect.objectContaining({
+      to: 'grace@example.com',
+      smsTo: '0971234567',
+      kind: 'event_reminder',
     }));
   });
 
@@ -180,5 +256,30 @@ describe('event lifecycle notifications', () => {
 
     expect(summary.skippedReason).toMatch(/disabled/i);
     expect(sendEmailNotification).not.toHaveBeenCalled();
+  });
+
+  it('sends the 15-minute reminder SMS before the event starts', async () => {
+    const sendEmailNotification = vi.fn().mockResolvedValue({
+      status: 'sent',
+      sms: [{ status: 'sent', recipient: '260971234567' }],
+    });
+    const pool = fakePool({ events: [liveEvent], registrations: [registration] });
+    const fifteenBefore = new Date('2026-08-13T12:45:00.000Z');
+
+    const summary = await processEventLifecycleNotifications(pool, {
+      getSystemSettings: async () => ({ notifications: { emailOnEventReminder: true } }),
+      sendEmailNotification,
+      appOrigin: 'https://mutalemubanga.org',
+    }, fifteenBefore);
+
+    expect(summary).toMatchObject({ startingSoon: 1, started: 0, ended: 0, emailed: 1, sms: 1, errors: 0 });
+    expect(sendEmailNotification).toHaveBeenCalledWith(expect.objectContaining({
+      to: 'grace@example.com',
+      smsTo: '0971234567',
+      kind: 'event_reminder',
+      templateSlug: 'event_starting_soon',
+      subject: 'QA Masterclass starts in 15 minutes',
+      smsMessage: expect.stringContaining('starts in 15 minutes'),
+    }));
   });
 });

@@ -21,6 +21,7 @@ import {
   resolveAttendeePhone,
 } from '../shared/ticketViewModel.js';
 import { buildPersonTemplateVars } from '../shared/notificationTemplates.js';
+import { resolvePublicAppUrl } from './publicAppUrl.js';
 
 const NAVY = '#0B1D36';
 const CYAN = '#06B6D4';
@@ -66,7 +67,7 @@ function formatDisplayDate(dateValue) {
 }
 
 function resolveAppOrigin() {
-  return String(process.env.APP_ORIGIN || process.env.VITE_APP_ORIGIN || 'http://localhost:5173').replace(/\/$/, '');
+  return resolvePublicAppUrl();
 }
 
 function buildCertificateRenderData({
