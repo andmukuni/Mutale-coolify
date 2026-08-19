@@ -10,7 +10,7 @@ import EventCard from '../components/EventCard';
 import BlogCard from '../components/BlogCard';
 import { useData } from '../context/DataContext';
 import { getEventDisplayStatus, isEventPubliclyVisible } from '../utils/eventServices';
-import heroPortrait from '../assets/herophoto.JPG';
+import heroPortrait from '../assets/mutale-navy-suit-and-tie.png';
 import { defaultWebsitePages, expertiseIconMap } from '../data/websitePages';
 import TrustedBySection from '../components/TrustedBySection';
 import { fetchPartnerLogos } from '../utils/partnerLogosApi';
@@ -25,7 +25,7 @@ export default function HomePage() {
   const page = profile.websitePages?.home || defaultWebsitePages.home;
   const visibility = profile.websitePages?.sectionVisibility || {};
   const isVisible = (id) => visibility[id] !== false;
-  const heroPortraitSrc = resolveMediaUrl(page.heroPortraitImage) || heroPortrait;
+  const heroPortraitSrc = heroPortrait;
   const aboutImage = resolveMediaUrl(page.aboutImage) || ABOUT_IMG_FALLBACK;
   const ctaBackground = resolveMediaUrl(page.ctaBackgroundImage) || CTA_BG_FALLBACK;
   const heroPills = (Array.isArray(page.heroPills) && page.heroPills.length > 0)
@@ -150,12 +150,12 @@ export default function HomePage() {
           <img
             src={heroPortraitSrc}
             alt={`${profile.name} portrait`}
-            className="absolute inset-0 h-full w-full object-cover object-[center_12%] lg:object-[78%_8%]"
+            className="absolute inset-y-0 right-0 h-full w-[82%] sm:w-[68%] lg:w-[56%] object-cover object-[center_18%] [mask-image:linear-gradient(to_right,transparent_0%,black_32%,black_100%)] [-webkit-mask-image:linear-gradient(to_right,transparent_0%,black_32%,black_100%)]"
             loading="eager"
           />
-          {/* Navy wash over the photo — left stays solid, then fades across the portrait */}
-          <div className="absolute inset-0 bg-gradient-to-r from-navy-950 from-[6%] via-navy-950/90 via-[42%] to-navy-950/35 to-[68%] lg:to-navy-950/10" />
-          <div className="absolute inset-0 bg-gradient-to-t from-navy-950/65 via-transparent to-navy-950/25" />
+          {/* Navy wash from the left, fading onto the portrait */}
+          <div className="absolute inset-0 bg-gradient-to-r from-navy-950 from-[10%] via-navy-950/88 via-[44%] to-transparent to-[70%]" />
+          <div className="absolute inset-0 bg-gradient-to-t from-navy-950/55 via-transparent to-navy-950/20" />
         </div>
 
         {/* Content */}

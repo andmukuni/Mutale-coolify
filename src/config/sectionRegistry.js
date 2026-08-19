@@ -24,7 +24,7 @@
  *     - manageLink: deep-link to an existing admin for dynamic list items.
  */
 
-import heroPortrait from '../assets/herophoto.JPG';
+import heroPortrait from '../assets/mutale-navy-suit-and-tie.png';
 import { normalizeSectionVisibility } from '../data/websitePages';
 
 // Current hardcoded defaults shown on the public site (used for live previews).
