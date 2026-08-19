@@ -146,16 +146,16 @@ export default function HomePage() {
       {/* ═══════════════════════ HERO ═══════════════════════ */}
       <section className="relative flex items-center overflow-hidden min-h-[32rem] sm:min-h-[36rem] lg:min-h-[42rem]">
         {/* Portrait as full-bleed hero background, anchored to the right */}
-        <div className="absolute inset-0">
+        <div className="absolute inset-0 bg-navy-950">
           <img
             src={heroPortraitSrc}
             alt={`${profile.name} portrait`}
-            className="w-full h-full object-cover object-[center_18%] lg:object-[78%_center]"
+            className="absolute inset-0 h-full w-full object-cover object-[center_12%] lg:object-[78%_8%]"
             loading="eager"
           />
-          {/* Same navy wash, left-weighted so it covers copy and fades into the photo */}
-          <div className="absolute inset-0 bg-gradient-to-r from-navy-950 from-[8%] via-navy-950/92 via-[42%] to-navy-950/25 to-[78%] lg:to-navy-950/10" />
-          <div className="absolute inset-0 bg-gradient-to-t from-navy-950/80 via-transparent to-navy-950/30" />
+          {/* Navy wash over the photo — left stays solid, then fades across the portrait */}
+          <div className="absolute inset-0 bg-gradient-to-r from-navy-950 from-[6%] via-navy-950/90 via-[42%] to-navy-950/35 to-[68%] lg:to-navy-950/10" />
+          <div className="absolute inset-0 bg-gradient-to-t from-navy-950/65 via-transparent to-navy-950/25" />
         </div>
 
         {/* Content */}
