@@ -16,7 +16,6 @@ import TrustedBySection from '../components/TrustedBySection';
 import { fetchPartnerLogos } from '../utils/partnerLogosApi';
 import { resolveMediaUrl } from '../utils/mediaUrl';
 
-const HERO_BG_FALLBACK = 'https://images.unsplash.com/photo-1579154204601-01588f351e67?auto=format&fit=crop&w=1920&q=80';
 const ABOUT_IMG_FALLBACK = 'https://images.unsplash.com/photo-1582719471384-894fbb16e074?auto=format&fit=crop&w=800&q=80';
 const CTA_BG_FALLBACK = 'https://images.unsplash.com/photo-1581093588401-fbb62a02f120?auto=format&fit=crop&w=1920&q=80';
 const HERO_PILL_ICONS = [MapPin, Briefcase, Globe];
@@ -26,7 +25,6 @@ export default function HomePage() {
   const page = profile.websitePages?.home || defaultWebsitePages.home;
   const visibility = profile.websitePages?.sectionVisibility || {};
   const isVisible = (id) => visibility[id] !== false;
-  const heroBackground = resolveMediaUrl(page.heroBackgroundImage) || HERO_BG_FALLBACK;
   const heroPortraitSrc = resolveMediaUrl(page.heroPortraitImage) || heroPortrait;
   const aboutImage = resolveMediaUrl(page.aboutImage) || ABOUT_IMG_FALLBACK;
   const ctaBackground = resolveMediaUrl(page.ctaBackgroundImage) || CTA_BG_FALLBACK;
@@ -146,24 +144,23 @@ export default function HomePage() {
   return (
     <div>
       {/* ═══════════════════════ HERO ═══════════════════════ */}
-      <section className="relative flex items-center overflow-hidden">
-        {/* Background image */}
+      <section className="relative flex items-center overflow-hidden min-h-[32rem] sm:min-h-[36rem] lg:min-h-[42rem]">
+        {/* Portrait as full-bleed hero background, anchored to the right */}
         <div className="absolute inset-0">
           <img
-            src={heroBackground}
-            alt="Laboratory professional at work"
-            className="w-full h-full object-cover"
+            src={heroPortraitSrc}
+            alt={`${profile.name} portrait`}
+            className="w-full h-full object-cover object-[center_18%] lg:object-[78%_center]"
+            loading="eager"
           />
-          {/* Multi-layer gradient overlay */}
-          <div className="absolute inset-0 bg-gradient-to-r from-navy-950 via-navy-950/95 to-navy-950/60" />
-          <div className="absolute inset-0 bg-gradient-to-t from-navy-950 via-transparent to-navy-950/30" />
+          {/* Same navy wash, left-weighted so it covers copy and fades into the photo */}
+          <div className="absolute inset-0 bg-gradient-to-r from-navy-950 from-[8%] via-navy-950/92 via-[42%] to-navy-950/25 to-[78%] lg:to-navy-950/10" />
+          <div className="absolute inset-0 bg-gradient-to-t from-navy-950/80 via-transparent to-navy-950/30" />
         </div>
 
         {/* Content */}
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-20 w-full">
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            {/* Left — text */}
-            <div>
+          <div className="max-w-xl lg:max-w-2xl">
               <div className="inline-flex items-center gap-2 bg-cyan-500/10 border border-cyan-500/20 rounded-full px-4 py-1.5 mb-6">
                 <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
                 <span className="text-xs font-semibold text-cyan-300 uppercase tracking-wider">
@@ -208,22 +205,6 @@ export default function HomePage() {
                   );
                 })}
               </div>
-            </div>
-
-            {/* Right — portrait panel */}
-            <div className="hidden lg:block relative">
-              <div className="relative max-w-md ml-auto">
-                <div className="absolute -inset-3 rounded-[2rem] bg-cyan-500/20 blur-2xl" />
-                <div className="relative overflow-hidden rounded-[2rem] border border-white/20 bg-white/10 backdrop-blur-sm shadow-2xl shadow-navy-950/40">
-                  <img
-                    src={heroPortraitSrc}
-                    alt={`${profile.name} portrait`}
-                    className="w-full h-[34rem] object-cover object-center"
-                    loading="eager"
-                  />
-                </div>
-              </div>
-            </div>
           </div>
         </div>
 
