@@ -75,7 +75,7 @@ export const defaultWebsitePages = {
     featuredEventsDescription: 'Handpicked events currently highlighted for the community.',
     featuredBlogLabel: 'Featured blog',
     featuredBlogTitle: 'Latest insights and articles',
-    featuredBlogDescription: 'Handpicked articles highlighted from the blog.',
+    featuredBlogDescription: 'Handpicked Insights from Mubanga’s desk.',
     testimonialsLabel: 'Testimonials',
     testimonialsTitle: 'What Partners Say',
     testimonialsDescription: 'Feedback from colleagues and programme teams across laboratory quality, diagnostics, and systems strengthening work.',
@@ -204,10 +204,16 @@ export function normalizeSectionVisibility(map = {}) {
   return flat;
 }
 
+const STALE_FEATURED_BLOG_DESCRIPTION = 'Handpicked articles highlighted from the blog.';
+
 export function mergeWebsitePages(savedPages = {}) {
   const source = savedPages && typeof savedPages === 'object' ? savedPages : {};
+  const home = mergeSection(defaultWebsitePages.home, source.home);
+  if (home.featuredBlogDescription === STALE_FEATURED_BLOG_DESCRIPTION) {
+    home.featuredBlogDescription = defaultWebsitePages.home.featuredBlogDescription;
+  }
   return {
-    home: mergeSection(defaultWebsitePages.home, source.home),
+    home,
     about: mergeSection(defaultWebsitePages.about, source.about),
     experience: mergeSection(defaultWebsitePages.experience, source.experience),
     blog: mergeSection(defaultWebsitePages.blog, source.blog),
