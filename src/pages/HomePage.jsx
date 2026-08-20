@@ -150,7 +150,7 @@ export default function HomePage() {
           <img
             src={heroPortraitSrc}
             alt={`${profile.name} portrait`}
-            className="absolute inset-y-0 right-0 h-full w-[82%] sm:w-[68%] lg:w-[56%] object-cover object-[center_18%] [mask-image:linear-gradient(to_right,transparent_0%,black_32%,black_100%)] [-webkit-mask-image:linear-gradient(to_right,transparent_0%,black_32%,black_100%)]"
+            className="absolute inset-y-0 right-0 h-full w-[82%] sm:w-[68%] lg:w-[56%] object-cover object-top [mask-image:linear-gradient(to_right,transparent_0%,black_32%,black_100%)] [-webkit-mask-image:linear-gradient(to_right,transparent_0%,black_32%,black_100%)]"
             loading="eager"
           />
           {/* Navy wash from the left, fading onto the portrait */}
