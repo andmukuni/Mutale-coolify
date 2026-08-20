@@ -12,7 +12,18 @@ import {
   verifyAccessCode,
   verifyGuestSessionToken,
 } from './guestTicketService.js';
-import { resolveAttendeeEmail, resolveAttendeePhone } from '../shared/ticketViewModel.js';
+import { isTicketPaymentEligible, resolveAttendeeEmail, resolveAttendeePhone } from '../shared/ticketViewModel.js';
+import {
+  GUEST_JOIN_TOKEN_TYPE,
+  GUEST_SURVEY_TOKEN_TYPE,
+  verifyGuestAccessToken,
+} from '../shared/guestAccessToken.js';
+import {
+  getEventSurveyQuestions,
+  loadSurveyResponse,
+  submitSurveyResponse,
+} from './eventSurveyService.js';
+import { getEventTimeBounds } from '../shared/eventRegistration.js';
 
 function getBearerToken(req) {
   const header = String(req.headers?.authorization || '').trim();
@@ -207,6 +218,8 @@ export function registerGuestTicketRoutes(app, deps) {
         getJoinWindowForEvent: deps.getJoinWindowForEvent,
         isForumVisibleEvent: deps.isForumVisibleEvent,
         mapDbEventSession: deps.mapDbEventSession,
+        signJwtHmacSha256: deps.signJwtHmacSha256,
+        authSecret: deps.AUTH_TOKEN_SECRET,
       });
 
       return res.json({ ok: true, data: portal });
@@ -220,6 +233,19 @@ export function registerGuestTicketRoutes(app, deps) {
       const loaded = await loadRegistrationByReference(deps.pool, req.params.reference);
       if (!loaded.ok) {
         return res.status(loaded.status).json({ ok: false, message: loaded.message });
+      }
+
+      const joinToken = String(req.body?.token || req.query?.token || '').trim();
+      if (joinToken) {
+        const claims = verifyGuestAccessToken(joinToken, {
+          referenceCode: loaded.registration.reference_code,
+          purpose: GUEST_JOIN_TOKEN_TYPE,
+          verifyJwtHmacSha256: deps.verifyJwtHmacSha256,
+          authSecret: deps.AUTH_TOKEN_SECRET,
+        });
+        if (!claims || String(claims.sub) !== String(loaded.registration.id)) {
+          return res.status(403).json({ ok: false, message: 'This guest join link is invalid or has expired.' });
+        }
       }
 
       const result = await performGuestVideoJoinAuth({
@@ -635,6 +661,98 @@ export function registerGuestTicketRoutes(app, deps) {
       });
     } catch (error) {
       return res.status(500).json({ ok: false, message: 'Failed to create forum reply.', error: error.message });
+    }
+  });
+
+  function readGuestAccessToken(req) {
+    return String(req.body?.token || req.query?.token || getBearerToken(req) || '').trim();
+  }
+
+  function assertSurveyToken(req, registration, deps) {
+    const token = readGuestAccessToken(req);
+    if (!token) return { ok: true };
+    const claims = verifyGuestAccessToken(token, {
+      referenceCode: registration.reference_code,
+      purpose: GUEST_SURVEY_TOKEN_TYPE,
+      verifyJwtHmacSha256: deps.verifyJwtHmacSha256,
+      authSecret: deps.AUTH_TOKEN_SECRET,
+    });
+    if (!claims || String(claims.sub) !== String(registration.id)) {
+      return { ok: false, status: 403, message: 'This survey link is invalid or has expired.' };
+    }
+    return { ok: true };
+  }
+
+  app.get('/api/tickets/:reference/survey', rateLimitTicket, async (req, res) => {
+    try {
+      const loaded = await loadRegistrationByReference(deps.pool, req.params.reference);
+      if (!loaded.ok) {
+        return res.status(loaded.status).json({ ok: false, message: loaded.message });
+      }
+      const tokenCheck = assertSurveyToken(req, loaded.registration, deps);
+      if (!tokenCheck.ok) {
+        return res.status(tokenCheck.status).json({ ok: false, message: tokenCheck.message });
+      }
+      if (!isTicketPaymentEligible(loaded.registration)) {
+        return res.status(403).json({ ok: false, message: 'This ticket is not eligible for the survey.' });
+      }
+
+      const existing = await loadSurveyResponse(deps.pool, loaded.registration.id);
+      const ended = Boolean(getEventTimeBounds(loaded.event).end && Date.now() >= getEventTimeBounds(loaded.event).end.getTime());
+
+      return res.json({
+        ok: true,
+        data: {
+          event_title: loaded.event.title,
+          attendee_name: resolveGuestDisplayName(loaded.registration),
+          questions: getEventSurveyQuestions(),
+          submitted: Boolean(existing),
+          answers: existing
+            ? (typeof existing.answers === 'string'
+              ? (() => { try { return JSON.parse(existing.answers || '{}'); } catch { return {}; } })()
+              : existing.answers)
+            : null,
+          can_submit: ended && !existing,
+          message: ended
+            ? (existing ? 'Thank you — your feedback is already recorded.' : '')
+            : 'The survey opens after the event ends.',
+        },
+      });
+    } catch (error) {
+      return res.status(500).json({ ok: false, message: 'Failed to load survey.', error: error.message });
+    }
+  });
+
+  app.post('/api/tickets/:reference/survey', rateLimitTicket, async (req, res) => {
+    try {
+      const loaded = await loadRegistrationByReference(deps.pool, req.params.reference);
+      if (!loaded.ok) {
+        return res.status(loaded.status).json({ ok: false, message: loaded.message });
+      }
+      const tokenCheck = assertSurveyToken(req, loaded.registration, deps);
+      if (!tokenCheck.ok) {
+        return res.status(tokenCheck.status).json({ ok: false, message: tokenCheck.message });
+      }
+      if (!isTicketPaymentEligible(loaded.registration)) {
+        return res.status(403).json({ ok: false, message: 'This ticket is not eligible for the survey.' });
+      }
+      const ended = Boolean(getEventTimeBounds(loaded.event).end && Date.now() >= getEventTimeBounds(loaded.event).end.getTime());
+      if (!ended) {
+        return res.status(403).json({ ok: false, message: 'The survey opens after the event ends.' });
+      }
+
+      const result = await submitSurveyResponse(deps.pool, {
+        eventId: loaded.event.id,
+        registrationId: loaded.registration.id,
+        referenceCode: loaded.registration.reference_code,
+        answers: req.body?.answers || {},
+      });
+      if (!result.ok) {
+        return res.status(result.status || 400).json({ ok: false, message: result.message });
+      }
+      return res.status(201).json({ ok: true, data: { answers: result.answers } });
+    } catch (error) {
+      return res.status(500).json({ ok: false, message: 'Failed to submit survey.', error: error.message });
     }
   });
 }

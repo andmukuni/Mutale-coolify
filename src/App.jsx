@@ -16,6 +16,7 @@ const EventDetailPage = lazy(() => import('./pages/EventDetailPage'));
 const EventRegisterPage = lazy(() => import('./pages/EventRegisterPage'));
 const TicketPage = lazy(() => import('./pages/TicketPage'));
 const GuestTicketJoinPage = lazy(() => import('./pages/GuestTicketJoinPage'));
+const GuestSurveyPage = lazy(() => import('./pages/GuestSurveyPage'));
 const GateCheckInPage = lazy(() => import('./pages/GateCheckInPage'));
 const EventForumPage = lazy(() => import('./pages/EventForumPage'));
 const EventJoinPage = lazy(() => import('./pages/EventJoinPage'));
@@ -170,6 +171,7 @@ export default function App() {
         <Route path="/certificates/verify/:code" element={<CertificateVerifyPage />} />
         <Route path="/tickets/:code" element={<TicketPage />} />
         <Route path="/tickets/:code/join" element={<GuestTicketJoinPage />} />
+        <Route path="/tickets/:code/survey" element={<GuestSurveyPage />} />
         <Route path="/check-in/:code" element={<GateCheckInPage />} />
 
         {/* Public user account routes */}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { CheckCircle2, XCircle, Calendar, MapPin } from 'lucide-react';
+import { CheckCircle2, XCircle, Calendar, MapPin, ClipboardList } from 'lucide-react';
 import { getApiBase } from '../utils/apiBase';
 import TicketDocument from '../../shared/TicketDocument.jsx';
 import TicketSessionsPanel from '../components/TicketSessionsPanel';
@@ -172,7 +172,30 @@ export default function TicketPage() {
               referenceCode={code}
               canJoin={canJoin}
               joinWindow={portal?.join_window}
+              joinUrl={portal?.join_url}
             />
+
+            {(portal?.can_survey || portal?.survey_url) && (
+              <div className="rounded-xl border border-navy-100 bg-white p-4 max-w-md mx-auto">
+                <h3 className="text-sm font-semibold text-navy-900 flex items-center gap-2">
+                  <ClipboardList size={16} />
+                  Event survey
+                </h3>
+                <p className="text-xs text-navy-500 mt-2">
+                  {portal?.can_survey
+                    ? 'Share a few minutes of feedback. Your answers are analyzed to improve future events.'
+                    : 'A feedback survey will open after the event ends.'}
+                </p>
+                <Link
+                  to={portal?.survey_url
+                    ? new URL(portal.survey_url, window.location.origin).pathname + new URL(portal.survey_url, window.location.origin).search
+                    : `/tickets/${encodeURIComponent(code)}/survey`}
+                  className="inline-flex mt-3 text-sm font-medium text-cyan-700 hover:text-cyan-600"
+                >
+                  {portal?.can_survey ? 'Open survey' : 'Preview survey'}
+                </Link>
+              </div>
+            )}
 
             <TicketSessionsPanel
               eventId={ticket.event_id}

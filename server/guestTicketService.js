@@ -6,6 +6,8 @@ import {
   resolveAttendeeName,
   resolveAttendeePhone,
 } from '../shared/ticketViewModel.js';
+import { issueGuestLinkBundle } from '../shared/guestAccessToken.js';
+import { getEventTimeBounds } from '../shared/eventRegistration.js';
 
 const VALID_PAYMENT = new Set(['paid', 'not_required', 'waived']);
 const OTP_TTL_MS = 15 * 60 * 1000;
@@ -146,9 +148,18 @@ export async function buildGuestPortalPayload({
   getJoinWindowForEvent,
   isForumVisibleEvent,
   mapDbEventSession,
+  signJwtHmacSha256,
+  authSecret,
 }) {
   const ref = String(registration.reference_code || '').trim();
   const guestUrl = appOrigin ? `${appOrigin.replace(/\/$/, '')}/tickets/${encodeURIComponent(ref)}` : '';
+  const links = issueGuestLinkBundle({
+    registration,
+    event,
+    origin: appOrigin,
+    signJwtHmacSha256,
+    authSecret,
+  });
   const joinWindow = getJoinWindowForEvent(event);
   const eligible = isTicketPaymentEligible(registration);
   const forumEnabled = isForumVisibleEvent(event);
@@ -186,6 +197,9 @@ export async function buildGuestPortalPayload({
     attendee_phone: resolveAttendeePhone(registration) || null,
     guest_portal_url: guestUrl,
     guest_access_url: guestUrl,
+    join_url: links.join_url,
+    survey_url: links.survey_url,
+    can_survey: eligible && Boolean(getEventTimeBounds(event).end && Date.now() >= getEventTimeBounds(event).end.getTime()),
     valid: eligible,
     can_join: canJoin,
     can_access_forum: forumEnabled && eligible,

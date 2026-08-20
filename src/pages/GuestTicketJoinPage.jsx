@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { AlertCircle, Loader2, Video } from 'lucide-react';
 import DailyIframe from '@daily-co/daily-js';
 import { getApiBase } from '../utils/apiBase';
@@ -11,6 +11,8 @@ const API_BASE = getApiBase();
 
 export default function GuestTicketJoinPage() {
   const { code } = useParams();
+  const [searchParams] = useSearchParams();
+  const joinToken = searchParams.get('token') || '';
   const [loading, setLoading] = useState(false);
   const [joinError, setJoinError] = useState('');
   const [joinNotice, setJoinNotice] = useState('');
@@ -77,7 +79,11 @@ export default function GuestTicketJoinPage() {
     try {
       const response = await fetch(
         `${API_BASE}/tickets/${encodeURIComponent(code || '')}/join-auth`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' },
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: joinToken }),
+        },
       );
       const json = await response.json().catch(() => ({}));
       if (!response.ok || !json?.ok) {

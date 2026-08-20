@@ -19,6 +19,7 @@ import {
   PowerOff,
   FileDown,
   Ticket,
+  ClipboardList,
   CalendarDays,
   IdCard,
   Printer,
@@ -35,6 +36,7 @@ import { useToast } from '../../context/ToastContext';
 import EventProfileSummaryHero from '../../components/admin/event/EventProfileSummaryHero';
 import EventProfileQuickActions from '../../components/admin/event/EventProfileQuickActions';
 import EventTicketsPanel from '../../components/admin/event/EventTicketsPanel';
+import EventSurveyPanel from '../../components/admin/event/EventSurveyPanel';
 import EventSessionsPanel from '../../components/admin/event/EventSessionsPanel';
 import EventForumPanel from '../../components/EventForumPanel';
 import CertificatePreviewModal from '../../components/admin/certificate/CertificatePreviewModal';
@@ -65,6 +67,7 @@ const PROFILE_TABS = [
   { id: 'badges', label: 'Badges', icon: IdCard },
   { id: 'attendees', label: 'Attendees', icon: Users },
   { id: 'tickets', label: 'Tickets', icon: Ticket },
+  { id: 'survey', label: 'Survey', icon: ClipboardList },
   { id: 'forum', label: 'Forum', icon: MessageSquare },
   { id: 'marketing', label: 'Marketing', icon: Percent },
   { id: 'activity', label: 'Activity', icon: Activity },
@@ -1124,6 +1127,15 @@ export default function EventProfilePage() {
       >
         <EventSessionsPanel eventId={event.id} event={event} />
       </FeedCard>
+          )}
+
+          {activeTab === 'survey' && (
+            <FeedCard
+              title="Guest survey"
+              subtitle="Post-event feedback with AI analysis of themes, sentiment, and improvements."
+            >
+              <EventSurveyPanel eventId={event.id} />
+            </FeedCard>
           )}
 
           {activeTab === 'forum' && showForumTab && (

@@ -70,6 +70,11 @@ import {
   willSendTicketNotifications,
 } from './ticketService.js';
 import { registerGuestTicketRoutes } from './guestTicketRoutes.js';
+import {
+  analyzeEventSurveyWithAI,
+  ensureEventSurveySchema,
+  listEventSurveyResults,
+} from './eventSurveyService.js';
 import { registerNotificationTemplateRoutes } from './notificationTemplateRoutes.js';
 import { applyNotificationTemplates, seedSystemNotificationTemplates } from './notificationTemplateService.js';
 import { buildPersonTemplateVars } from '../shared/notificationTemplates.js';
@@ -2835,6 +2840,8 @@ async function dispatchTicketEmailsForRows({
         appOrigin,
         pool,
         buyerPhone,
+        signJwtHmacSha256,
+        authSecret: AUTH_TOKEN_SECRET,
       });
       if (result?.status === 'sent') {
         console.log(`[ticket] ✓ Sent ${result.sentCount || 0} ticket email(s) for ${registration.reference_code || registration.id}`);
@@ -2854,6 +2861,8 @@ async function dispatchTicketEmailsForRows({
         smsTo: buyerPhone,
         recipientEmail: buyerEmail || registration.user_email,
         recipientName: buyerName || registration.user_name,
+        signJwtHmacSha256,
+        authSecret: AUTH_TOKEN_SECRET,
       });
       if (confirmResult?.status === 'sent') {
         console.log(`[registration] ✓ Confirmation email/SMS sent for ${registration.reference_code || registration.id}`);
@@ -4423,13 +4432,13 @@ async function ensureSchema() {
 
   // Backward-compatible migration: add whatsapp and user_type to users table.
   for (const [col, def] of [['whatsapp', 'VARCHAR(60)'], ['user_type', "VARCHAR(30) DEFAULT 'local'"]]) {
-    try { await pool.query(`ALTER TABLE users ADD COLUMN ${col} ${def}`); } catch (e) { if (e?.code !== 'ER_DUP_FIELDNAME') throw e; }
+    try { await pool.query(`ALTER TABLE users ADD COLUMN ${col} ${def}`); } catch (e) { if (e?.code !== 'ER_DUP_FIELDNAME' && e?.code !== 'ER_NO_SUCH_TABLE') throw e; }
   }
 
   try {
     await pool.query('ALTER TABLE users ADD COLUMN profile_photo VARCHAR(500) NULL');
   } catch (e) {
-    if (e?.code !== 'ER_DUP_FIELDNAME') throw e;
+    if (e?.code !== 'ER_DUP_FIELDNAME' && e?.code !== 'ER_NO_SUCH_TABLE') throw e;
   }
 
   await pool.query(`
@@ -5134,6 +5143,8 @@ async function ensureSchema() {
       INDEX idx_users_password_reset_token_hash (password_reset_token_hash)
     )
   `);
+
+  await ensureEventSurveySchema(pool);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS event_chat_sessions (
@@ -7483,6 +7494,8 @@ async function createSiteChatSelfRegistration(req, authUser, event, extras = {})
       appOrigin: resolvePublicAppUrl(req),
       pool,
       buyerPhone: String(authUser.phone || authUser.whatsapp || '').trim(),
+      signJwtHmacSha256,
+      authSecret: AUTH_TOKEN_SECRET,
     });
     await sendRegistrationConfirmationIfNeeded({
       registration: mapped,
@@ -7493,6 +7506,8 @@ async function createSiteChatSelfRegistration(req, authUser, event, extras = {})
       smsTo: String(authUser.phone || authUser.whatsapp || '').trim(),
       recipientEmail: String(authUser.email || mapped.user_email || '').trim(),
       recipientName: String(authUser.name || mapped.user_name || '').trim(),
+      signJwtHmacSha256,
+      authSecret: AUTH_TOKEN_SECRET,
     });
   } catch (error) {
     console.warn('[site-chat] ticket email failed:', error.message);
@@ -10997,6 +11012,8 @@ app.patch('/api/registrations/:id', async (req, res) => {
             appRoot: __appRoot,
             appOrigin: resolvePublicAppUrl(req),
             pool,
+            signJwtHmacSha256,
+            authSecret: AUTH_TOKEN_SECRET,
           });
         } catch (receiptErr) {
           console.warn('[registration] Receipt/ticket email failed:', receiptErr.message);
@@ -11070,6 +11087,8 @@ app.patch('/api/registrations/:id', async (req, res) => {
           appRoot: __appRoot,
           appOrigin: resolvePublicAppUrl(req),
           pool,
+          signJwtHmacSha256,
+          authSecret: AUTH_TOKEN_SECRET,
         });
       } catch (receiptErr) {
         console.warn('[registration] Receipt/ticket email failed:', receiptErr.message);
@@ -14710,6 +14729,9 @@ async function runEventLifecycleJob() {
     const summary = await processEventLifecycleNotifications(pool, {
       getSystemSettings,
       sendEmailNotification,
+      appOrigin: resolvePublicAppUrl(),
+      signJwtHmacSha256,
+      authSecret: AUTH_TOKEN_SECRET,
     });
     console.log('[event-lifecycle] scheduled job:', summary);
   } catch (error) {
@@ -15196,6 +15218,44 @@ app.post('/api/admin/events/:eventId/badge-template/publish', async (req, res) =
     return res.json({ ok: true, data: result.template });
   } catch (error) {
     return res.status(500).json({ ok: false, message: 'Failed to publish badge template.', error: error.message });
+  }
+});
+
+app.get('/api/admin/events/:eventId/survey', async (req, res) => {
+  const auth = getAdminAuth(req);
+  if (!auth.ok) return sendAuthFailure(res, auth);
+  try {
+    const eventId = String(req.params.eventId || '').trim();
+    const [[event]] = await pool.query('SELECT * FROM events WHERE id = ? LIMIT 1', [eventId]);
+    if (!event) return res.status(404).json({ ok: false, message: 'Event not found.' });
+    const data = await listEventSurveyResults(pool, eventId);
+    return res.json({ ok: true, data });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: 'Failed to load survey results.', error: error.message });
+  }
+});
+
+app.post('/api/admin/events/:eventId/survey/analyze', async (req, res) => {
+  const auth = getAdminAuth(req);
+  if (!auth.ok) return sendAuthFailure(res, auth);
+  try {
+    const eventId = String(req.params.eventId || '').trim();
+    const [[event]] = await pool.query('SELECT * FROM events WHERE id = ? LIMIT 1', [eventId]);
+    if (!event) return res.status(404).json({ ok: false, message: 'Event not found.' });
+    const settings = await getSystemSettings();
+    const openai = getOpenAIChatConfig(settings);
+    const result = await analyzeEventSurveyWithAI({
+      pool,
+      event,
+      apiKey: openai.apiKey,
+      model: openai.model,
+    });
+    if (!result.ok) {
+      return res.status(result.status || 400).json({ ok: false, message: result.message });
+    }
+    return res.json({ ok: true, data: result.analysis });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: 'Failed to analyze survey results.', error: error.message });
   }
 });
 

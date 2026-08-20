@@ -11,6 +11,8 @@ export const TEMPLATE_PLACEHOLDERS = [
   { key: 'thank_you', label: 'Thank-you line with first name' },
   { key: 'event_title', label: 'Event title' },
   { key: 'ticket_url', label: 'Ticket link' },
+  { key: 'join_url', label: 'Guest meeting join link (includes access token)' },
+  { key: 'survey_url', label: 'Post-event survey link (includes access token)' },
   { key: 'event_url', label: 'Event page link' },
   { key: 'reference', label: 'Ticket / payment reference' },
   { key: 'verify_url', label: 'Email confirmation link' },
@@ -29,6 +31,8 @@ export const SAMPLE_TEMPLATE_VARS = {
   thank_you: 'Thank you, Andrew.',
   event_title: 'Navigating the Hidden Sorrows of Leading',
   ticket_url: 'https://mutalemubanga.org/tickets/REG-DEMO',
+  join_url: 'https://mutalemubanga.org/tickets/REG-DEMO/join?token=demo',
+  survey_url: 'https://mutalemubanga.org/tickets/REG-DEMO/survey?token=demo',
   event_url: 'https://mutalemubanga.org/events/demo',
   reference: 'REG-DEMO',
   verify_url: 'https://mutalemubanga.org/verify-email?token=demo',
@@ -48,7 +52,7 @@ export const SYSTEM_NOTIFICATION_TEMPLATES = [
     name: 'Entry ticket',
     description: 'Sent with a paid or complimentary event ticket.',
     subject: '',
-    body: '{{thank_you}} {{event_title}}. View your ticket here: {{ticket_url}}',
+    body: '{{thank_you}} {{event_title}}. Join with your guest token: {{join_url}}',
   },
   {
     slug: 'ticket',
@@ -56,7 +60,7 @@ export const SYSTEM_NOTIFICATION_TEMPLATES = [
     name: 'Entry ticket',
     description: 'Email subject and text for the attendee ticket.',
     subject: 'Your entry ticket: {{event_title}}',
-    body: 'Hi {{first_name}},\n\nYour entry ticket for "{{event_title}}" is ready.\nView your ticket and join live: {{ticket_url}}\nShow the QR code at the gate for entry.\nReference: {{reference}}',
+    body: 'Hi {{first_name}},\n\nYour entry ticket for "{{event_title}}" is ready.\nView your ticket: {{ticket_url}}\nJoin the meeting with your guest token: {{join_url}}\nShow the QR code at the gate for entry.\nReference: {{reference}}',
   },
   {
     slug: 'ticket_buyer',
@@ -64,7 +68,7 @@ export const SYSTEM_NOTIFICATION_TEMPLATES = [
     name: 'Ticket copy (purchaser)',
     description: 'SMS copy sent to the person who bought guest tickets.',
     subject: '',
-    body: '{{thank_you}} {{event_title}}. View your ticket here: {{ticket_url}}',
+    body: '{{thank_you}} {{event_title}}. Guest join link: {{join_url}}',
   },
   {
     slug: 'ticket_buyer',
@@ -72,7 +76,7 @@ export const SYSTEM_NOTIFICATION_TEMPLATES = [
     name: 'Ticket copy (purchaser)',
     description: 'Email copy sent to the purchaser when tickets are issued.',
     subject: 'Ticket copy: {{event_title}}',
-    body: 'Hi {{first_name}},\n\nHere is your copy of the entry ticket.\nView ticket online: {{ticket_url}}\nShow the QR code at the gate for entry.\nReference: {{reference}}',
+    body: 'Hi {{first_name}},\n\nHere is your copy of the entry ticket.\nView ticket online: {{ticket_url}}\nGuest join link: {{join_url}}\nShow the QR code at the gate for entry.\nReference: {{reference}}',
   },
   {
     slug: 'registration',
@@ -80,7 +84,7 @@ export const SYSTEM_NOTIFICATION_TEMPLATES = [
     name: 'Registration confirmed',
     description: 'Sent when an event registration is confirmed.',
     subject: '',
-    body: 'Registration confirmed: {{event_title}}. Ref: {{reference}} {{ticket_url}}',
+    body: 'Registration confirmed: {{event_title}}. Ref: {{reference}} {{join_url}}'
   },
   {
     slug: 'registration',
@@ -88,7 +92,7 @@ export const SYSTEM_NOTIFICATION_TEMPLATES = [
     name: 'Registration confirmed',
     description: 'Email subject for registration confirmation.',
     subject: 'Registration Confirmed: {{event_title}}',
-    body: 'Hi {{first_name}},\n\nYour registration for "{{event_title}}" is confirmed.\nReference: {{reference}}\nView your ticket: {{ticket_url}}',
+    body: 'Hi {{first_name}},\n\nYour registration for "{{event_title}}" is confirmed.\nReference: {{reference}}\nView your ticket: {{ticket_url}}\nJoin with your guest token: {{join_url}}'
   },
   {
     slug: 'receipt',
@@ -128,7 +132,7 @@ export const SYSTEM_NOTIFICATION_TEMPLATES = [
     name: 'Event starting soon',
     description: 'SMS sent 15 minutes before the event starts.',
     subject: '',
-    body: '{{event_title}} starts in 15 minutes. {{ticket_url}}',
+    body: '{{event_title}} starts in 15 minutes. Join: {{join_url}}'
   },
   {
     slug: 'event_starting_soon',
@@ -136,7 +140,7 @@ export const SYSTEM_NOTIFICATION_TEMPLATES = [
     name: 'Event starting soon',
     description: 'Email sent 15 minutes before the event starts.',
     subject: '{{event_title}} starts in 15 minutes',
-    body: 'Hi {{first_name}},\n\n"{{event_title}}" starts in 15 minutes.\nYour ticket: {{ticket_url}}\nEvent page: {{event_url}}',
+    body: 'Hi {{first_name}},\n\n"{{event_title}}" starts in 15 minutes.\nJoin with your guest token: {{join_url}}\nYour ticket: {{ticket_url}}\nEvent page: {{event_url}}'
   },
   {
     slug: 'event_started',
@@ -144,7 +148,7 @@ export const SYSTEM_NOTIFICATION_TEMPLATES = [
     name: 'Event started',
     description: 'Sent when a live event starts.',
     subject: '',
-    body: '{{event_title}} has started. {{ticket_url}}',
+    body: '{{event_title}} has started. Join: {{join_url}}'
   },
   {
     slug: 'event_started',
@@ -152,7 +156,7 @@ export const SYSTEM_NOTIFICATION_TEMPLATES = [
     name: 'Event started',
     description: 'Email when a live event starts.',
     subject: '{{event_title}} has started',
-    body: 'Hi {{first_name}},\n\n"{{event_title}}" has started.\nYour ticket: {{ticket_url}}\nEvent page: {{event_url}}',
+    body: 'Hi {{first_name}},\n\n"{{event_title}}" has started.\nJoin with your guest token: {{join_url}}\nYour ticket: {{ticket_url}}\nEvent page: {{event_url}}'
   },
   {
     slug: 'event_ended',
@@ -160,7 +164,7 @@ export const SYSTEM_NOTIFICATION_TEMPLATES = [
     name: 'Event ended',
     description: 'Sent after an event ends.',
     subject: '',
-    body: '{{event_title}} has ended. Thank you for attending. {{ticket_url}}',
+    body: '{{event_title}} has ended. Please share feedback: {{survey_url}}'
   },
   {
     slug: 'event_ended',
@@ -168,7 +172,7 @@ export const SYSTEM_NOTIFICATION_TEMPLATES = [
     name: 'Event ended',
     description: 'Email after an event ends.',
     subject: 'Thank you for attending {{event_title}}',
-    body: 'Hi {{first_name}},\n\n"{{event_title}}" has now ended. Thank you for attending.\nYour ticket and any certificates: {{ticket_url}}',
+    body: 'Hi {{first_name}},\n\n"{{event_title}}" has now ended. Thank you for attending.\nPlease complete this short survey: {{survey_url}}\nYour ticket and any certificates: {{ticket_url}}'
   },
   {
     slug: 'verify_email',

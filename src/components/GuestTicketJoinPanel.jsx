@@ -5,9 +5,30 @@ import { getApiBase } from '../utils/apiBase';
 
 const API_BASE = getApiBase();
 
-export default function GuestTicketJoinPanel({ referenceCode, canJoin, joinWindow }) {
+function toAppPath(url, fallback) {
+  if (!url) return fallback;
+  try {
+    const parsed = new URL(url, window.location.origin);
+    return `${parsed.pathname}${parsed.search}`;
+  } catch {
+    return fallback;
+  }
+}
+
+function tokenFromUrl(url) {
+  if (!url) return '';
+  try {
+    return new URL(url, window.location.origin).searchParams.get('token') || '';
+  } catch {
+    return '';
+  }
+}
+
+export default function GuestTicketJoinPanel({ referenceCode, canJoin, joinWindow, joinUrl }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const fallbackPath = `/tickets/${encodeURIComponent(referenceCode || '')}/join`;
+  const joinPath = toAppPath(joinUrl, fallbackPath);
 
   if (!referenceCode || !canJoin) {
     const reason = joinWindow?.reason || 'Live join is not available for this ticket right now.';
@@ -28,17 +49,21 @@ export default function GuestTicketJoinPanel({ referenceCode, canJoin, joinWindo
     try {
       const res = await fetch(
         `${API_BASE}/tickets/${encodeURIComponent(referenceCode)}/join-auth`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' },
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: tokenFromUrl(joinUrl) }),
+        },
       );
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json?.ok) throw new Error(json?.message || 'Could not join meeting.');
 
-      const joinUrl = String(json?.auth?.joinUrl || json?.auth?.roomUrl || '').trim();
-      if (joinUrl) {
-        window.open(joinUrl, '_blank', 'noopener,noreferrer');
+      const meetingUrl = String(json?.auth?.joinUrl || json?.auth?.roomUrl || '').trim();
+      if (meetingUrl) {
+        window.open(meetingUrl, '_blank', 'noopener,noreferrer');
         return;
       }
-      window.location.href = `/tickets/${encodeURIComponent(referenceCode)}/join`;
+      window.location.href = joinPath;
     } catch (err) {
       setError(err?.message || 'Could not join meeting.');
     } finally {
@@ -64,7 +89,7 @@ export default function GuestTicketJoinPanel({ referenceCode, canJoin, joinWindo
           Join meeting
         </button>
         <Link
-          to={`/tickets/${encodeURIComponent(referenceCode)}/join`}
+          to={joinPath}
           className="inline-flex items-center gap-1 px-3 py-2 text-sm text-cyan-700 hover:text-cyan-600"
         >
           <ExternalLink size={14} />

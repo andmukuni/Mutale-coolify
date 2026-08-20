@@ -33,11 +33,12 @@ describe('notification templates', () => {
         thank_you: 'Thank you, Andrew.',
         event_title: 'Navigating the Hidden Sorrows of Leading',
         ticket_url: 'https://mutalemubanga.org/tickets/REG-1',
+        join_url: 'https://mutalemubanga.org/tickets/REG-1/join?token=demo',
       },
       smsMessage: 'fallback',
     });
     expect(applied.smsMessage).toBe(
-      'Thank you, Andrew. Navigating the Hidden Sorrows of Leading. View your ticket here: https://mutalemubanga.org/tickets/REG-1',
+      'Thank you, Andrew. Navigating the Hidden Sorrows of Leading. Join with your guest token: https://mutalemubanga.org/tickets/REG-1/join?token=demo',
     );
   });
 

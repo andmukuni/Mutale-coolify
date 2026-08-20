@@ -66,7 +66,7 @@ describe('buildTicketSmsMessage', () => {
       event: { title: 'Navigating the Hidden Sorrows of Leading' },
       ticketUrl: 'https://mutalemubanga.org/tickets/REG-1',
     })).toBe(
-      'Thank you, Andrew. Navigating the Hidden Sorrows of Leading. View your ticket here: https://mutalemubanga.org/tickets/REG-1',
+      'Thank you, Andrew. Navigating the Hidden Sorrows of Leading. Join with your guest token: https://mutalemubanga.org/tickets/REG-1',
     );
   });
 
@@ -74,7 +74,7 @@ describe('buildTicketSmsMessage', () => {
     expect(buildTicketSmsMessage({
       event: { title: 'Summit' },
       ticketUrl: 'https://example.com/tickets/MM-1',
-    })).toBe('Thank you. Summit. View your ticket here: https://example.com/tickets/MM-1');
+    })).toBe('Thank you. Summit. Join with your guest token: https://example.com/tickets/MM-1');
   });
 });
 
@@ -155,7 +155,7 @@ describe('sendTicketEmailsForRegistration', () => {
     expect(result.status).toBe('sent');
     expect(sendEmailNotification).toHaveBeenCalledTimes(2);
     expect(sendEmailNotification.mock.calls[0][0].smsMessage).toBe(
-      'Thank you, Buyer. Summit. View your ticket here: https://example.com/tickets/MM-TKT-1',
+      'Thank you, Buyer. Summit. Join with your guest token: https://example.com/tickets/MM-TKT-1/join',
     );
     expect(sendEmailNotification.mock.calls[1][0].skipSms).toBeFalsy();
     expect(pool.query).toHaveBeenCalledWith(
@@ -192,6 +192,31 @@ describe('sendTicketEmailsForRegistration', () => {
     expect(sendEmailNotification).toHaveBeenCalledTimes(2);
     expect(sendEmailNotification.mock.calls[0][0].skipSms).toBeFalsy();
     expect(sendEmailNotification.mock.calls[1][0].skipSms).toBe(true);
+  });
+
+  it('puts a signed guest join token on the meeting link', async () => {
+    const result = await sendTicketEmailsForRegistration({
+      registration: {
+        id: 'reg-token',
+        reference_code: 'MM-TKT-TOKEN',
+        payment_status: 'paid',
+        user_email: 'buyer@example.com',
+        user_name: 'Buyer',
+        attendee_slot_key: '__self__',
+      },
+      event: inPersonEvent,
+      settings,
+      sendEmailNotification,
+      appRoot,
+      appOrigin: 'https://example.com',
+      signJwtHmacSha256: (payload) => `signed.${Buffer.from(JSON.stringify(payload)).toString('base64url')}`,
+      authSecret: 'secret',
+    });
+    expect(result.status).toBe('sent');
+    const sms = sendEmailNotification.mock.calls[0][0].smsMessage;
+    const text = sendEmailNotification.mock.calls[0][0].text;
+    expect(sms).toMatch(/\/tickets\/MM-TKT-TOKEN\/join\?token=/);
+    expect(text).toMatch(/\/tickets\/MM-TKT-TOKEN\/join\?token=/);
   });
 
   it('dedupes when guest email equals buyer email', async () => {

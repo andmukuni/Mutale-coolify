@@ -11,6 +11,7 @@ import {
 } from '../shared/notificationTemplates.js';
 import { applyNotificationTemplates } from './notificationTemplateService.js';
 import { uniqueSmsRecipients } from './emailSmsCompanion.js';
+import { issueGuestLinkBundle } from '../shared/guestAccessToken.js';
 
 export { formatFirstNameSentenceCase };
 
@@ -20,13 +21,22 @@ function normalizeEmail(value = '') {
   return email;
 }
 
-function ticketTemplateVars({ registration = {}, event = {}, ticketUrl = '', recipientName = '' } = {}) {
+function ticketTemplateVars({
+  registration = {},
+  event = {},
+  ticketUrl = '',
+  joinUrl = '',
+  surveyUrl = '',
+  recipientName = '',
+} = {}) {
   const purchaserName = String(registration.user_name || recipientName || '').trim();
   const eventTitle = String(event.title || registration.event_title || '').trim().replace(/\.+$/, '');
   return {
     ...buildPersonTemplateVars(purchaserName),
     event_title: eventTitle,
     ticket_url: String(ticketUrl || '').trim(),
+    join_url: String(joinUrl || ticketUrl || '').trim(),
+    survey_url: String(surveyUrl || '').trim(),
     reference: String(registration.reference_code || '').trim(),
   };
 }
@@ -35,12 +45,15 @@ export function buildTicketSmsMessage({
   registration = {},
   event = {},
   ticketUrl = '',
+  joinUrl = '',
 } = {}) {
-  const vars = ticketTemplateVars({ registration, event, ticketUrl });
+  const vars = ticketTemplateVars({ registration, event, ticketUrl, joinUrl });
   const catalog = getSystemTemplate('ticket', 'sms');
   if (catalog?.body) return renderTemplate(catalog.body, vars);
   const titlePart = vars.event_title ? `${vars.event_title}.` : '';
-  const linkPart = vars.ticket_url ? `View your ticket here: ${vars.ticket_url}` : '';
+  const linkPart = vars.join_url
+    ? `Join with your guest token: ${vars.join_url}`
+    : (vars.ticket_url ? `View your ticket here: ${vars.ticket_url}` : '');
   return [vars.thank_you || buildThankYouLine(registration.user_name), titlePart, linkPart].filter(Boolean).join(' ');
 }
 
@@ -50,6 +63,7 @@ export function buildTicketEmailCopy({
   recipientName = 'there',
   role = 'attendee',
   appOrigin = '',
+  joinUrl = '',
 } = {}) {
   const eventTitle = String(event.title || registration.event_title || 'Event').trim();
   const attendeeName = resolveAttendeeName(registration);
@@ -57,6 +71,7 @@ export function buildTicketEmailCopy({
   const ticketUrl = appOrigin && refCode
     ? `${String(appOrigin).replace(/\/$/, '')}/tickets/${encodeURIComponent(refCode)}`
     : '';
+  const liveJoinUrl = String(joinUrl || '').trim();
 
   if (role === 'buyer_copy') {
     const forLabel = isGuestTicket(registration) ? attendeeName : 'you';
@@ -64,10 +79,12 @@ export function buildTicketEmailCopy({
       subject: `Ticket copy: ${eventTitle} (${forLabel})`,
       previewText: `Your ticket copy for ${eventTitle}.`,
       ticketUrl,
+      joinUrl: liveJoinUrl,
       greeting: `Hi ${recipientName || 'there'},`,
       introLines: [
         `Here is your copy of the entry ticket for ${forLabel === 'you' ? 'your registration' : forLabel}.`,
         ticketUrl ? `View ticket online: ${ticketUrl}` : '',
+        liveJoinUrl ? `Guest join link (includes access token): ${liveJoinUrl}` : '',
         'Show the QR code at the gate for entry.',
         refCode ? `Reference: ${refCode}` : '',
       ].filter(Boolean),
@@ -78,10 +95,12 @@ export function buildTicketEmailCopy({
     subject: `Your entry ticket: ${eventTitle}`,
     previewText: `Your entry ticket for ${eventTitle}.`,
     ticketUrl,
+    joinUrl: liveJoinUrl,
     greeting: `Hi ${recipientName || attendeeName || 'there'},`,
     introLines: [
       `Your entry ticket for "${eventTitle}" is ready.`,
-      ticketUrl ? `View your ticket and join live: ${ticketUrl}` : '',
+      ticketUrl ? `View your ticket: ${ticketUrl}` : '',
+      liveJoinUrl ? `Join the meeting with your guest token: ${liveJoinUrl}` : '',
       'Show the QR code at the gate for entry.',
       refCode ? `Reference: ${refCode}` : '',
     ].filter(Boolean),
@@ -124,6 +143,8 @@ export async function sendRegistrationConfirmationIfNeeded({
   smsTo = '',
   recipientEmail = '',
   recipientName = '',
+  signJwtHmacSha256,
+  authSecret,
 } = {}) {
   const row = withBuyerPhone(registration, smsTo);
   if (!shouldSendRegistrationSms({ registration: row, event })) {
@@ -141,9 +162,17 @@ export async function sendRegistrationConfirmationIfNeeded({
   const eventUrl = event.slug && origin
     ? `${origin}/events/${encodeURIComponent(event.slug)}`
     : origin;
-  const ticketUrl = refCode && origin
+  const links = issueGuestLinkBundle({
+    registration: row,
+    event,
+    origin,
+    signJwtHmacSha256,
+    authSecret,
+  });
+  const ticketUrl = links.ticket_url || (refCode && origin
     ? `${origin}/tickets/${encodeURIComponent(refCode)}`
-    : eventUrl;
+    : eventUrl);
+  const joinUrl = links.join_url;
   const name = String(recipientName || row.user_name || '').trim() || 'there';
   const phone = String(smsTo || row.user_phone || resolveAttendeePhone(row) || '').trim();
 
@@ -156,13 +185,14 @@ export async function sendRegistrationConfirmationIfNeeded({
       '',
       `Thank you for registering for "${eventTitle}"! Your registration is confirmed.`,
       refCode ? `Reference: ${refCode}` : '',
-      ticketUrl ? `View: ${ticketUrl}` : '',
+      ticketUrl ? `View your ticket: ${ticketUrl}` : '',
+      joinUrl ? `Join with your guest token: ${joinUrl}` : '',
     ].filter(Boolean).join('\n'),
     smsTo: phone,
     smsMessage: [
       `Registration confirmed: ${eventTitle}.`,
       refCode ? `Ref: ${refCode}` : '',
-      ticketUrl,
+      joinUrl || ticketUrl,
     ].filter(Boolean).join(' '),
     kind: 'registration',
     skipSms: false,
@@ -172,6 +202,7 @@ export async function sendRegistrationConfirmationIfNeeded({
       event_title: eventTitle,
       reference: refCode,
       ticket_url: ticketUrl || eventUrl,
+      join_url: joinUrl,
       event_url: eventUrl,
     },
   });
@@ -236,13 +267,29 @@ export async function sendTicketEmail({
   appOrigin = '',
   pool = null,
   skipSms = false,
+  signJwtHmacSha256,
+  authSecret,
 }) {
   const recipient = normalizeEmail(to);
   if (!recipient) {
     return { status: 'skipped', reason: 'No valid recipient email.' };
   }
 
-  const copy = buildTicketEmailCopy({ registration, event, recipientName, role, appOrigin });
+  const links = issueGuestLinkBundle({
+    registration,
+    event,
+    origin: appOrigin,
+    signJwtHmacSha256,
+    authSecret,
+  });
+  const copy = buildTicketEmailCopy({
+    registration,
+    event,
+    recipientName,
+    role,
+    appOrigin,
+    joinUrl: links.join_url,
+  });
   const logoDataUrl = await loadReceiptLogoDataUrl(appRoot);
   const viewModel = await buildTicketViewModel({
     registration,
@@ -282,15 +329,23 @@ export async function sendTicketEmail({
   const smsTo = role === 'buyer_copy'
     ? String(registration.user_phone || resolveAttendeePhone(registration) || '').trim()
     : resolveAttendeePhone(registration);
-  const ticketUrl = String(copy.ticketUrl || '').trim();
+  const ticketUrl = String(copy.ticketUrl || links.ticket_url || '').trim();
+  const joinUrl = String(copy.joinUrl || links.join_url || '').trim();
   const slug = role === 'buyer_copy' ? 'ticket_buyer' : 'ticket';
-  const vars = ticketTemplateVars({ registration, event, ticketUrl, recipientName });
+  const vars = ticketTemplateVars({
+    registration,
+    event,
+    ticketUrl,
+    joinUrl,
+    surveyUrl: links.survey_url,
+    recipientName,
+  });
   const applied = await applyNotificationTemplates(pool, {
     slug,
     vars,
     subject: copy.subject,
     text,
-    smsMessage: buildTicketSmsMessage({ registration, event, ticketUrl }),
+    smsMessage: buildTicketSmsMessage({ registration, event, ticketUrl, joinUrl }),
   });
   const result = await sendEmailNotification({
     settings,
@@ -327,6 +382,8 @@ export async function sendTicketEmailsForRegistration({
   pool = null,
   skipIdempotencyCheck = false,
   buyerPhone = '',
+  signJwtHmacSha256,
+  authSecret,
 }) {
   const row = withBuyerPhone(registration, buyerPhone);
   if (!isTicketPaymentEligible(row)) {
@@ -376,6 +433,8 @@ export async function sendTicketEmailsForRegistration({
       appRoot,
       appOrigin,
       pool,
+      signJwtHmacSha256,
+      authSecret,
     }));
   }
 
@@ -392,6 +451,8 @@ export async function sendTicketEmailsForRegistration({
       appOrigin,
       pool,
       skipSms: Boolean(guestEmailResolved && sameTicketSmsPhone),
+      signJwtHmacSha256,
+      authSecret,
     }));
   } else if (buyerEmail && !guestEmailResolved) {
     sends.push(sendTicketEmail({
@@ -405,6 +466,8 @@ export async function sendTicketEmailsForRegistration({
       appRoot,
       appOrigin,
       pool,
+      signJwtHmacSha256,
+      authSecret,
     }));
   } else if (!guestEmailResolved && !buyerEmail) {
     return { status: 'skipped', reason: 'No recipient email.' };
@@ -436,6 +499,8 @@ export async function maybeSendTicketEmailsOnSettlement({
   appOrigin = '',
   pool = null,
   buyerPhone = '',
+  signJwtHmacSha256,
+  authSecret,
 }) {
   return sendTicketEmailsForRegistration({
     registration,
@@ -446,6 +511,8 @@ export async function maybeSendTicketEmailsOnSettlement({
     appOrigin,
     pool,
     buyerPhone,
+    signJwtHmacSha256,
+    authSecret,
   });
 }
 

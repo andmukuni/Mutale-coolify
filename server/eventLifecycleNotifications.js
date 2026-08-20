@@ -7,6 +7,7 @@ import {
 } from '../shared/ticketViewModel.js';
 import { buildPersonTemplateVars } from '../shared/notificationTemplates.js';
 import { resolvePublicAppUrl } from './publicAppUrl.js';
+import { issueGuestLinkBundle } from '../shared/guestAccessToken.js';
 
 export const LIFECYCLE_LOOKBACK_MS = 48 * 60 * 60 * 1000;
 export const REMINDER_LEAD_MS = 15 * 60 * 1000;
@@ -75,19 +76,32 @@ function formatWhen(event = {}) {
   return [date, time, zone].filter(Boolean).join(' · ');
 }
 
-export function buildLifecycleMessages({ event = {}, registration = {}, kind, appOrigin } = {}) {
+export function buildLifecycleMessages({
+  event = {},
+  registration = {},
+  kind,
+  appOrigin,
+  signJwtHmacSha256,
+  authSecret,
+} = {}) {
   const name = resolveAttendeeName(registration);
   const title = String(event.title || 'the event').trim();
   const origin = String(appOrigin || resolveAppOrigin()).replace(/\/$/, '');
   const eventUrl = event.slug
     ? `${origin}/events/${encodeURIComponent(event.slug)}`
     : origin;
-  const ref = String(registration.reference_code || '').trim();
-  const ticketUrl = ref && origin
-    ? `${origin}/tickets/${encodeURIComponent(ref)}`
-    : '';
+  const links = issueGuestLinkBundle({
+    registration,
+    event,
+    origin,
+    signJwtHmacSha256,
+    authSecret,
+  });
+  const ticketUrl = links.ticket_url;
+  const joinUrl = links.join_url;
+  const surveyUrl = links.survey_url;
   const when = formatWhen(event);
-  const link = ticketUrl || eventUrl;
+  const link = (kind === LIFECYCLE_KINDS.ended ? surveyUrl : joinUrl) || ticketUrl || eventUrl;
 
   let subject;
   let text;
@@ -101,6 +115,7 @@ export function buildLifecycleMessages({ event = {}, registration = {}, kind, ap
       `"${title}" starts in 15 minutes.`,
       when ? `Schedule: ${when}` : '',
       '',
+      joinUrl ? `Join with your guest token: ${joinUrl}` : '',
       ticketUrl ? `Your ticket: ${ticketUrl}` : '',
       eventUrl ? `Event page: ${eventUrl}` : '',
       '',
@@ -117,6 +132,7 @@ export function buildLifecycleMessages({ event = {}, registration = {}, kind, ap
       `"${title}" has started.`,
       when ? `Schedule: ${when}` : '',
       '',
+      joinUrl ? `Join with your guest token: ${joinUrl}` : '',
       ticketUrl ? `Your ticket: ${ticketUrl}` : '',
       eventUrl ? `Event page: ${eventUrl}` : '',
       '',
@@ -133,12 +149,13 @@ export function buildLifecycleMessages({ event = {}, registration = {}, kind, ap
       `"${title}" has now ended. Thank you for attending.`,
       when ? `Schedule: ${when}` : '',
       '',
+      surveyUrl ? `Please complete this short survey: ${surveyUrl}` : '',
       ticketUrl ? `Your ticket and any certificates: ${ticketUrl}` : (eventUrl ? `Event page: ${eventUrl}` : ''),
       '',
       'Best regards,',
       'Mutale Mubanga',
     ].filter(Boolean).join('\n');
-    smsMessage = [`${title} has ended. Thank you for attending.`, link].filter(Boolean).join(' ');
+    smsMessage = [`${title} has ended. Please share feedback:`, link].filter(Boolean).join(' ');
   }
 
   return {
@@ -149,6 +166,8 @@ export function buildLifecycleMessages({ event = {}, registration = {}, kind, ap
     to: resolveAttendeeEmail(registration),
     eventUrl,
     ticketUrl,
+    joinUrl,
+    surveyUrl,
   };
 }
 
@@ -186,6 +205,8 @@ export async function processEventLifecycleNotifications(pool, deps = {}, now = 
     getSystemSettings,
     sendEmailNotification,
     appOrigin = resolveAppOrigin(),
+    signJwtHmacSha256,
+    authSecret,
   } = deps;
   const summary = {
     startingSoon: 0,
@@ -221,7 +242,14 @@ export async function processEventLifecycleNotifications(pool, deps = {}, now = 
             summary.skipped += 1;
             continue;
           }
-          const message = buildLifecycleMessages({ event, registration, kind, appOrigin });
+          const message = buildLifecycleMessages({
+            event,
+            registration,
+            kind,
+            appOrigin,
+            signJwtHmacSha256,
+            authSecret,
+          });
           if (!message.to) {
             summary.skipped += 1;
             await recordAttempt(pool, {
@@ -247,6 +275,8 @@ export async function processEventLifecycleNotifications(pool, deps = {}, now = 
               ...buildPersonTemplateVars(resolveAttendeeName(registration)),
               event_title: event.title,
               ticket_url: message.ticketUrl,
+              join_url: message.joinUrl,
+              survey_url: message.surveyUrl,
               event_url: message.eventUrl,
             },
           });
