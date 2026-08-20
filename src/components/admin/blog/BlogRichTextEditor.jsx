@@ -16,8 +16,10 @@ import {
   Link2,
   List,
   ListOrdered,
+  Quote,
 } from 'lucide-react';
 import { BlogImage } from './blogImageExtension';
+import { BlogBlockquote, DEFAULT_QUOTE_AUTHOR } from './blogBlockquoteExtension';
 import BlogImageControlsBar from './BlogImageControlsBar';
 import TextFormatToolbar from '../shared/TextFormatToolbar.jsx';
 import { prepareContentForEditor, sanitizePastedHtml, shouldHandleClipboardImagePaste } from '../../../utils/blogContent';
@@ -78,7 +80,9 @@ export default function BlogRichTextEditor({
         heading: { levels: [1, 2, 3] },
         link: false,
         underline: false,
+        blockquote: false,
       }),
+      BlogBlockquote,
       Underline,
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       Link.configure({ openOnClick: false, HTMLAttributes: { rel: 'noopener noreferrer', target: '_blank' } }),
@@ -295,6 +299,17 @@ export default function BlogRichTextEditor({
     }
   };
 
+  const toggleBlockquote = () => {
+    if (!editor) return;
+    if (editor.isActive('blockquote')) {
+      editor.chain().focus().unsetBlockquote().run();
+      return;
+    }
+    editor.chain().focus().toggleBlockquote().updateAttributes('blockquote', {
+      author: editor.getAttributes('blockquote').author || DEFAULT_QUOTE_AUTHOR,
+    }).run();
+  };
+
   return (
     <div className="space-y-1.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -412,6 +427,33 @@ export default function BlogRichTextEditor({
             >
               <ListOrdered size={16} />
             </ToolbarButton>
+            <ToolbarButton
+              active={editor.isActive('blockquote')}
+              disabled={disabled}
+              onClick={toggleBlockquote}
+              title="Block quote"
+            >
+              <Quote size={16} />
+            </ToolbarButton>
+            {editor.isActive('blockquote') && (
+              <input
+                type="text"
+                aria-label="Quote attribution"
+                placeholder="Attribution"
+                disabled={disabled}
+                value={editor.getAttributes('blockquote').author || ''}
+                onChange={(e) => {
+                  editor.commands.updateAttributes('blockquote', { author: e.target.value });
+                }}
+                onBlur={(e) => {
+                  editor.commands.updateAttributes('blockquote', { author: e.target.value.trim() });
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') e.preventDefault();
+                }}
+                className="text-xs rounded-lg border border-navy-200 bg-white px-2 py-1.5 text-navy-700 w-[9.5rem] uppercase tracking-wide"
+              />
+            )}
 
             <ToolbarDivider />
 
@@ -551,7 +593,7 @@ export default function BlogRichTextEditor({
         <p className="text-xs text-red-600">{uploadError}</p>
       )}
       <p className="text-xs text-navy-400">
-        Insert, drag & drop, or paste images. Use <strong>Free move</strong> to position anywhere; <strong>Behind text</strong> / <strong>In front</strong> for layering. Pull corner handles to resize. <strong>Text wrap</strong> uses left/center/right flow.
+        Highlight text and click the quote icon for a pull quote. Insert, drag & drop, or paste images. Use <strong>Free move</strong> to position anywhere; <strong>Behind text</strong> / <strong>In front</strong> for layering. Pull corner handles to resize. <strong>Text wrap</strong> uses left/center/right flow.
       </p>
     </div>
   );

@@ -9,6 +9,6 @@ export const BLOG_SANITIZE_OPTIONS = {
   ],
   ALLOWED_ATTR: [
     'href', 'target', 'rel', 'src', 'alt', 'data-align', 'data-layout', 'data-layer',
-    'data-x', 'data-y', 'class', 'width', 'height', 'style', 'data-color',
+    'data-x', 'data-y', 'data-author', 'class', 'width', 'height', 'style', 'data-color',
   ],
 };

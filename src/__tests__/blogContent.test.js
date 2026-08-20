@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  BLOG_SANITIZE_OPTIONS,
   looksLikeHtml,
   sanitizePastedHtml,
   shouldHandleClipboardImagePaste,
@@ -57,5 +58,10 @@ describe('blogContent', () => {
   it('sanitizePastedHtml strips Office markup', () => {
     const html = '<p class="MsoNormal">Hello</p><!-- comment -->';
     expect(sanitizePastedHtml(html)).toBe('<p>Hello</p>');
+  });
+
+  it('allows blockquote attribution to survive sanitization', () => {
+    expect(BLOG_SANITIZE_OPTIONS.ALLOWED_TAGS).toContain('blockquote');
+    expect(BLOG_SANITIZE_OPTIONS.ALLOWED_ATTR).toContain('data-author');
   });
 });
