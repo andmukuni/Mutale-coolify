@@ -82,6 +82,7 @@ export async function loadWhiteLogoDataUrl(appRoot = '') {
 
   if (appRoot) {
     candidates.push(path.join(appRoot, 'Logo-Website-Mutale_White No Bg.png'));
+    candidates.push(path.join(appRoot, 'public', 'Logo-Website-Mutale_White No Bg.png'));
     try {
       const assetsDir = path.join(appRoot, 'dist', 'assets');
       const files = await fs.readdir(assetsDir);
