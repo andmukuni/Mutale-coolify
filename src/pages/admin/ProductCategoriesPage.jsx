@@ -47,6 +47,7 @@ export default function ProductCategoriesPage() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [confirm, setConfirm] = useState({ open: false, row: null, busy: false });
 
@@ -90,6 +91,7 @@ export default function ProductCategoriesPage() {
     setEditing(null);
     setForm({ ...emptyForm });
     setFormError('');
+    setFieldErrors({});
     setModalOpen(true);
   };
 
@@ -103,6 +105,7 @@ export default function ProductCategoriesPage() {
       is_active: row.is_active !== false && row.is_active !== 0,
     });
     setFormError('');
+    setFieldErrors({});
     setModalOpen(true);
   };
 
@@ -111,15 +114,18 @@ export default function ProductCategoriesPage() {
     setModalOpen(false);
     setEditing(null);
     setFormError('');
+    setFieldErrors({});
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setFormError('');
     if (!form.name.trim()) {
+      setFieldErrors({ name: 'Name is required.' });
       setFormError('Name is required.');
       return;
     }
+    setFieldErrors({});
 
     setSaving(true);
     try {
@@ -352,6 +358,8 @@ export default function ProductCategoriesPage() {
             placeholder="e.g. Apparel"
             required
             helpText="Shown in the category dropdown when adding products."
+            error={fieldErrors.name}
+            onClearError={() => setFieldErrors({})}
           />
 
           <FormField

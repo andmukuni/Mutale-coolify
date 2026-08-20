@@ -50,6 +50,7 @@ export default function UserFormModal({ isOpen, onClose, onSaved, user = null })
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
+    if (name) setFieldErrors((prev) => (prev[name] ? { ...prev, [name]: '' } : prev));
     setForm((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
   };
 

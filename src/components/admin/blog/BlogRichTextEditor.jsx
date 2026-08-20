@@ -59,6 +59,7 @@ export default function BlogRichTextEditor({
   disabled = false,
   label = 'Content',
   required = false,
+  error = '',
 }) {
   const [mode, setMode] = useState('visual');
   const [htmlDraft, setHtmlDraft] = useState('');
@@ -297,7 +298,7 @@ export default function BlogRichTextEditor({
   return (
     <div className="space-y-1.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <label className="block text-sm font-medium text-navy-700">
+        <label className={`block text-sm font-medium ${error ? 'text-red-700' : 'text-navy-700'}`}>
           {label}
           {required && <span className="text-red-400 ml-0.5">*</span>}
         </label>
@@ -517,7 +518,7 @@ export default function BlogRichTextEditor({
 
           <BlogImageControlsBar editor={editor} disabled={disabled} />
 
-          <div className="blog-editor blog-prose rounded-b-xl border border-navy-200 bg-white focus-within:ring-2 focus-within:ring-cyan-500/30">
+          <div className={`blog-editor blog-prose rounded-b-xl border bg-white focus-within:ring-2 ${error ? 'border-red-400 bg-red-50/40 focus-within:ring-red-400/40 field-has-error' : 'border-navy-200 focus-within:ring-cyan-500/30'}`}>
             <EditorContent editor={editor} />
           </div>
         </>
@@ -532,7 +533,7 @@ export default function BlogRichTextEditor({
           }}
           disabled={disabled}
           rows={16}
-          className="w-full font-mono text-xs rounded-xl border border-navy-200 bg-navy-50 px-4 py-3 text-navy-800 focus:outline-none focus:ring-2 focus:ring-cyan-500/30"
+          className={`w-full font-mono text-xs rounded-xl border px-4 py-3 focus:outline-none focus:ring-2 ${error ? 'border-red-400 bg-red-50 text-red-900 focus:ring-red-400 field-has-error' : 'border-navy-200 bg-navy-50 text-navy-800 focus:ring-cyan-500/30'}`}
           spellCheck={false}
         />
       )}
@@ -542,6 +543,9 @@ export default function BlogRichTextEditor({
       )}
       {uploadNotice && (
         <p className="text-xs text-amber-700">{uploadNotice}</p>
+      )}
+      {error && (
+        <p className="text-xs text-red-600" role="alert">{error}</p>
       )}
       {uploadError && (
         <p className="text-xs text-red-600">{uploadError}</p>

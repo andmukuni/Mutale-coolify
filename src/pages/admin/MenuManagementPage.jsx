@@ -81,6 +81,7 @@ export default function MenuManagementPage() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [confirm, setConfirm] = useState({ open: false, row: null, busy: false });
   const [reordering, setReordering] = useState(false);
@@ -139,20 +140,22 @@ export default function MenuManagementPage() {
       open_in_new_tab: Boolean(row.open_in_new_tab),
     });
     setFormError('');
+    setFieldErrors({});
     setModalOpen(true);
   };
 
   const handleSave = async (e) => {
     e.preventDefault();
     setFormError('');
-    if (!form.label.trim()) {
-      setFormError('Label is required.');
+    const nextErrors = {};
+    if (!form.label.trim()) nextErrors.label = 'Label is required.';
+    if (!form.url.trim()) nextErrors.url = 'URL is required.';
+    if (Object.keys(nextErrors).length) {
+      setFieldErrors(nextErrors);
+      setFormError(Object.values(nextErrors)[0]);
       return;
     }
-    if (!form.url.trim()) {
-      setFormError('URL is required.');
-      return;
-    }
+    setFieldErrors({});
 
     setSaving(true);
     try {
@@ -393,19 +396,29 @@ export default function MenuManagementPage() {
 
           <FormField
             label="Label"
+            name="label"
             value={form.label}
-            onChange={(e) => setForm((prev) => ({ ...prev, label: e.target.value }))}
+            onChange={(e) => {
+              setFieldErrors((prev) => ({ ...prev, label: '' }));
+              setForm((prev) => ({ ...prev, label: e.target.value }));
+            }}
             required
             placeholder="About"
+            error={fieldErrors.label}
           />
 
           <FormField
             label="URL"
+            name="url"
             value={form.url}
-            onChange={(e) => setForm((prev) => ({ ...prev, url: e.target.value }))}
+            onChange={(e) => {
+              setFieldErrors((prev) => ({ ...prev, url: '' }));
+              setForm((prev) => ({ ...prev, url: e.target.value }));
+            }}
             required
             placeholder="/about"
             helpText="Internal paths (e.g. /blog) or full URLs (https://…)."
+            error={fieldErrors.url}
           />
 
           {activeTab === 'main' && (

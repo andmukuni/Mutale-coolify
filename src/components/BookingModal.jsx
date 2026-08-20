@@ -33,6 +33,7 @@ import { getApiBase, getAppOrigin } from '../utils/apiBase';
 import { getSessionAuthHeaders } from '../utils/authHeaders';
 import { runLencoCardWidget } from '../utils/lencoCardPayment';
 import EventVenueMap from './EventVenueMap';
+import { fieldControlClass } from '../utils/formFieldHighlight';
 
 const API_BASE = getApiBase();
 
@@ -296,6 +297,7 @@ export default function EventRegistrationFlow({
   const [appliedCouponMeta, setAppliedCouponMeta] = useState(null);
   const [couponBusy, setCouponBusy] = useState(false);
   const [couponFieldError, setCouponFieldError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const [registrationStep, setRegistrationStep] = useState('details');
 
   const isOnline = isOnlineEvent(event);
@@ -522,27 +524,29 @@ export default function EventRegistrationFlow({
 
   const validateRegistrationDetails = () => {
     if (!baseAvailability.canBook) {
-      return baseAvailability.reason || 'This event is not available for registration.';
+      return { message: baseAvailability.reason || 'This event is not available for registration.', fields: {} };
     }
 
     if (allowsMultiAttendee) {
       if (ticketCount < 1) {
-        return 'Select at least one ticket (yourself and/or guests).';
+        return { message: 'Select at least one ticket (yourself and/or guests).', fields: {} };
       }
 
       if (includeSelf && selfRegistration) {
-        return 'You are already registered for this event. Uncheck “Register myself” or register guests only.';
+        return { message: 'You are already registered for this event. Uncheck “Register myself” or register guests only.', fields: {} };
       }
 
       if (includeSelf) {
         const selfAvailability = checkEventAvailability(event, registrations, currentUser?.id, regType, {
           attendeeSlotKey: '__self__',
         });
-        if (!selfAvailability.canBook) return selfAvailability.reason;
+        if (!selfAvailability.canBook) return { message: selfAvailability.reason, fields: {} };
       }
 
       const guestValidation = validateGuestAttendees(guestAttendees);
-      if (!guestValidation.ok) return guestValidation.error;
+      if (!guestValidation.ok) {
+        return { message: guestValidation.error, fields: guestValidation.fields || {} };
+      }
 
       for (let i = 0; i < guestAttendees.length; i += 1) {
         const guest = guestAttendees[i];
@@ -551,12 +555,15 @@ export default function EventRegistrationFlow({
           attendeeSlotKey: slotKey,
         });
         if (!slotAvailability.canBook) {
-          return slotAvailability.reason || `Guest ${i + 1} could not be registered.`;
+          return {
+            message: slotAvailability.reason || `Guest ${i + 1} could not be registered.`,
+            fields: { [`guest.${i}.name`]: slotAvailability.reason || `Guest ${i + 1} could not be registered.` },
+          };
         }
       }
 
       if (event.capacity && spotsLeft !== null && ticketCount > spotsLeft) {
-        return `Only ${spotsLeft} spot${spotsLeft === 1 ? '' : 's'} remaining for this event.`;
+        return { message: `Only ${spotsLeft} spot${spotsLeft === 1 ? '' : 's'} remaining for this event.`, fields: {} };
       }
     }
 
@@ -564,10 +571,11 @@ export default function EventRegistrationFlow({
     const previewOk = Boolean(appliedCouponMeta && appliedCouponMeta.codeNorm === liveNorm);
 
     if (!event.is_free && liveNorm && !previewOk) {
-      return 'Press “Apply coupon” to validate this code, or clear the coupon field.';
+      const message = 'Press “Apply coupon” to validate this code, or clear the coupon field.';
+      return { message, fields: { coupon: message } };
     }
 
-    return null;
+    return { message: null, fields: {} };
   };
 
   const buildBatchPayload = () => ({
@@ -619,11 +627,13 @@ export default function EventRegistrationFlow({
 
   const handleContinueToPayment = () => {
     setResult(null);
-    const validationError = validateRegistrationDetails();
-    if (validationError) {
-      setResult({ success: false, error: validationError });
+    const { message, fields } = validateRegistrationDetails();
+    if (message) {
+      setFieldErrors(fields);
+      setResult({ success: false, error: message });
       return;
     }
+    setFieldErrors({});
     setRegistrationStep('payment');
   };
 
@@ -631,12 +641,14 @@ export default function EventRegistrationFlow({
     setLoading(true);
     setResult(null);
 
-    const validationError = validateRegistrationDetails();
-    if (validationError) {
-      setResult({ success: false, error: validationError });
+    const { message, fields } = validateRegistrationDetails();
+    if (message) {
+      setFieldErrors(fields);
+      setResult({ success: false, error: message });
       setLoading(false);
       return;
     }
+    setFieldErrors({});
 
     const liveNorm = normalizeCouponCodeInput(couponInput);
     const previewOk = Boolean(appliedCouponMeta && appliedCouponMeta.codeNorm === liveNorm);
@@ -688,6 +700,7 @@ export default function EventRegistrationFlow({
 
       if (paymentMethod === 'mobile_money') {
         if (!phone.trim()) {
+          setFieldErrors({ phone: 'Phone number is required for mobile money checkout.' });
           setResult({ success: false, error: 'Phone number is required for mobile money checkout.' });
           return;
         }
@@ -1361,12 +1374,17 @@ export default function EventRegistrationFlow({
                         onChange={(e) => setGuestAttendees((prev) => prev.map((row, i) => (
                           i === index ? { ...row, sex: e.target.value } : row
                         )))}
-                        className="w-full px-3 py-2.5 rounded-xl border border-navy-200 bg-white text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                        className={fieldControlClass(fieldErrors[`guest.${index}.sex`], 'bg-white')}
+                        aria-invalid={Boolean(fieldErrors[`guest.${index}.sex`]) || undefined}
+                        data-field={`guest.${index}.sex`}
                       >
                         <option value="">Select…</option>
                         <option value="male">Male</option>
                         <option value="female">Female</option>
                       </select>
+                      {fieldErrors[`guest.${index}.sex`] && (
+                        <p className="mt-1 text-[11px] text-red-600">{fieldErrors[`guest.${index}.sex`]}</p>
+                      )}
                     </div>
                   </div>
                   {normalizeAttendeeType(guest.attendee_type) === 'child' && (
@@ -1378,7 +1396,9 @@ export default function EventRegistrationFlow({
                           onChange={(e) => setGuestAttendees((prev) => prev.map((row, i) => (
                             i === index ? { ...row, relation: e.target.value } : row
                           )))}
-                          className="w-full px-3 py-2.5 rounded-xl border border-navy-200 bg-white text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                          className={fieldControlClass(fieldErrors[`guest.${index}.relation`], 'bg-white')}
+                          aria-invalid={Boolean(fieldErrors[`guest.${index}.relation`]) || undefined}
+                          data-field={`guest.${index}.relation`}
                         >
                           <option value="">Select…</option>
                           <option value="parent">Parent</option>
@@ -1386,6 +1406,9 @@ export default function EventRegistrationFlow({
                           <option value="teacher">Teacher</option>
                           <option value="other">Other</option>
                         </select>
+                        {fieldErrors[`guest.${index}.relation`] && (
+                          <p className="mt-1 text-[11px] text-red-600">{fieldErrors[`guest.${index}.relation`]}</p>
+                        )}
                       </div>
                       <ChildAgeField
                         guest={guest}
@@ -1402,12 +1425,20 @@ export default function EventRegistrationFlow({
                     <input
                       type="text"
                       value={guest.name}
-                      onChange={(e) => setGuestAttendees((prev) => prev.map((row, i) => (
-                        i === index ? { ...row, name: e.target.value } : row
-                      )))}
+                      onChange={(e) => {
+                        setFieldErrors((prev) => ({ ...prev, [`guest.${index}.name`]: '' }));
+                        setGuestAttendees((prev) => prev.map((row, i) => (
+                          i === index ? { ...row, name: e.target.value } : row
+                        )));
+                      }}
                       placeholder={normalizeAttendeeType(guest.attendee_type) === 'child' ? 'Child full name' : 'Attendee full name'}
-                      className="w-full px-4 py-2.5 rounded-xl border border-navy-200 bg-white text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                      data-field={`guest.${index}.name`}
+                      aria-invalid={Boolean(fieldErrors[`guest.${index}.name`]) || undefined}
+                      className={fieldControlClass(fieldErrors[`guest.${index}.name`], 'bg-white')}
                     />
+                    {fieldErrors[`guest.${index}.name`] && (
+                      <p className="mt-1 text-[11px] text-red-600">{fieldErrors[`guest.${index}.name`]}</p>
+                    )}
                   </div>
                   <div className="grid sm:grid-cols-2 gap-2">
                     <div>
@@ -1484,11 +1515,17 @@ export default function EventRegistrationFlow({
             <input
               type="text"
               value={couponInput}
-              onChange={(e) => setCouponInput(e.target.value)}
+              onChange={(e) => {
+                setFieldErrors((prev) => ({ ...prev, coupon: '' }));
+                setCouponInput(e.target.value);
+              }}
               placeholder="Enter a code"
               autoComplete="off"
               spellCheck={false}
-              className="flex-1 min-w-0 px-4 py-2.5 rounded-xl border border-navy-200 bg-navy-50 text-sm text-navy-900 uppercase focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent placeholder:normal-case placeholder:text-navy-400"
+              name="coupon"
+              data-field="coupon"
+              aria-invalid={Boolean(fieldErrors.coupon || couponFieldError) || undefined}
+              className={`${fieldControlClass(Boolean(fieldErrors.coupon || couponFieldError))} uppercase placeholder:normal-case flex-1 min-w-0`}
             />
             <div className="flex gap-2 shrink-0">
               <button
@@ -1630,10 +1667,19 @@ export default function EventRegistrationFlow({
               <input
                 type="tel"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) => {
+                  setFieldErrors((prev) => ({ ...prev, phone: '' }));
+                  setPhone(e.target.value);
+                }}
                 placeholder="e.g. 09777"
-                className="w-full px-4 py-2.5 rounded-xl border border-navy-200 bg-navy-50 text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                name="phone"
+                data-field="phone"
+                aria-invalid={Boolean(fieldErrors.phone) || undefined}
+                className={fieldControlClass(fieldErrors.phone)}
               />
+              {fieldErrors.phone && (
+                <p className="mt-1 text-xs text-red-600">{fieldErrors.phone}</p>
+              )}
               <div className="mt-1 flex items-center justify-between gap-2">
                 <p className="text-xs text-navy-400">
                   We’ll send an approval prompt to this number.

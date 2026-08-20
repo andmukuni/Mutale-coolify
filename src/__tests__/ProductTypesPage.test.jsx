@@ -57,7 +57,7 @@ vi.mock('../components/ui', () => ({
         <div>{footer}</div>
       </div>
     ) : null,
-  FormField: ({ label, name, value, onChange, type, required, helpText }) => (
+  FormField: ({ label, name, value, onChange, type, required, helpText, error }) => (
     <label>
       <span>{label}{required ? ' *' : ''}</span>
       <input
@@ -66,7 +66,9 @@ vi.mock('../components/ui', () => ({
         onChange={onChange}
         type={type || 'text'}
         aria-label={label}
+        aria-invalid={error ? true : undefined}
       />
+      {error && <span>{error}</span>}
       {helpText && <span>{helpText}</span>}
     </label>
   ),
@@ -161,7 +163,7 @@ describe('ProductTypesPage (admin)', () => {
     const submitBtn = within(dialog).getByRole('button', { name: /create type/i });
     fireEvent.click(submitBtn);
 
-    expect(await within(dialog).findByText(/label is required/i)).toBeInTheDocument();
+    expect((await within(dialog).findAllByText(/label is required/i)).length).toBeGreaterThan(0);
     // POST should NOT have been called
     const calls = globalThis.fetch.mock.calls.filter(c => (c[1]?.method || '').toUpperCase() === 'POST');
     expect(calls.length).toBe(0);

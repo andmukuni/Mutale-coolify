@@ -3,6 +3,7 @@ export { default as PageHeader } from './PageHeader';
 export { default as AdminStatCard } from './AdminStatCard';
 export { default as DataTable } from './DataTable';
 export { default as FormField } from './FormField';
+export { fieldControlClass, FIELD_ERROR_CLASS, FIELD_OK_CLASS } from '../../utils/formFieldHighlight';
 export { default as Modal } from './Modal';
 export { default as ConfirmDialog } from './ConfirmDialog';
 export { default as StatusBadge } from './StatusBadge';

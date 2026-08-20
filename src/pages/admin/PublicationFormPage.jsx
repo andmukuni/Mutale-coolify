@@ -4,6 +4,7 @@ import { Save } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 import { PageHeader, Card, FormField, Spinner } from '../../components/ui';
+import { useFieldErrors } from '../../hooks/useFieldErrors';
 
 const emptyPublication = {
   title: '',
@@ -32,6 +33,7 @@ export default function PublicationFormPage() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const { fieldErrors, setErrors: setFieldErrors, clearField, clearAll: clearFieldErrors } = useFieldErrors();
   const initializedIdRef = useRef(null);
   const dirtyRef = useRef(false);
 
@@ -57,6 +59,7 @@ export default function PublicationFormPage() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+    if (name) clearField(name);
     dirtyRef.current = true;
     setForm((prev) => ({
       ...prev,
@@ -74,10 +77,19 @@ export default function PublicationFormPage() {
       year: form.year === '' ? null : Number(form.year),
     };
 
+    const nextErrors = {};
+    if (!payload.title?.trim()) nextErrors.title = 'Title is required.';
+    if (!payload.authors?.trim()) nextErrors.authors = 'Authors are required.';
+    if (Object.keys(nextErrors).length) {
+      setFieldErrors(nextErrors);
+      setError(Object.values(nextErrors)[0]);
+      setSaving(false);
+      toast.error(Object.values(nextErrors)[0]);
+      return;
+    }
+    clearFieldErrors();
+
     try {
-      if (!payload.title?.trim() || !payload.authors?.trim()) {
-        throw new Error('Title and authors are required.');
-      }
 
       if (isEditing) {
         await updatePublication(id, payload);
@@ -131,6 +143,7 @@ export default function PublicationFormPage() {
             onChange={handleChange}
             required
             placeholder="Publication title"
+            error={fieldErrors.title}
           />
 
           <FormField
@@ -140,6 +153,7 @@ export default function PublicationFormPage() {
             onChange={handleChange}
             required
             placeholder="e.g., Mubanga M., et al."
+            error={fieldErrors.authors}
           />
 
           <div className="grid sm:grid-cols-2 gap-4">

@@ -11,7 +11,14 @@ import { getApiBase } from '../../utils/apiBase';
 import { getAdminAuthHeaders } from '../../utils/authHeaders';
 import { prepareEventCoverImage, compactEventFormImages, preparePersonPhotoSource, preparePartnerLogoSource } from '../../utils/prepareEventCoverImage';
 import EventSessionsPanel from '../../components/admin/event/EventSessionsPanel';
+import EventSurveyBuilder from '../../components/admin/event/EventSurveyBuilder';
 import VenueMapPicker from '../../components/admin/VenueMapPicker';
+import { useFieldErrors } from '../../hooks/useFieldErrors';
+import {
+  cloneDefaultSurveyQuestions,
+  normalizeSurveyQuestions,
+  validateSurveyQuestionList,
+} from '../../../shared/eventSurveyQuestions.js';
 
 const API_BASE = getApiBase();
 
@@ -25,6 +32,7 @@ const formSteps = [
   { label: 'Schedule & Venue', hint: 'Date, time, location, and mode' },
   { label: 'Registration Setup', hint: 'Pricing, visibility, and organizer' },
   { label: 'Speakers & Partners', hint: 'Featured speakers and event partners' },
+  { label: 'Guest Survey', hint: 'Questions guests answer after the event' },
   { label: 'Review & Publish', hint: 'Final confirmation before save' },
 ];
 
@@ -64,6 +72,7 @@ function createDefaultEvent() {
 
   return {
     ...emptyEvent,
+    survey_questions: cloneDefaultSurveyQuestions(),
     start_date: toLocalDateInputValue(start),
     end_date: toLocalDateInputValue(start),
     start_time: toTimeInputValue(start),
@@ -115,6 +124,7 @@ const emptyEvent = {
   volume_discount_type: 'percent',
   volume_discount_value: 10,
   certificate_requires_all_sessions: false,
+  survey_questions: cloneDefaultSurveyQuestions(),
 };
 
 const EVENT_FORM_FLAGS = [
@@ -155,6 +165,7 @@ function buildCloneForm(sourceEvent = {}) {
     slug: generateSlug(`${sourceEvent.slug || generateSlug(clonedTitle)}-copy-${copyStamp}`),
     status: 'draft',
     featured: false,
+    survey_questions: normalizeSurveyQuestions(sourceEvent.survey_questions, { fallbackToDefault: true }),
   };
 }
 
@@ -167,7 +178,12 @@ function getInitialForm(events, id, cloneId) {
     return createDefaultEvent();
   }
   const event = events.find((e) => e.id === id);
-  return event ? withEventFormFlags({ ...emptyEvent, ...event }) : null;
+  if (!event) return null;
+  return withEventFormFlags({
+    ...emptyEvent,
+    ...event,
+    survey_questions: normalizeSurveyQuestions(event.survey_questions, { fallbackToDefault: true }),
+  });
 }
 
 export default function EventFormPage() {
@@ -190,6 +206,7 @@ export default function EventFormPage() {
   const [currentStep, setCurrentStep] = useState(0);
   const [stepError, setStepError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const { fieldErrors, setErrors: setFieldErrors, clearField, clearAll: clearFieldErrors } = useFieldErrors();
   const [videoSettings, setVideoSettings] = useState({
     defaultProvider: 'zoom',
     enabledProviders: ['zoom', 'daily'],
@@ -279,6 +296,7 @@ export default function EventFormPage() {
     const newVal = type === 'checkbox' ? checked : value;
     if (name === 'cover_image' && value.trim()) setPhotoError('');
     if (stepError) setStepError('');
+    if (name) clearField(name);
     setForm((prev) => {
       const next = {
         ...prev,
@@ -332,6 +350,7 @@ export default function EventFormPage() {
       });
       setForm((prev) => ({ ...prev, cover_image: dataUrl }));
       if (stepError) setStepError('');
+      clearField('cover_image');
     } catch (err) {
       setPhotoError(err?.message || 'Could not process the selected image. Try another file or paste an image URL.');
     } finally {
@@ -356,69 +375,80 @@ export default function EventFormPage() {
   };
 
   const validateStep = (stepIndex) => {
+    const fields = {};
     if (stepIndex === 0) {
-      if (!form.title.trim()) return 'Event title is required.';
-      if (!form.slug.trim()) return 'Slug is required.';
-
-      const targetSlug = normalizeSlug(form.slug);
-      const hasSlugConflict = events.some((event) => (
-        event.id !== id && normalizeSlug(event.slug) === targetSlug
-      ));
-      if (hasSlugConflict) {
-        return 'This slug already exists. Use a different title or edit the slug.';
+      if (!form.title.trim()) fields.title = 'Event title is required.';
+      if (!form.slug.trim()) fields.slug = 'Slug is required.';
+      else {
+        const targetSlug = normalizeSlug(form.slug);
+        const hasSlugConflict = events.some((event) => (
+          event.id !== id && normalizeSlug(event.slug) === targetSlug
+        ));
+        if (hasSlugConflict) {
+          fields.slug = 'This slug already exists. Use a different title or edit the slug.';
+        }
       }
-
-      if (!form.description.trim()) return 'Full description is required.';
-      if (!isEditing && !(form.cover_image || '').trim()) return 'Featured photo is required for new events.';
-      return '';
+      if (!form.description.trim()) fields.description = 'Full description is required.';
+      if (!isEditing && !(form.cover_image || '').trim()) {
+        fields.cover_image = 'Featured photo is required for new events.';
+      }
     }
 
     if (stepIndex === 1) {
-      if (form.event_mode !== 'virtual' && !form.location.trim()) return 'Location / City is required.';
-      if (!form.start_date) return 'Start date is required.';
-      if (!form.end_date) return 'End date is required.';
-      if (form.end_date < form.start_date) return 'End date cannot be earlier than start date.';
+      if (form.event_mode !== 'virtual' && !form.location.trim()) {
+        fields.location = 'Location / City is required.';
+      }
+      if (!form.start_date) fields.start_date = 'Start date is required.';
+      if (!form.end_date) fields.end_date = 'End date is required.';
+      else if (form.end_date < form.start_date) {
+        fields.end_date = 'End date cannot be earlier than start date.';
+      }
 
       if (form.start_time && form.end_time && form.start_date === form.end_date) {
         const startDt = combineLocalDateTime(form.start_date, form.start_time);
         const endDt = combineLocalDateTime(form.end_date, form.end_time);
         if (startDt && endDt && endDt <= startDt) {
-          return 'End time must be later than start time when the event starts and ends on the same day.';
+          fields.end_time = 'End time must be later than start time when the event starts and ends on the same day.';
         }
       }
-      return '';
     }
 
     if (stepIndex === 2) {
-      if (!form.registration_deadline) return 'Registration deadline date is required.';
-      if (!form.registration_deadline_time) return 'Registration deadline time is required.';
+      if (!form.registration_deadline) fields.registration_deadline = 'Registration deadline date is required.';
+      if (!form.registration_deadline_time) fields.registration_deadline_time = 'Registration deadline time is required.';
 
-      const startDt = combineLocalDateTime(form.start_date, form.start_time, '00:00');
       const endDt = combineLocalDateTime(form.end_date, form.end_time, '23:59');
       const deadlineDt = combineLocalDateTime(form.registration_deadline, form.registration_deadline_time, '00:00');
       if (endDt && deadlineDt && deadlineDt > endDt) {
-        return 'Registration deadline cannot be after the event ends.';
+        fields.registration_deadline = 'Registration deadline cannot be after the event ends.';
       }
 
       if (!form.is_free && (!form.price || Number(form.price) <= 0)) {
-        return 'Please set a valid paid price, or mark the event as free.';
+        fields.price = 'Please set a valid paid price, or mark the event as free.';
       }
       if (form.organizer_email && !/^\S+@\S+\.\S+$/.test(form.organizer_email)) {
-        return 'Organizer email format looks invalid.';
+        fields.organizer_email = 'Organizer email format looks invalid.';
       }
-      return '';
     }
 
-    return '';
+    if (stepIndex === 4) {
+      const survey = validateSurveyQuestionList(form.survey_questions);
+      if (!survey.ok) fields.survey_questions = survey.message;
+    }
+
+    const message = Object.values(fields)[0] || '';
+    return { message, fields };
   };
 
   const handleNextStep = () => {
-    const error = validateStep(currentStep);
-    if (error) {
-      setStepError(error);
+    const { message, fields } = validateStep(currentStep);
+    if (message) {
+      setStepError(message);
+      setFieldErrors(fields);
       return;
     }
     setStepError('');
+    clearFieldErrors();
     setCurrentStep((prev) => {
       const next = Math.min(prev + 1, formSteps.length - 1);
       stepRef.current = next;
@@ -428,6 +458,7 @@ export default function EventFormPage() {
 
   const handlePrevStep = () => {
     setStepError('');
+    clearFieldErrors();
     setCurrentStep((prev) => {
       const next = Math.max(prev - 1, 0);
       stepRef.current = next;
@@ -475,15 +506,17 @@ export default function EventFormPage() {
 
     if (!isEditing && !payload.cover_image) {
       setPhotoError('Featured photo is required when creating an event.');
+      setFieldErrors({ cover_image: 'Featured photo is required when creating an event.' });
       setCurrentStep(0);
       return;
     }
 
     for (let i = 0; i < formSteps.length - 1; i += 1) {
-      const error = validateStep(i);
-      if (error) {
+      const { message, fields } = validateStep(i);
+      if (message) {
         setCurrentStep(i);
-        setStepError(error);
+        setStepError(message);
+        setFieldErrors(fields);
         return;
       }
     }
@@ -501,6 +534,8 @@ export default function EventFormPage() {
       payload.location_place = '';
     }
     if (payload.is_free) payload.price = 0;
+    payload.survey_questions = validateSurveyQuestionList(payload.survey_questions).questions
+      || cloneDefaultSurveyQuestions();
 
     try {
       setSubmitting(true);
@@ -564,6 +599,7 @@ export default function EventFormPage() {
     } catch (error) {
       const msg = getSubmitErrorMessage(error);
       setSaveError(msg);
+      if (msg.toLowerCase().includes('slug')) setFieldErrors({ slug: msg });
       toast.error(msg);
       setSubmitting(false);
       return;
@@ -607,7 +643,7 @@ export default function EventFormPage() {
   <Card className="max-w-3xl mx-auto">
   <div onKeyDown={handleFormKeyDown} className="space-y-5 pb-24 sm:pb-0">
           {/* Stepper */}
-          <div className="flex sm:grid sm:grid-cols-4 gap-2 overflow-x-auto pb-1 snap-x snap-mandatory">
+          <div className="flex sm:grid sm:grid-cols-3 gap-2 overflow-x-auto pb-1 snap-x snap-mandatory">
             {formSteps.map((step, index) => {
               const isActive = index === currentStep;
               const isDone = index < currentStep;
@@ -638,10 +674,10 @@ export default function EventFormPage() {
 
           {currentStep === 0 && (
             <>
-              <FormField label="Title" name="title" value={form.title} onChange={handleChange} required placeholder="Event title" />
-              <FormField label="Slug" name="slug" value={form.slug} onChange={handleChange} placeholder="auto-generated-from-title" helpText="URL-friendly identifier (auto-filled from title)" />
+              <FormField label="Title" name="title" value={form.title} onChange={handleChange} required placeholder="Event title" error={fieldErrors.title} />
+              <FormField label="Slug" name="slug" value={form.slug} onChange={handleChange} placeholder="auto-generated-from-title" helpText="URL-friendly identifier (auto-filled from title)" error={fieldErrors.slug} />
               <FormField label="Short Description" name="short_description" value={form.short_description} onChange={handleChange} placeholder="One-line summary (shown in cards)" />
-              <FormField label="Full Description" name="description" value={form.description} onChange={handleChange} textarea rows={5} required placeholder="Full event description…" />
+              <FormField label="Full Description" name="description" value={form.description} onChange={handleChange} textarea rows={5} required placeholder="Full event description…" error={fieldErrors.description} />
               <FormField
                 label="Featured Photo (Event Cover)"
                 name="cover_image"
@@ -650,6 +686,7 @@ export default function EventFormPage() {
                 placeholder="https://..."
                 required={!isEditing}
                 helpText="Paste an image URL or upload an image file below."
+                error={fieldErrors.cover_image || photoError}
               />
               <div>
                 <label htmlFor="cover_upload" className="block text-sm font-medium text-navy-700 mb-1.5">
@@ -778,7 +815,7 @@ export default function EventFormPage() {
               {form.event_mode !== 'virtual' && (
                 <div className="grid sm:grid-cols-2 gap-4">
                   <FormField label="Venue" name="venue" value={form.venue} onChange={handleChange} placeholder="e.g., Conference Centre" />
-                  <FormField label="Location / City" name="location" value={form.location} onChange={handleChange} required placeholder="e.g., Lusaka, Zambia" />
+                  <FormField label="Location / City" name="location" value={form.location} onChange={handleChange} required placeholder="e.g., Lusaka, Zambia" error={fieldErrors.location} />
                 </div>
               )}
 
@@ -811,8 +848,8 @@ export default function EventFormPage() {
               )}
 
               <div className="grid sm:grid-cols-2 gap-4">
-                <FormField label="Start Date" name="start_date" type="date" value={form.start_date} onChange={handleChange} required />
-                <FormField label="End Date" name="end_date" type="date" value={form.end_date} onChange={handleChange} required min={form.start_date || undefined} />
+                <FormField label="Start Date" name="start_date" type="date" value={form.start_date} onChange={handleChange} required error={fieldErrors.start_date} />
+                <FormField label="End Date" name="end_date" type="date" value={form.end_date} onChange={handleChange} required min={form.start_date || undefined} error={fieldErrors.end_date} />
               </div>
 
               <div className="grid sm:grid-cols-3 gap-4">
@@ -824,6 +861,7 @@ export default function EventFormPage() {
                   value={form.end_time}
                   onChange={handleChange}
                   min={form.start_date && form.end_date && form.start_date === form.end_date ? form.start_time || undefined : undefined}
+                  error={fieldErrors.end_time}
                 />
                 <FormField label="Timezone" name="timezone" value={form.timezone} onChange={handleChange} placeholder="Africa/Lusaka" />
               </div>
@@ -842,6 +880,7 @@ export default function EventFormPage() {
                   required
                   max={form.end_date || undefined}
                   helpText="Closes early registration before the event. People can still register while the event is live if spots remain."
+                  error={fieldErrors.registration_deadline}
                 />
                 <FormField
                   label="Deadline Time"
@@ -850,6 +889,7 @@ export default function EventFormPage() {
                   value={form.registration_deadline_time}
                   onChange={handleChange}
                   required
+                  error={fieldErrors.registration_deadline_time}
                   max={form.registration_deadline && form.end_date && form.registration_deadline === form.end_date ? form.end_time || undefined : undefined}
                 />
                 <FormField label="Capacity" name="capacity" type="number" value={form.capacity} onChange={handleChange} placeholder="Leave blank for unlimited" />
@@ -870,7 +910,7 @@ export default function EventFormPage() {
                   </label>
                 </div>
                 {!form.is_free && (
-                  <FormField label="Price (ZMW - Zambia)" name="price" type="number" value={form.price} onChange={handleChange} placeholder="0" />
+                  <FormField label="Price (ZMW - Zambia)" name="price" type="number" value={form.price} onChange={handleChange} placeholder="0" error={fieldErrors.price} />
                 )}
               </div>
 
@@ -979,7 +1019,7 @@ export default function EventFormPage() {
 
               <div className="grid sm:grid-cols-3 gap-4">
                 <FormField label="Organizer Name" name="organizer_name" value={form.organizer_name} onChange={handleChange} placeholder="Your name" />
-                <FormField label="Organizer Email" name="organizer_email" type="email" value={form.organizer_email} onChange={handleChange} placeholder="email@example.com" />
+                <FormField label="Organizer Email" name="organizer_email" type="email" value={form.organizer_email} onChange={handleChange} placeholder="email@example.com" error={fieldErrors.organizer_email} />
                 <FormField label="Organizer Phone" name="organizer_phone" value={form.organizer_phone} onChange={handleChange} placeholder="+260 ..." />
               </div>
             </>
@@ -1157,6 +1197,14 @@ export default function EventFormPage() {
           )}
 
           {currentStep === 4 && (
+            <EventSurveyBuilder
+              questions={form.survey_questions || []}
+              disabled={isPastLockedEvent}
+              onChange={(survey_questions) => setForm((prev) => ({ ...prev, survey_questions }))}
+            />
+          )}
+
+          {currentStep === 5 && (
             <div className="space-y-4">
               <div className="rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-800 flex items-start gap-2">
                 <CheckCircle2 size={17} className="shrink-0 mt-0.5" />
@@ -1187,6 +1235,7 @@ export default function EventFormPage() {
                 <SummaryItem label="Speakers" value={`${(form.featured_speakers || []).length} speaker(s)`} />
                 <SummaryItem label="Guests" value={`${(form.featured_guests || []).length} guest(s)`} />
                 <SummaryItem label="Partners" value={`${(form.partners || []).length} partner(s)`} />
+                <SummaryItem label="Survey questions" value={`${(form.survey_questions || []).length} question(s)`} />
               </div>
 
               {form.short_description && (

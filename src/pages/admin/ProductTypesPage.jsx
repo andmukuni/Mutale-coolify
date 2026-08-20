@@ -54,6 +54,7 @@ export default function ProductTypesPage() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const [saving, setSaving] = useState(false);
 
   // Delete dialog state
@@ -104,6 +105,7 @@ export default function ProductTypesPage() {
     setEditing(null);
     setForm({ ...emptyForm });
     setFormError('');
+    setFieldErrors({});
     setValueDirty(false);
     setModalOpen(true);
   };
@@ -120,6 +122,7 @@ export default function ProductTypesPage() {
       is_active: row.is_active !== false && row.is_active !== 0,
     });
     setFormError('');
+    setFieldErrors({});
     setValueDirty(true);
     setModalOpen(true);
   };
@@ -129,6 +132,7 @@ export default function ProductTypesPage() {
     setModalOpen(false);
     setEditing(null);
     setFormError('');
+    setFieldErrors({});
   };
 
   const handleLabelChange = (e) => {
@@ -149,15 +153,15 @@ export default function ProductTypesPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setFormError('');
-
-    if (!form.label.trim()) {
-      setFormError('Label is required.');
+    const nextErrors = {};
+    if (!form.label.trim()) nextErrors.label = 'Label is required.';
+    if (!form.value.trim()) nextErrors.value = 'Value is required.';
+    if (Object.keys(nextErrors).length) {
+      setFieldErrors(nextErrors);
+      setFormError(Object.values(nextErrors)[0]);
       return;
     }
-    if (!form.value.trim()) {
-      setFormError('Value is required.');
-      return;
-    }
+    setFieldErrors({});
 
     setSaving(true);
     try {
@@ -411,6 +415,8 @@ export default function ProductTypesPage() {
               placeholder="e.g. Mug"
               required
               helpText="Shown to admins and customers."
+              error={fieldErrors.label}
+              onClearError={() => setFieldErrors((prev) => ({ ...prev, label: '' }))}
             />
             <FormField
               label="Value"
@@ -420,6 +426,8 @@ export default function ProductTypesPage() {
               placeholder="auto-derived from label"
               required
               helpText="Lowercase identifier saved on each product."
+              error={fieldErrors.value}
+              onClearError={() => setFieldErrors((prev) => ({ ...prev, value: '' }))}
             />
           </div>
 

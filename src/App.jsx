@@ -3,6 +3,7 @@ import { Routes, Route, useLocation } from 'react-router-dom';
 import ProtectedRoute from './components/ProtectedRoute';
 import RequireUserAuth from './components/RequireUserAuth';
 import TopProgressBar from './components/ui/TopProgressBar';
+import FormErrorHighlight from './components/FormErrorHighlight';
 import { lazyWithRetry } from './utils/lazyWithRetry';
 
 const MainLayout = lazy(() => import('./layouts/MainLayout'));
@@ -134,6 +135,7 @@ export default function App() {
   return (
     <>
     <TopProgressBar />
+    <FormErrorHighlight />
     <ErrorBoundary resetKey={location.pathname}>
     <Suspense fallback={<RouteLoader />}>
       <Routes>

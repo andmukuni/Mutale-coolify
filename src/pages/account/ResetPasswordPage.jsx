@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Lock, Eye, EyeOff, KeyRound } from 'lucide-react';
 import { useUserAuth } from '../../context/UserAuthContext';
+import { fieldControlClass } from '../../utils/formFieldHighlight';
 
 export default function ResetPasswordPage() {
   const { resetPasswordWithToken } = useUserAuth();
@@ -27,6 +28,9 @@ export default function ResetPasswordPage() {
     if (password !== confirm) return { ok: false, message: 'Passwords do not match.' };
     return { ok: true, message: '' };
   }, [token, password, confirm]);
+
+  const passwordError = status.type === 'error' && (status.message.toLowerCase().includes('password') || status.message.toLowerCase().includes('match') || password.length < 6);
+  const confirmError = status.type === 'error' && (status.message.toLowerCase().includes('match') || (password && password !== confirm));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -111,7 +115,8 @@ export default function ResetPasswordPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-navy-200 bg-navy-50 text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                    aria-invalid={passwordError || undefined}
+                    className={`${fieldControlClass(passwordError)} pl-10 pr-10`}
                   />
                   <button
                     type="button"
@@ -121,6 +126,9 @@ export default function ResetPasswordPage() {
                     {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
                 </div>
+                {status.type === 'error' && passwordError && !status.message.toLowerCase().includes('match') && (
+                  <p className="mt-1 text-xs text-red-600">{status.message}</p>
+                )}
               </div>
 
               <div>
@@ -137,7 +145,8 @@ export default function ResetPasswordPage() {
                     value={confirm}
                     onChange={(e) => setConfirm(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-navy-200 bg-navy-50 text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                    aria-invalid={confirmError || undefined}
+                    className={`${fieldControlClass(confirmError)} pl-10 pr-10`}
                   />
                   <button
                     type="button"
@@ -147,11 +156,14 @@ export default function ResetPasswordPage() {
                     {showConfirm ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
                 </div>
+                {confirmError && (
+                  <p className="mt-1 text-xs text-red-600">{status.message}</p>
+                )}
               </div>
 
               <button
                 type="submit"
-                disabled={!validation.ok || loading}
+                disabled={loading}
                 className="w-full flex items-center justify-center gap-2 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-medium py-3 rounded-xl transition-colors"
               >
                 {loading ? (

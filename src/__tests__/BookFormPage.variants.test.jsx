@@ -83,9 +83,7 @@ describe('BookFormPage (Admin Product Form)', () => {
 
   it('hides Author and ISBN fields when switching product type to T-Shirt', () => {
     render(wrap(<BookFormPage />));
-    // Click the T-Shirt type pill in the type picker.
-    const tshirtBtn = screen.getAllByRole('button', { name: /t-shirt/i })[0];
-    fireEvent.click(tshirtBtn);
+    fireEvent.change(screen.getByLabelText(/product type/i), { target: { value: 'tshirt' } });
 
     expect(screen.queryByLabelText(/Author/i)).toBeNull();
     expect(screen.queryByLabelText(/ISBN/i)).toBeNull();
@@ -93,11 +91,11 @@ describe('BookFormPage (Admin Product Form)', () => {
 
   it('updates default category when switching to a merch type', () => {
     render(wrap(<BookFormPage />));
-    // Mug → defaultCategory: Drinkware
-    fireEvent.click(screen.getByRole('button', { name: /^mug$/i }));
+    // Mug is merch — category falls back to the first merch catalogue value.
+    fireEvent.change(screen.getByLabelText(/product type/i), { target: { value: 'mug' } });
 
     const categoryInput = screen.getByLabelText(/Category/i);
-    expect(categoryInput.value).toBe('Drinkware');
+    expect(categoryInput.value).toBe('Apparel');
   });
 
   it('Variants step starts empty and supports add/remove of variant rows', () => {
@@ -107,7 +105,7 @@ describe('BookFormPage (Admin Product Form)', () => {
     const titleInput = screen.getByLabelText(/Title/i);
     fireEvent.change(titleInput, { target: { value: 'My Shirt' } });
     // The form requires Author for books — switch to T-Shirt to skip that requirement.
-    fireEvent.click(screen.getAllByRole('button', { name: /t-shirt/i })[0]);
+    fireEvent.change(screen.getByLabelText(/product type/i), { target: { value: 'tshirt' } });
 
     // Click Next four times: Details → Images → Pricing → Variants
     const clickNext = () => fireEvent.click(screen.getByRole('button', { name: /^Next$/i }));

@@ -8,6 +8,8 @@ import { useData } from '../context/DataContext';
 import { useUserAuth } from '../context/UserAuthContext';
 import { getApiBase } from '../utils/apiBase';
 import { defaultWebsitePages } from '../data/websitePages';
+import { fieldControlClass } from '../utils/formFieldHighlight';
+import { useFieldErrors } from '../hooks/useFieldErrors';
 
 const API_BASE = getApiBase();
 
@@ -33,11 +35,25 @@ export default function ContactPage() {
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const { fieldErrors, setErrors: setFieldErrors, clearField, clearAll: clearFieldErrors } = useFieldErrors();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitError('');
     setSubmitted(false);
+    const nextErrors = {};
+    if (!form.name.trim()) nextErrors.name = 'Full name is required.';
+    if (!form.phone.trim()) nextErrors.phone = 'Phone number is required.';
+    if (!form.email.trim()) nextErrors.email = 'Email is required.';
+    else if (!/^\S+@\S+\.\S+$/.test(form.email.trim())) nextErrors.email = 'Enter a valid email address.';
+    if (!form.subject.trim()) nextErrors.subject = 'Subject is required.';
+    if (!form.message.trim()) nextErrors.message = 'Message is required.';
+    if (Object.keys(nextErrors).length) {
+      setFieldErrors(nextErrors);
+      setSubmitError(Object.values(nextErrors)[0]);
+      return;
+    }
+    clearFieldErrors();
     setSubmitting(true);
 
     try {
@@ -70,6 +86,7 @@ export default function ContactPage() {
   };
 
   const handleChange = (e) => {
+    if (e.target.name) clearField(e.target.name);
     setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
@@ -122,9 +139,11 @@ export default function ContactPage() {
                         required
                         value={form.name}
                         onChange={handleChange}
-                        className="w-full px-4 py-2.5 rounded-xl border border-navy-200 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent bg-navy-50"
+                        aria-invalid={Boolean(fieldErrors.name) || undefined}
+                        className={fieldControlClass(fieldErrors.name)}
                         placeholder="Your name"
                       />
+                      {fieldErrors.name && <p className="mt-1 text-xs text-red-600">{fieldErrors.name}</p>}
                     </div>
                     <div>
                       <label htmlFor="phone" className="block text-sm font-medium text-navy-700 mb-1.5">Phone Number</label>
@@ -135,9 +154,11 @@ export default function ContactPage() {
                         required
                         value={form.phone}
                         onChange={handleChange}
-                        className="w-full px-4 py-2.5 rounded-xl border border-navy-200 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent bg-navy-50"
+                        aria-invalid={Boolean(fieldErrors.phone) || undefined}
+                        className={fieldControlClass(fieldErrors.phone)}
                         placeholder="e.g. +260 977..."
                       />
+                      {fieldErrors.phone && <p className="mt-1 text-xs text-red-600">{fieldErrors.phone}</p>}
                     </div>
                     <div>
                       <label htmlFor="email" className="block text-sm font-medium text-navy-700 mb-1.5">Email Address</label>
@@ -148,9 +169,11 @@ export default function ContactPage() {
                         required
                         value={form.email}
                         onChange={handleChange}
-                        className="w-full px-4 py-2.5 rounded-xl border border-navy-200 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent bg-navy-50"
+                        aria-invalid={Boolean(fieldErrors.email) || undefined}
+                        className={fieldControlClass(fieldErrors.email)}
                         placeholder="you@example.com"
                       />
+                      {fieldErrors.email && <p className="mt-1 text-xs text-red-600">{fieldErrors.email}</p>}
                     </div>
                   </div>
                   <div>
@@ -162,9 +185,11 @@ export default function ContactPage() {
                       required
                       value={form.subject}
                       onChange={handleChange}
-                      className="w-full px-4 py-2.5 rounded-xl border border-navy-200 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent bg-navy-50"
+                      aria-invalid={Boolean(fieldErrors.subject) || undefined}
+                      className={fieldControlClass(fieldErrors.subject)}
                       placeholder="What is this regarding?"
                     />
+                    {fieldErrors.subject && <p className="mt-1 text-xs text-red-600">{fieldErrors.subject}</p>}
                   </div>
                   <div>
                     <label htmlFor="message" className="block text-sm font-medium text-navy-700 mb-1.5">Message</label>
@@ -175,9 +200,11 @@ export default function ContactPage() {
                       required
                       value={form.message}
                       onChange={handleChange}
-                      className="w-full px-4 py-2.5 rounded-xl border border-navy-200 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent bg-navy-50 resize-none"
+                      aria-invalid={Boolean(fieldErrors.message) || undefined}
+                      className={`${fieldControlClass(fieldErrors.message)} resize-none`}
                       placeholder="Your message..."
                     />
+                    {fieldErrors.message && <p className="mt-1 text-xs text-red-600">{fieldErrors.message}</p>}
                   </div>
                   <button
                     type="submit"

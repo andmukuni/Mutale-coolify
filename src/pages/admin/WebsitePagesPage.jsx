@@ -116,6 +116,7 @@ export default function WebsitePagesPage() {
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const dirtyRef = useRef(false);
   const saveButtonRef = useRef(null);
   const [showStickySave, setShowStickySave] = useState(false);
@@ -170,6 +171,7 @@ export default function WebsitePagesPage() {
 
   const setCustomDraftField = (name, value) => {
     dirtyRef.current = true;
+    if (name === 'title' || name === 'slug') setFieldErrors((prev) => ({ ...prev, [name]: '' }));
     setForm((prev) => ({
       ...prev,
       customPageDraft: {
@@ -187,13 +189,19 @@ export default function WebsitePagesPage() {
       id: `page-${Date.now()}`,
     });
     if (!nextPage.title || !nextPage.slug) {
+      const nextErrors = {};
+      if (!nextPage.title) nextErrors.title = 'Page title is required.';
+      if (!nextPage.slug) nextErrors.slug = 'Slug is required.';
+      setFieldErrors(nextErrors);
       setError('Custom page title and slug are required.');
       return;
     }
     if (form.customPages.some((page) => page.slug === nextPage.slug)) {
+      setFieldErrors({ slug: 'A custom page with this slug already exists.' });
       setError('A custom page with this slug already exists.');
       return;
     }
+    setFieldErrors({});
     dirtyRef.current = true;
     setForm((prev) => ({
       ...prev,
@@ -417,8 +425,8 @@ export default function WebsitePagesPage() {
               <div className="rounded-2xl border border-navy-100 bg-navy-50/60 p-4 space-y-4">
                 <p className="text-sm font-semibold text-navy-800">Add New Page</p>
                 <div className="grid md:grid-cols-2 gap-4">
-                  <FormField label="Page title" value={form.customPageDraft.title} onChange={(e) => setCustomDraftField('title', e.target.value)} />
-                  <FormField label="Slug" value={form.customPageDraft.slug} onChange={(e) => setCustomDraftField('slug', slugify(e.target.value))} helpText="Public URL will be /pages/your-slug." />
+                  <FormField label="Page title" name="title" value={form.customPageDraft.title} onChange={(e) => setCustomDraftField('title', e.target.value)} error={fieldErrors.title} />
+                  <FormField label="Slug" name="slug" value={form.customPageDraft.slug} onChange={(e) => setCustomDraftField('slug', slugify(e.target.value))} helpText="Public URL will be /pages/your-slug." error={fieldErrors.slug} />
                   <FormField label="Eyebrow" value={form.customPageDraft.eyebrow} onChange={(e) => setCustomDraftField('eyebrow', e.target.value)} />
                   <FormField label="Excerpt" value={form.customPageDraft.excerpt} onChange={(e) => setCustomDraftField('excerpt', e.target.value)} />
                 </div>

@@ -119,29 +119,35 @@ export function validateGuestAttendees(attendees = []) {
     const row = attendees[i] || {};
     const name = String(row.name || row.booked_for_name || '').trim();
     if (!name) {
-      return { ok: false, error: `Attendee ${i + 1} needs a name.` };
+      const error = `Attendee ${i + 1} needs a name.`;
+      return { ok: false, error, fields: { [`guest.${i}.name`]: error } };
     }
     const attendeeType = normalizeAttendeeType(row.attendee_type || row.attendeeType);
     const sex = normalizeAttendeeSex(row.sex || row.attendee_sex || row.gender);
     if (!sex) {
-      return { ok: false, error: `Attendee ${i + 1} (${name}): select sex (male or female).` };
+      const error = `Attendee ${i + 1} (${name}): select sex (male or female).`;
+      return { ok: false, error, fields: { [`guest.${i}.sex`]: error } };
     }
     if (attendeeType === 'child') {
       const relation = normalizeAttendeeRelation(row.relation || row.booked_for_relation);
       if (!relation) {
-        return { ok: false, error: `Attendee ${i + 1} (${name}): select your relationship (parent, guardian, etc.).` };
+        const error = `Attendee ${i + 1} (${name}): select your relationship (parent, guardian, etc.).`;
+        return { ok: false, error, fields: { [`guest.${i}.relation`]: error } };
       }
       const age = normalizeAttendeeAge(row.age ?? row.attendee_age);
       if (age == null) {
-        return { ok: false, error: `Attendee ${i + 1} (${name}): enter age.` };
+        const error = `Attendee ${i + 1} (${name}): enter age.`;
+        return { ok: false, error, fields: { [`guest.${i}.age`]: error } };
       }
       if (age > MAX_CHILD_AGE) {
-        return { ok: false, error: `Attendee ${i + 1} (${name}): child age cannot be greater than ${MAX_CHILD_AGE}.` };
+        const error = `Attendee ${i + 1} (${name}): child age cannot be greater than ${MAX_CHILD_AGE}.`;
+        return { ok: false, error, fields: { [`guest.${i}.age`]: error } };
       }
     }
     const key = name.toLowerCase();
     if (seenNames.has(key)) {
-      return { ok: false, error: 'Each attendee must have a unique name in this order.' };
+      const error = 'Each attendee must have a unique name in this order.';
+      return { ok: false, error, fields: { [`guest.${i}.name`]: error } };
     }
     seenNames.add(key);
   }

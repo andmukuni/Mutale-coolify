@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Mail, Send } from 'lucide-react';
 import { useUserAuth } from '../../context/UserAuthContext';
+import { fieldControlClass } from '../../utils/formFieldHighlight';
 
 export default function ForgotPasswordPage() {
   const { requestPasswordReset } = useUserAuth();
@@ -84,7 +85,8 @@ export default function ForgotPasswordPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@example.com"
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-navy-200 bg-navy-50 text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                    aria-invalid={status.type === 'error' || undefined}
+                    className={`${fieldControlClass(status.type === 'error')} pl-10 pr-4`}
                   />
                 </div>
               </div>

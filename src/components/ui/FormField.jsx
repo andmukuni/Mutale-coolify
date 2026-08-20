@@ -1,3 +1,6 @@
+import { cloneElement, isValidElement, useId } from 'react';
+import { FIELD_ERROR_CLASS, fieldControlClass } from '../../utils/formFieldHighlight';
+
 export default function FormField({
   label,
   name,
@@ -17,23 +20,51 @@ export default function FormField({
   max,
   step,
   maxLength,
+  children,
+  onClearError,
 }) {
-  const baseClass = `w-full px-4 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent ${
-    error
-      ? 'border-red-300 bg-red-50 text-red-900 placeholder-red-300'
-      : 'border-navy-200 bg-navy-50 text-navy-900 placeholder-navy-400'
-  } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`;
+  const uid = useId();
+  const fieldId = name || `field-${uid}`;
+  const errorId = `${fieldId}-error`;
+  const hasError = Boolean(error);
+  const baseClass = `${fieldControlClass(hasError)} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`;
+
+  const handleChange = (event) => {
+    if (hasError) onClearError?.(name || fieldId);
+    onChange?.(event);
+  };
+
+  const describedBy = hasError ? errorId : undefined;
 
   const renderInput = () => {
+    if (children) {
+      if (!isValidElement(children)) return children;
+      const childClass = [children.props.className, hasError ? FIELD_ERROR_CLASS : '']
+        .filter(Boolean)
+        .join(' ');
+      return cloneElement(children, {
+        id: children.props.id || fieldId,
+        'aria-invalid': hasError || children.props['aria-invalid'],
+        'aria-describedby': describedBy || children.props['aria-describedby'],
+        className: childClass,
+        onChange: (event) => {
+          if (hasError) onClearError?.(name || fieldId);
+          children.props.onChange?.(event);
+        },
+      });
+    }
+
     if (type === 'select') {
       return (
         <select
-          id={name}
+          id={fieldId}
           name={name}
           value={value}
-          onChange={onChange}
+          onChange={handleChange}
           required={required}
           disabled={disabled}
+          aria-invalid={hasError || undefined}
+          aria-describedby={describedBy}
           className={baseClass}
         >
           {options.map((opt) => {
@@ -52,14 +83,16 @@ export default function FormField({
     if (textarea || type === 'textarea') {
       return (
         <textarea
-          id={name}
+          id={fieldId}
           name={name}
           value={value}
-          onChange={onChange}
+          onChange={handleChange}
           required={required}
           rows={rows}
           placeholder={placeholder}
           disabled={disabled}
+          aria-invalid={hasError || undefined}
+          aria-describedby={describedBy}
           className={`${baseClass} min-h-[6.5rem] resize-y overflow-auto`}
         />
       );
@@ -67,11 +100,11 @@ export default function FormField({
 
     return (
       <input
-        id={name}
+        id={fieldId}
         name={name}
         type={type}
         value={value}
-        onChange={onChange}
+        onChange={handleChange}
         required={required}
         placeholder={placeholder}
         disabled={disabled}
@@ -79,24 +112,30 @@ export default function FormField({
         max={max}
         step={step}
         maxLength={maxLength}
+        aria-invalid={hasError || undefined}
+        aria-describedby={describedBy}
         className={baseClass}
       />
     );
   };
 
   return (
-    <div>
+    <div data-field-wrapper={name || undefined}>
       {label && (
         <label
-          htmlFor={name}
-          className="block text-sm font-medium text-navy-700 mb-1.5"
+          htmlFor={fieldId}
+          className={`block text-sm font-medium mb-1.5 ${hasError ? 'text-red-700' : 'text-navy-700'}`}
         >
           {label} {required && <span className="text-red-400">*</span>}
         </label>
       )}
       {renderInput()}
-      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
-      {(helpText || helpLink) && !error && (
+      {hasError && (
+        <p id={errorId} className="mt-1 text-xs text-red-600" role="alert">
+          {error}
+        </p>
+      )}
+      {(helpText || helpLink) && !hasError && (
         <p className="mt-1 text-xs text-navy-400">
           {helpText}
           {helpText && helpLink ? ' ' : null}

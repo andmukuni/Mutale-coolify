@@ -6,6 +6,7 @@ import { useToast } from '../../context/ToastContext';
 import { LoadingButton } from '../../components/ui';
 import { purgeInvalidAuthState } from '../../utils/authHeaders';
 import adminLogo from '../../../Logo-Website-Mutale_White No Bg.png';
+import { fieldControlClass } from '../../utils/formFieldHighlight';
 
 export default function LoginPage() {
   const { login, isAuthenticated, loginError, clearLoginError, isLoading } = useAuth();
@@ -124,7 +125,8 @@ export default function LoginPage() {
                     autoComplete="email"
                     autoFocus
                     placeholder="admin@mutale.dev"
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-navy-200 bg-navy-50 text-sm text-navy-900 placeholder-navy-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-colors"
+                    aria-invalid={Boolean(loginError) || undefined}
+                    className={`${fieldControlClass(Boolean(loginError))} pl-10 pr-4`}
                   />
                 </div>
               </div>
@@ -149,7 +151,8 @@ export default function LoginPage() {
                     required
                     autoComplete="current-password"
                     placeholder="Enter your password"
-                    className="w-full pl-10 pr-11 py-2.5 rounded-xl border border-navy-200 bg-navy-50 text-sm text-navy-900 placeholder-navy-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-colors"
+                    aria-invalid={Boolean(loginError) || undefined}
+                    className={`${fieldControlClass(Boolean(loginError))} pl-10 pr-11`}
                   />
                   <button
                     type="button"

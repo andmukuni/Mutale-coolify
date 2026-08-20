@@ -233,7 +233,8 @@ export default function EventSessionsPanel({ eventId, event = {} }) {
             value={draft.session_date}
             onChange={(e) => setDraft((d) => ({ ...d, session_date: e.target.value }))}
             required
-            className="px-3 py-2 rounded-lg border border-navy-200 text-sm"
+            aria-invalid={(!draft.session_date && Boolean(error)) || undefined}
+            className={`px-3 py-2 rounded-lg border text-sm ${!draft.session_date && error ? 'border-red-400 bg-red-50 field-has-error' : 'border-navy-200'}`}
           />
           <input
             type="time"

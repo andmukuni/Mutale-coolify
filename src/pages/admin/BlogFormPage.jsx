@@ -6,6 +6,7 @@ import { useToast } from '../../context/ToastContext';
 import { PageHeader, Card, FormField, Spinner } from '../../components/ui';
 import BlogRichTextEditor from '../../components/admin/blog/BlogRichTextEditor';
 import { calculateReadTime } from '../../utils/helpers';
+import { useFieldErrors } from '../../hooks/useFieldErrors';
 
 const blogCategories = [
   'Quality Systems',
@@ -47,6 +48,7 @@ export default function BlogFormPage() {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const { fieldErrors, setErrors: setFieldErrors, clearField, clearAll: clearFieldErrors } = useFieldErrors();
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imageLoadError, setImageLoadError] = useState('');
   const [imageLoaded, setImageLoaded] = useState(false);
@@ -59,6 +61,7 @@ export default function BlogFormPage() {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
+    if (name) clearField(name);
     setForm((prev) => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value,
@@ -67,15 +70,21 @@ export default function BlogFormPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const nextErrors = {};
+    if (!form.title.trim()) nextErrors.title = 'Title is required.';
+    if (!form.excerpt.trim()) nextErrors.excerpt = 'Excerpt is required.';
     const textOnly = form.content?.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim();
-    if (!textOnly) {
-      setError('Content is required.');
-      toast.error('Please add article content.');
+    if (!textOnly) nextErrors.content = 'Content is required.';
+    if (Object.keys(nextErrors).length) {
+      setFieldErrors(nextErrors);
+      setError(Object.values(nextErrors)[0]);
+      toast.error(Object.values(nextErrors)[0]);
       return;
     }
 
     setSaving(true);
     setError('');
+    clearFieldErrors();
 
     const data = { ...form, readTime: calculateReadTime(form.content) };
 
@@ -163,6 +172,7 @@ export default function BlogFormPage() {
             onChange={handleChange}
             required
             placeholder="e.g., The Future of Quality Assurance in Healthcare"
+            error={fieldErrors.title}
           />
 
           <div className="grid sm:grid-cols-2 gap-4">
@@ -195,6 +205,7 @@ export default function BlogFormPage() {
             required
             placeholder="A brief summary that appears in blog listings..."
             helpText="Keep it concise — 1-2 sentences work best"
+            error={fieldErrors.excerpt}
           />
 
           <div>
@@ -261,8 +272,12 @@ export default function BlogFormPage() {
             label="Content"
             required
             value={form.content}
-            onChange={(html) => setForm((prev) => ({ ...prev, content: html }))}
+            onChange={(html) => {
+              clearField('content');
+              setForm((prev) => ({ ...prev, content: html }));
+            }}
             disabled={saving || uploadingImage}
+            error={fieldErrors.content}
           />
 
           <div className="pt-1">

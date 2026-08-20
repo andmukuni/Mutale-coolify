@@ -147,6 +147,7 @@ export default function UserProfilePage() {
   const [saved, setSaved] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const [photoUploading, setPhotoUploading] = useState(false);
   const [photoRemoving, setPhotoRemoving] = useState(false);
   const photoInputRef = useRef(null);
@@ -257,6 +258,7 @@ export default function UserProfilePage() {
   const handleChange = (e) => {
     setFormError('');
     const { name, value } = e.target;
+    if (name) setFieldErrors((prev) => (prev[name] ? { ...prev, [name]: '' } : prev));
     if (name === 'linkedin_url') {
       const match = value.match(/linkedin\.com\/in\/([^/?#\s]+)/i);
       const handle = match ? match[1].replace(/\/$/, '') : '';
@@ -268,10 +270,17 @@ export default function UserProfilePage() {
 
   const handleSave = async () => {
     if (profileSaving) return;
-    if (!form.name.trim()) { setFormError('Name is required.'); return; }
-    if (!form.email.trim()) { setFormError('Email is required.'); return; }
-    if (!form.phone.trim()) { setFormError('Phone number is required.'); return; }
-    if (!/^\S+@\S+\.\S+$/.test(form.email.trim())) { setFormError('Please enter a valid email address.'); return; }
+    const nextErrors = {};
+    if (!form.name.trim()) nextErrors.name = 'Name is required.';
+    if (!form.email.trim()) nextErrors.email = 'Email is required.';
+    else if (!/^\S+@\S+\.\S+$/.test(form.email.trim())) nextErrors.email = 'Please enter a valid email address.';
+    if (!form.phone.trim()) nextErrors.phone = 'Phone number is required.';
+    if (Object.keys(nextErrors).length) {
+      setFieldErrors(nextErrors);
+      setFormError(Object.values(nextErrors)[0]);
+      return;
+    }
+    setFieldErrors({});
 
     const specialties = form.specialties.split(',').map((s) => s.trim()).filter(Boolean);
     clearAuthError();
@@ -565,9 +574,9 @@ export default function UserProfilePage() {
                 <LiSectionHeader title="Edit profile" />
                 <div className="space-y-4">
                 <div className="grid sm:grid-cols-2 gap-4">
-                  <FormInput icon={User} label="Full name" name="name" value={form.name} onChange={handleChange} />
-                  <FormInput icon={Mail} label="Email address" name="email" type="email" value={form.email} onChange={handleChange} />
-                  <FormInput icon={Phone} label="Phone number" name="phone" type="tel" value={form.phone} onChange={handleChange} placeholder="e.g. 09777" />
+                  <FormInput icon={User} label="Full name" name="name" value={form.name} onChange={handleChange} error={fieldErrors.name} />
+                  <FormInput icon={Mail} label="Email address" name="email" type="email" value={form.email} onChange={handleChange} error={fieldErrors.email} />
+                  <FormInput icon={Phone} label="Phone number" name="phone" type="tel" value={form.phone} onChange={handleChange} placeholder="e.g. 09777" error={fieldErrors.phone} />
                   <FormInput icon={Briefcase} label="What you do (profession)" name="profession" value={form.profession} onChange={handleChange} placeholder="e.g. Quality Assurance Specialist" />
                   <FormInput icon={Building2} label="Organization" name="organization" value={form.organization} onChange={handleChange} placeholder="e.g. Ministry of Health" />
                 </div>
@@ -632,6 +641,7 @@ export default function UserProfilePage() {
                     onClick={() => {
                       setEditing(false);
                       setFormError('');
+                      setFieldErrors({});
                       setForm({
                         name: currentUser?.name || '',
                         email: currentUser?.email || '',
@@ -1411,32 +1421,37 @@ function PaymentStatusBadge({ status = '' }) {
   );
 }
 
-function FormInput({ icon: Icon, label, name, value, onChange, type = 'text', placeholder = '', highlight = false }) {
+function FormInput({ icon: Icon, label, name, value, onChange, type = 'text', placeholder = '', highlight = false, error = '' }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-navy-700 mb-1.5 flex items-center gap-1.5">
+      <label className={`block text-sm font-medium mb-1.5 flex items-center gap-1.5 ${error ? 'text-red-700' : 'text-navy-700'}`}>
         {label}
-        {highlight && (
+        {highlight && !error && (
           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700 animate-pulse">
             Required
           </span>
         )}
       </label>
       <div className="relative">
-        <Icon size={15} className={`absolute left-3.5 top-1/2 -translate-y-1/2 ${highlight ? 'text-cyan-500' : 'text-navy-400'}`} />
+        <Icon size={15} className={`absolute left-3.5 top-1/2 -translate-y-1/2 ${error ? 'text-red-400' : highlight ? 'text-cyan-500' : 'text-navy-400'}`} />
         <input
+          id={name}
           name={name}
           type={type}
           value={value}
           onChange={onChange}
           placeholder={placeholder}
-          className={`w-full pl-10 pr-4 py-2.5 rounded-xl border text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-all ${
-            highlight
-              ? 'border-cyan-400 bg-cyan-50/50 ring-1 ring-cyan-200 shadow-[0_0_0_3px_rgba(6,182,212,0.1)]'
-              : 'border-navy-200 bg-navy-50'
+          aria-invalid={Boolean(error) || undefined}
+          className={`w-full pl-10 pr-4 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:border-transparent transition-all ${
+            error
+              ? 'border-red-400 bg-red-50 text-red-900 focus:ring-red-400 field-has-error'
+              : highlight
+                ? 'border-cyan-400 bg-cyan-50/50 text-navy-900 ring-1 ring-cyan-200 shadow-[0_0_0_3px_rgba(6,182,212,0.1)] focus:ring-cyan-500'
+                : 'border-navy-200 bg-navy-50 text-navy-900 focus:ring-cyan-500'
           }`}
         />
       </div>
+      {error && <p className="mt-1 text-xs text-red-600" role="alert">{error}</p>}
     </div>
   );
 }

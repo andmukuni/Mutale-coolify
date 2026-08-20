@@ -306,3 +306,27 @@ body {
     animation: none;
   }
 }
+
+/* ─── Form field error highlighting (native + JS) ─── */
+form.was-validated :is(input, select, textarea):invalid:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="file"]):not([type="submit"]):not([type="button"]),
+:is(input, select, textarea):user-invalid:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="file"]):not([type="submit"]):not([type="button"]),
+:is(input, select, textarea).field-has-error {
+  border-color: #f87171 !important;
+  background-color: #fef2f2;
+  color: #7f1d1d;
+}
+
+form.was-validated :is(input, select, textarea):invalid:not([type="checkbox"]):not([type="radio"]):focus,
+:is(input, select, textarea):user-invalid:not([type="checkbox"]):not([type="radio"]):focus,
+:is(input, select, textarea).field-has-error:focus {
+  box-shadow: 0 0 0 2px #fca5a5;
+  outline: none;
+}
+
+.dark form.was-validated :is(input, select, textarea):invalid:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="file"]):not([type="submit"]):not([type="button"]),
+.dark :is(input, select, textarea):user-invalid:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="file"]):not([type="submit"]):not([type="button"]),
+.dark :is(input, select, textarea).field-has-error {
+  border-color: #f87171 !important;
+  background-color: rgba(127, 29, 29, 0.35);
+  color: #fecaca;
+}

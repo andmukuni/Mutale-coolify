@@ -452,6 +452,7 @@ describe('multi-guest registration helpers', () => {
     expect(validateGuestAttendees([{ name: 'Ada' }])).toEqual({
       ok: false,
       error: 'Attendee 1 (Ada): select sex (male or female).',
+      fields: { 'guest.0.sex': 'Attendee 1 (Ada): select sex (male or female).' },
     });
     expect(validateGuestAttendees([{ name: 'Kid', attendee_type: 'child', relation: 'parent', sex: 'female', age: 8 }]).ok).toBe(true);
     expect(validateGuestAttendees([{ name: 'Kid', attendee_type: 'child', relation: 'parent', sex: 'female', age: 17 }]).ok).toBe(true);
@@ -461,6 +462,7 @@ describe('multi-guest registration helpers', () => {
     expect(validateGuestAttendees([{ name: 'Kid', attendee_type: 'child', relation: 'parent', sex: 'male', age: 18 }])).toEqual({
       ok: false,
       error: 'Attendee 1 (Kid): child age cannot be greater than 17.',
+      fields: { 'guest.0.age': 'Attendee 1 (Kid): child age cannot be greater than 17.' },
     });
   });
 

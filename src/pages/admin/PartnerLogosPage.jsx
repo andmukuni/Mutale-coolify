@@ -40,6 +40,7 @@ export default function PartnerLogosPage() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [confirm, setConfirm] = useState({ open: false, row: null, busy: false });
@@ -104,9 +105,11 @@ export default function PartnerLogosPage() {
     e.preventDefault();
     setFormError('');
     if (!form.name.trim()) {
+      setFieldErrors({ name: 'Organization name is required.' });
       setFormError('Organization name is required.');
       return;
     }
+    setFieldErrors({});
 
     setSaving(true);
     try {
@@ -296,10 +299,15 @@ export default function PartnerLogosPage() {
 
           <FormField
             label="Organization name"
+            name="name"
             value={form.name}
-            onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+            onChange={(e) => {
+              setFieldErrors({});
+              setForm((prev) => ({ ...prev, name: e.target.value }));
+            }}
             required
             placeholder="Africa CDC"
+            error={fieldErrors.name}
           />
 
           <div>

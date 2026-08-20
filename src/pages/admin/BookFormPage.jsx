@@ -15,6 +15,8 @@ import { useProductTypes } from '../../context/ProductTypesContext';
 import { useProductCategories } from '../../context/ProductCategoriesContext';
 import { useToast } from '../../context/ToastContext';
 import { getProductTypeIcon } from '../../utils/productTypeIcons';
+import { FIELD_ERROR_CLASS } from '../../utils/formFieldHighlight';
+import { useFieldErrors } from '../../hooks/useFieldErrors';
 
 /* ────────────────────────────────────────────────────────── */
 /*  Constants                                                 */
@@ -122,23 +124,30 @@ function makeVariantId() {
 /*  Reusable styled field wrapper                            */
 /* ────────────────────────────────────────────────────────── */
 
-function Field({ label, required, helpText, name, children }) {
+function Field({ label, required, helpText, name, error, children }) {
   const generatedId = name ? `product-field-${name}` : undefined;
+  const errorId = generatedId ? `${generatedId}-error` : undefined;
   const fieldControl = isValidElement(children)
     ? cloneElement(children, {
         id: children.props.id || generatedId,
+        'aria-invalid': error ? true : children.props['aria-invalid'],
+        'aria-describedby': error ? errorId : children.props['aria-describedby'],
+        className: [children.props.className, error ? FIELD_ERROR_CLASS : ''].filter(Boolean).join(' '),
       })
     : children;
 
   return (
     <div>
       {label && (
-        <label htmlFor={generatedId} className="block text-sm font-medium text-navy-700 mb-1.5">
+        <label htmlFor={generatedId} className={`block text-sm font-medium mb-1.5 ${error ? 'text-red-700' : 'text-navy-700'}`}>
           {label} {required && <span className="text-red-400">*</span>}
         </label>
       )}
       {fieldControl}
-      {helpText && <p className="mt-1 text-xs text-navy-400">{helpText}</p>}
+      {error && (
+        <p id={errorId} className="mt-1 text-xs text-red-600" role="alert">{error}</p>
+      )}
+      {helpText && !error && <p className="mt-1 text-xs text-navy-400">{helpText}</p>}
     </div>
   );
 }
@@ -150,7 +159,7 @@ const inputCls =
 /*  Step 1 — Product Details                                 */
 /* ────────────────────────────────────────────────────────── */
 
-function StepDetails({ form, onChange, onTypeChange, onSelectEvent, events, productTypeOptions, categoryOptions }) {
+function StepDetails({ form, onChange, onTypeChange, onSelectEvent, events, productTypeOptions, categoryOptions, fieldErrors = {} }) {
   const isBook = form.product_type === 'book';
   const categories = categoryOptions.length > 0 ? categoryOptions : ['Other'];
 
@@ -189,17 +198,17 @@ function StepDetails({ form, onChange, onTypeChange, onSelectEvent, events, prod
       </Field>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Field label="Title" name="title" required>
+        <Field label="Title" name="title" required error={fieldErrors.title}>
           <input name="title" value={form.title} onChange={onChange} className={inputCls} placeholder={isBook ? 'e.g. Quality Management in Medical Laboratories' : 'e.g. Conference 2026 T-Shirt'} required />
         </Field>
-        <Field label="URL Slug" name="slug" required>
+        <Field label="URL Slug" name="slug" required error={fieldErrors.slug}>
           <input name="slug" value={form.slug} onChange={onChange} className={inputCls} placeholder="auto-generated-from-title" required />
         </Field>
 
         {isBook && (
           <>
-            <Field label="Author" name="author" required={isBook}>
-              <input name="author" value={form.author} onChange={onChange} className={inputCls} placeholder="e.g. Mutale Mubanga" />
+            <Field label="Author" name="author" required={isBook} error={fieldErrors.author}>
+              <input name="author" value={form.author} onChange={onChange} className={inputCls} placeholder="e.g. Mutale Mubanga" required={isBook} />
             </Field>
             <Field label="ISBN" name="isbn">
               <input name="isbn" value={form.isbn} onChange={onChange} className={inputCls} placeholder="978-0-000-00000-0" />
@@ -744,6 +753,7 @@ export default function BookFormPage() {
   const [saved, setSaved]                 = useState(false);
   const [saving, setSaving]               = useState(false);
   const [error, setError]                 = useState('');
+  const { fieldErrors, setErrors: setFieldErrors, clearField, clearAll: clearFieldErrors } = useFieldErrors();
   const [loading, setLoading]             = useState(isEditing);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadingGallery, setUploadingGallery] = useState(false);
@@ -789,6 +799,7 @@ export default function BookFormPage() {
   /* ── Handlers ───────────────────────────────────────────── */
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
+    if (name) clearField(name);
     setForm(prev => {
       const updated = { ...prev, [name]: type === 'checkbox' ? checked : value };
       if (name === 'title' && !isEditing) updated.slug = generateSlug(value);
@@ -965,26 +976,34 @@ export default function BookFormPage() {
   };
 
   /* ── Step validation ────────────────────────────────────── */
-  const canProceed = () => {
-    if (step === 0) {
-      const baseOk = form.title.trim() && form.slug.trim();
-      const bookOk = form.product_type !== 'book' || form.author.trim();
-      return baseOk && bookOk;
-    }
-    return true; // other steps are optional
+  const getStepErrors = () => {
+    if (step !== 0) return {};
+    const next = {};
+    if (!form.title.trim()) next.title = 'Title is required.';
+    if (!form.slug.trim()) next.slug = 'URL slug is required.';
+    if (form.product_type === 'book' && !form.author.trim()) next.author = 'Author is required for books.';
+    return next;
   };
 
+  const canProceed = () => Object.keys(getStepErrors()).length === 0;
+
   const goNext = () => { if (step < STEPS.length - 1 && canProceed()) setStep(s => s + 1); };
-  const goBack = () => { if (step > 0) setStep(s => s - 1); };
+  const goBack = () => { if (step > 0) { clearFieldErrors(); setStep(s => s - 1); } };
   const handleWizardSubmit = (e) => {
     e.preventDefault();
+    const stepErrs = getStepErrors();
+    if (Object.keys(stepErrs).length) {
+      setFieldErrors(stepErrs);
+      setError(Object.values(stepErrs)[0]);
+      return;
+    }
+    clearFieldErrors();
+    setError('');
     if (isLastStep) {
       handleSubmit();
       return;
     }
-    if (canProceed()) {
-      goNext();
-    }
+    goNext();
   };
 
   /* ── Loading spinner ────────────────────────────────────── */
@@ -998,7 +1017,7 @@ export default function BookFormPage() {
 
   /* ── Step content map ───────────────────────────────────── */
   const stepContent = {
-    details:    <StepDetails form={form} onChange={handleChange} onTypeChange={handleTypeChange} onSelectEvent={handleSelectEvent} events={events} productTypeOptions={productTypeOptions} categoryOptions={categoryOptions} />,
+    details:    <StepDetails form={form} onChange={handleChange} onTypeChange={handleTypeChange} onSelectEvent={handleSelectEvent} events={events} productTypeOptions={productTypeOptions} categoryOptions={categoryOptions} fieldErrors={fieldErrors} />,
     images:     <StepImages
                   form={form}
                   onImageUpload={handleImageUpload}
@@ -1119,7 +1138,6 @@ export default function BookFormPage() {
         ) : (
           <button
             type="submit"
-            disabled={!canProceed()}
             className="inline-flex items-center justify-center gap-2 w-full sm:w-auto bg-cyan-600 hover:bg-cyan-500 text-white px-6 py-2.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           >
             Next

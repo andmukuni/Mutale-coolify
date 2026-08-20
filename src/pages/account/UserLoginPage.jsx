@@ -6,6 +6,7 @@ import { useToast } from '../../context/ToastContext';
 import { getApiBase } from '../../utils/apiBase';
 import { purgeInvalidAuthState } from '../../utils/authHeaders';
 import siteLogo from '../../../Logo-Website-Mutale_Main - Navy and Teal.png';
+import { fieldControlClass } from '../../utils/formFieldHighlight';
 
 const API_BASE = getApiBase();
 
@@ -152,7 +153,8 @@ export default function UserLoginPage() {
                     value={form.email}
                     onChange={handleChange}
                     placeholder="you@example.com"
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-navy-200 bg-navy-50 text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                    aria-invalid={Boolean(authError && !unverified) || undefined}
+                    className={`${fieldControlClass(Boolean(authError && !unverified))} pl-10 pr-4`}
                   />
                 </div>
               </div>
@@ -181,7 +183,8 @@ export default function UserLoginPage() {
                     value={form.password}
                     onChange={handleChange}
                     placeholder="••••••••"
-                    className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-navy-200 bg-navy-50 text-sm text-navy-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                    aria-invalid={Boolean(authError && !unverified) || undefined}
+                    className={`${fieldControlClass(Boolean(authError && !unverified))} pl-10 pr-10`}
                   />
                   <button
                     type="button"
