@@ -127,6 +127,7 @@ import { sanitizeBlogHtml } from '../shared/blogSanitize.js';
 import { DEFAULT_PARTNER_LOGOS } from '../shared/partnerLogos.js';
 import { DEFAULT_MENU_ITEMS, MENU_LOCATIONS } from '../shared/menuItems.js';
 import { getEventRegistrationGateReason, isEventEnded } from '../shared/eventRegistration.js';
+import { normalizeSurveyQuestions } from '../shared/eventSurveyQuestions.js';
 import {
   ensureRbacTables,
   seedRbac,
@@ -319,6 +320,7 @@ const EVENT_FIELDS = [
   'daily_created_at',
   'daily_synced_at',
   'forum_enabled',
+  'survey_questions',
 ];
 
 const BLOG_FIELDS = [
@@ -2104,6 +2106,9 @@ function normalizeEventPayload(payload = {}, fallbackId = null) {
     daily_created_at: payload.daily_created_at || null,
     daily_synced_at: payload.daily_synced_at || null,
     forum_enabled: parseBoolean(payload.forum_enabled, false),
+    survey_questions: JSON.stringify(
+      normalizeSurveyQuestions(payload.survey_questions, { fallbackToDefault: true }),
+    ),
   };
 }
 
@@ -3250,6 +3255,7 @@ function buildBrandedEmailHtml({ title, previewText = '', greeting = 'Hi there,'
 </html>`;
 }
 
+
 async function lookupUserPhoneByEmail(email) {
   const normalized = String(email || '').trim().toLowerCase();
   if (!normalized || !normalized.includes('@')) return '';
@@ -4022,6 +4028,7 @@ function mapDbEvent(row) {
     featured_speakers: safeParseJson(row.featured_speakers),
     featured_guests: safeParseJson(row.featured_guests),
     partners: safeParseJson(row.partners),
+    survey_questions: normalizeSurveyQuestions(row.survey_questions, { fallbackToDefault: true }),
     location_lat: toNullableNumber(row.location_lat),
     location_lng: toNullableNumber(row.location_lng),
   };
@@ -4154,6 +4161,7 @@ async function ensureSchema() {
     ['location_lat', 'DECIMAL(10,7) NULL'],
     ['location_lng', 'DECIMAL(10,7) NULL'],
     ['location_place', 'VARCHAR(255) NULL'],
+    ['survey_questions', 'JSON NULL'],
   ];
 
   for (const [name, sqlType] of eventColumnsToAdd) {

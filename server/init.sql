@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS events (
   category VARCHAR(100),
   featured BOOLEAN DEFAULT FALSE,
   forum_enabled TINYINT(1) NOT NULL DEFAULT 0,
+  survey_questions JSON NULL,
   delivery_mode VARCHAR(30) DEFAULT 'virtual',
   provider VARCHAR(30) DEFAULT 'internal',
   zoom_meeting_id VARCHAR(64),

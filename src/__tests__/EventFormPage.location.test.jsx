@@ -24,6 +24,9 @@ vi.mock('../components/admin/event/EventSessionsPanel', () => ({
 vi.mock('../components/admin/EventPublicQrCard', () => ({
   default: () => null,
 }));
+vi.mock('../components/admin/event/EventSurveyBuilder', () => ({
+  default: () => <div>Guest survey builder</div>,
+}));
 
 function goToScheduleStep() {
   fireEvent.change(screen.getByLabelText(/^title/i), { target: { value: 'Lab Workshop' } });

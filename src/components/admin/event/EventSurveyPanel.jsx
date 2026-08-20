@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Loader2, Sparkles } from 'lucide-react';
 import { getApiBase } from '../../../utils/apiBase';
 import { getAdminAuthHeaders } from '../../../utils/authHeaders';
+import { formatSurveyAnswerValue } from '../../../../shared/eventSurveyQuestions.js';
 
 const API_BASE = getApiBase();
 
@@ -57,6 +58,7 @@ export default function EventSurveyPanel({ eventId }) {
 
   const analysis = data?.analysis?.summary || {};
   const responses = Array.isArray(data?.responses) ? data.responses : [];
+  const questions = Array.isArray(data?.questions) ? data.questions : [];
 
   return (
     <div className="space-y-5">
@@ -65,7 +67,7 @@ export default function EventSurveyPanel({ eventId }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-navy-600">
           {data?.response_count || 0} response{data?.response_count === 1 ? '' : 's'}
-          {data?.average_rating != null ? ` · average rating ${data.average_rating}/5` : ''}
+          {data?.average_rating != null ? ` · average ${data.average_rating}/${data.rating_max || 5}` : ''}
         </p>
         <button
           type="button"
@@ -120,16 +122,18 @@ export default function EventSurveyPanel({ eventId }) {
           {responses.map((row) => (
             <li key={row.id} className="py-3">
               <p className="text-sm font-medium text-navy-900">{row.attendee_name}</p>
-              <p className="text-xs text-navy-500 mt-0.5">
-                {row.answers?.rating ? `Rating ${row.answers.rating}/5` : 'No rating'}
-                {row.answers?.recommend ? ` · Recommend: ${row.answers.recommend}` : ''}
-              </p>
-              {row.answers?.valuable && (
-                <p className="text-sm text-navy-700 mt-1">{row.answers.valuable}</p>
-              )}
-              {row.answers?.improve && (
-                <p className="text-xs text-navy-500 mt-1">Improve: {row.answers.improve}</p>
-              )}
+              <dl className="mt-2 space-y-1.5">
+                {questions.map((question) => {
+                  const formatted = formatSurveyAnswerValue(question, row.answers?.[question.id]);
+                  if (!formatted) return null;
+                  return (
+                    <div key={question.id}>
+                      <dt className="text-[11px] uppercase tracking-wide text-navy-400">{question.label}</dt>
+                      <dd className="text-sm text-navy-700">{formatted}</dd>
+                    </div>
+                  );
+                })}
+              </dl>
             </li>
           ))}
         </ul>

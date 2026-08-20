@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { CheckCircle2, ClipboardList, Loader2, XCircle } from 'lucide-react';
 import { getApiBase } from '../utils/apiBase';
+import SurveyQuestionField from '../components/survey/SurveyQuestionField';
+import { validateSurveyAnswers } from '../../shared/eventSurveyQuestions.js';
 
 const API_BASE = getApiBase();
 
@@ -47,6 +49,11 @@ export default function GuestSurveyPage() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    const checked = validateSurveyAnswers(answers, questions);
+    if (!checked.ok) {
+      setError(checked.message);
+      return;
+    }
     setSubmitting(true);
     setError('');
     try {
@@ -106,46 +113,12 @@ export default function GuestSurveyPage() {
         {!loading && survey?.can_submit && !done && (
           <form onSubmit={handleSubmit} className="mt-6 space-y-5">
             {questions.map((question) => (
-              <label key={question.id} className="block">
-                <span className="text-sm font-medium text-navy-800">
-                  {question.label}
-                  {question.required ? ' *' : ''}
-                </span>
-                {question.type === 'rating' && (
-                  <select
-                    className="mt-2 w-full rounded-xl border border-navy-200 px-3 py-2.5 text-sm"
-                    value={answers[question.id] || ''}
-                    onChange={(e) => setAnswers((prev) => ({ ...prev, [question.id]: e.target.value }))}
-                    required={question.required}
-                  >
-                    <option value="">Select a rating</option>
-                    {[1, 2, 3, 4, 5].map((value) => (
-                      <option key={value} value={value}>{value} / 5</option>
-                    ))}
-                  </select>
-                )}
-                {question.type === 'choice' && (
-                  <select
-                    className="mt-2 w-full rounded-xl border border-navy-200 px-3 py-2.5 text-sm"
-                    value={answers[question.id] || ''}
-                    onChange={(e) => setAnswers((prev) => ({ ...prev, [question.id]: e.target.value }))}
-                    required={question.required}
-                  >
-                    <option value="">Select an option</option>
-                    {(question.options || []).map((option) => (
-                      <option key={option} value={option}>{option}</option>
-                    ))}
-                  </select>
-                )}
-                {question.type === 'text' && (
-                  <textarea
-                    className="mt-2 w-full rounded-xl border border-navy-200 px-3 py-2.5 text-sm min-h-[90px]"
-                    value={answers[question.id] || ''}
-                    onChange={(e) => setAnswers((prev) => ({ ...prev, [question.id]: e.target.value }))}
-                    required={question.required}
-                  />
-                )}
-              </label>
+              <SurveyQuestionField
+                key={question.id}
+                question={question}
+                value={answers[question.id]}
+                onChange={(value) => setAnswers((prev) => ({ ...prev, [question.id]: value }))}
+              />
             ))}
             <button
               type="submit"

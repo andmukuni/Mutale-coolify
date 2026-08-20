@@ -705,7 +705,7 @@ export function registerGuestTicketRoutes(app, deps) {
         data: {
           event_title: loaded.event.title,
           attendee_name: resolveGuestDisplayName(loaded.registration),
-          questions: getEventSurveyQuestions(),
+          questions: getEventSurveyQuestions(loaded.event),
           submitted: Boolean(existing),
           answers: existing
             ? (typeof existing.answers === 'string'
@@ -746,6 +746,7 @@ export function registerGuestTicketRoutes(app, deps) {
         registrationId: loaded.registration.id,
         referenceCode: loaded.registration.reference_code,
         answers: req.body?.answers || {},
+        questions: getEventSurveyQuestions(loaded.event),
       });
       if (!result.ok) {
         return res.status(result.status || 400).json({ ok: false, message: result.message });

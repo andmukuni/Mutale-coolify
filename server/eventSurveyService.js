@@ -1,32 +1,11 @@
-export const DEFAULT_EVENT_SURVEY_QUESTIONS = [
-  {
-    id: 'rating',
-    type: 'rating',
-    label: 'How would you rate this event overall?',
-    required: true,
-    min: 1,
-    max: 5,
-  },
-  {
-    id: 'valuable',
-    type: 'text',
-    label: 'What did you find most valuable?',
-    required: true,
-  },
-  {
-    id: 'improve',
-    type: 'text',
-    label: 'What could we improve for next time?',
-    required: false,
-  },
-  {
-    id: 'recommend',
-    type: 'choice',
-    label: 'Would you recommend this event to a colleague?',
-    required: true,
-    options: ['Yes', 'Maybe', 'No'],
-  },
-];
+import {
+  DEFAULT_EVENT_SURVEY_QUESTIONS,
+  computeSurveyAverageRating,
+  resolveEventSurveyQuestions,
+  validateSurveyAnswers as validateAnswersAgainstQuestions,
+} from '../shared/eventSurveyQuestions.js';
+
+export { DEFAULT_EVENT_SURVEY_QUESTIONS };
 
 function newId(prefix) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -69,35 +48,12 @@ export async function ensureEventSurveySchema(pool) {
   `);
 }
 
-export function getEventSurveyQuestions() {
-  return DEFAULT_EVENT_SURVEY_QUESTIONS;
+export function getEventSurveyQuestions(event = {}) {
+  return resolveEventSurveyQuestions(event);
 }
 
-export function validateSurveyAnswers(answers = {}) {
-  const normalized = {};
-  for (const question of DEFAULT_EVENT_SURVEY_QUESTIONS) {
-    const raw = answers[question.id];
-    if (question.type === 'rating') {
-      const value = Number(raw);
-      if (!Number.isFinite(value) || value < question.min || value > question.max) {
-        if (question.required) {
-          return { ok: false, message: `Please rate the event from ${question.min} to ${question.max}.` };
-        }
-        continue;
-      }
-      normalized[question.id] = value;
-      continue;
-    }
-    const text = String(raw || '').trim();
-    if (question.required && !text) {
-      return { ok: false, message: `Please answer: ${question.label}` };
-    }
-    if (question.type === 'choice' && text && !(question.options || []).includes(text)) {
-      return { ok: false, message: `Choose a valid option for: ${question.label}` };
-    }
-    if (text) normalized[question.id] = text.slice(0, 4000);
-  }
-  return { ok: true, answers: normalized };
+export function validateSurveyAnswers(answers = {}, questions = DEFAULT_EVENT_SURVEY_QUESTIONS) {
+  return validateAnswersAgainstQuestions(answers, questions);
 }
 
 export async function loadSurveyResponse(pool, registrationId) {
@@ -113,8 +69,9 @@ export async function submitSurveyResponse(pool, {
   registrationId,
   referenceCode,
   answers,
+  questions,
 }) {
-  const validated = validateSurveyAnswers(answers);
+  const validated = validateSurveyAnswers(answers, questions);
   if (!validated.ok) return validated;
 
   const existing = await loadSurveyResponse(pool, registrationId);
@@ -141,6 +98,11 @@ export async function listEventSurveyResults(pool, eventId) {
      ORDER BY r.submitted_at DESC`,
     [eventId],
   );
+  const [[event]] = await pool.query(
+    'SELECT survey_questions FROM events WHERE id = ? LIMIT 1',
+    [eventId],
+  );
+  const questions = resolveEventSurveyQuestions(event);
   const responses = (rows || []).map((row) => ({
     id: row.id,
     registration_id: row.registration_id,
@@ -156,18 +118,14 @@ export async function listEventSurveyResults(pool, eventId) {
     [eventId],
   );
 
-  const ratings = responses
-    .map((item) => Number(item.answers?.rating))
-    .filter((value) => Number.isFinite(value));
-  const averageRating = ratings.length
-    ? Math.round((ratings.reduce((sum, value) => sum + value, 0) / ratings.length) * 10) / 10
-    : null;
+  const ratingStats = computeSurveyAverageRating(responses, questions);
 
   return {
-    questions: DEFAULT_EVENT_SURVEY_QUESTIONS,
+    questions,
     responses,
     response_count: responses.length,
-    average_rating: averageRating,
+    average_rating: ratingStats.average,
+    rating_max: ratingStats.max,
     analysis: analysis
       ? {
         id: analysis.id,
@@ -197,18 +155,31 @@ export async function analyzeEventSurveyWithAI({
     return { ok: false, status: 400, message: 'No survey responses to analyze yet.' };
   }
 
-  const payload = results.responses.map((item) => ({
-    attendee: item.attendee_name,
-    answers: item.answers,
-  }));
+  const questions = results.questions || resolveEventSurveyQuestions(event);
+  const payload = {
+    questions: questions.map((question) => ({
+      id: question.id,
+      type: question.type,
+      label: question.label,
+    })),
+    responses: results.responses.map((item) => ({
+      attendee: item.attendee_name,
+      answers: questions.map((question) => ({
+        question: question.label,
+        type: question.type,
+        value: item.answers?.[question.id] ?? null,
+      })),
+    })),
+  };
 
   const prompt = [
     `Analyze post-event survey responses for "${event.title || 'this event'}".`,
+    'Questions are defined by the organizer and may differ per event.',
     'Return compact JSON only with keys:',
     'headline (string), sentiment (positive|mixed|negative),',
     'average_rating (number or null), themes (array of {theme, count, evidence}),',
     'highlights (string[]), improvements (string[]), recommendation (string).',
-    'Use only the responses. Do not invent attendees.',
+    'Use only the responses. Do not invent attendees or questions.',
     '',
     JSON.stringify(payload).slice(0, 12000),
   ].join('\n');
