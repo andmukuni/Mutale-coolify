@@ -50,6 +50,17 @@ describe('branded email chrome', () => {
     expect(html).toContain('Hi Mutale,');
   });
 
+  it('keeps the card at 600px so it does not fill the inbox', () => {
+    const html = wrapBrandedEmailHtml({
+      title: 'Confirm your email address',
+      innerHtml: '<p>Body</p>',
+    });
+    expect(html).toContain('max-width:600px');
+    expect(html).toContain('width:100%;max-width:600px');
+    expect(html).toContain('<center');
+    expect(html).not.toContain('width:640px');
+  });
+
   it('escapes custom inner HTML titles', () => {
     const html = wrapBrandedEmailHtml({
       title: '<script>alert(1)</script>',

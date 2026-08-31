@@ -57,6 +57,16 @@ describe('buildRegistrationEmailHtml', () => {
     expect(html).toContain('https://mutalemubanga.org/tickets/KLA-2024-00125');
   });
 
+  it('sits as a 600px centered card instead of stretching full width', () => {
+    const html = buildRegistrationEmailHtml(sample);
+    expect(html).toContain('max-width:600px');
+    expect(html).toContain('width:100%;max-width:600px');
+    expect(html).toContain('<center');
+    expect(html).toContain('align="center"');
+    expect(html).not.toContain('width:640px');
+    expect(html).not.toContain('max-width:100%');
+  });
+
   it('escapes HTML in the recipient name', () => {
     const html = buildRegistrationEmailHtml({
       ...sample,

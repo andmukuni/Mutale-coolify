@@ -13,6 +13,7 @@ export const EMAIL_BRAND_COLORS = {
 };
 
 export const PUBLIC_WHITE_LOGO_PATH = '/Logo-Website-Mutale_White%20No%20Bg.png';
+export const EMAIL_CARD_WIDTH = 600;
 
 const {
   navy: NAVY,
@@ -147,6 +148,50 @@ function resolveBrand(brand = {}, websiteUrl = '') {
 }
 
 /**
+ * Centered 600px card so the email sits in the inbox instead of stretching full width.
+ * Gmail ignores a fixed width + max-width:100%; width:100% + max-width:600px holds.
+ */
+export function renderEmailDocument({ title = 'Mutale Mubanga', previewText = '', cardHtml = '' } = {}) {
+  const width = EMAIL_CARD_WIDTH;
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="x-apple-disable-message-reformatting" />
+    <title>${escapeHtml(title)}</title>
+    <!--[if !mso]><!-->
+    <style>
+      html, body { margin:0 !important; padding:0 !important; width:100% !important; background:${EMAIL_BG} !important; }
+      body { -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%; }
+      .email-card { width:100% !important; max-width:${width}px !important; }
+    </style>
+    <!--<![endif]-->
+  </head>
+  <body style="margin:0;padding:0;width:100%;background:${EMAIL_BG};font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">${escapeHtml(previewText)}</div>
+    <center style="width:100%;background:${EMAIL_BG}">
+      <table role="presentation" align="center" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;background:${EMAIL_BG}">
+        <tr>
+          <td align="center" valign="top" style="padding:28px 20px;background:${EMAIL_BG}">
+            <!--[if mso]>
+            <table role="presentation" align="center" width="${width}" cellpadding="0" cellspacing="0" border="0"><tr><td width="${width}">
+            <![endif]-->
+            <table role="presentation" align="center" class="email-card" width="${width}" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:${width}px;background:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 8px 30px rgba(11,27,58,0.10)">
+              ${cardHtml}
+            </table>
+            <!--[if mso]>
+            </td></tr></table>
+            <![endif]-->
+          </td>
+        </tr>
+      </table>
+    </center>
+  </body>
+</html>`;
+}
+
+/**
  * Wrap already-safe HTML in the navy / teal / coral Mutale email chrome.
  */
 export function wrapBrandedEmailHtml({
@@ -164,19 +209,10 @@ export function wrapBrandedEmailHtml({
     ? `<td style="vertical-align:middle;text-align:right;width:150px">${headerExtraHtml}</td>`
     : '';
 
-  return `<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>${escapeHtml(title)}</title>
-  </head>
-  <body style="margin:0;padding:0;background:${EMAIL_BG};font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
-    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">${escapeHtml(previewText)}</div>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${EMAIL_BG}">
-      <tr>
-        <td align="center" style="padding:24px 12px">
-          <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="width:640px;max-width:100%;background:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 8px 30px rgba(11,27,58,0.10)">
+  return renderEmailDocument({
+    title,
+    previewText,
+    cardHtml: `
             <tr>
               <td style="background:${NAVY};padding:22px 28px 20px">
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
@@ -201,13 +237,8 @@ export function wrapBrandedEmailHtml({
               <td style="padding:0 18px 8px">
                 ${brandFooterHtml(resolved)}
               </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-  </body>
-</html>`;
+            </tr>`,
+  });
 }
 
 /**

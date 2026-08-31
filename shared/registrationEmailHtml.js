@@ -5,6 +5,7 @@ import {
   brandFooterHtml,
   brandHeaderHtml,
   escapeHtml,
+  renderEmailDocument,
   resolveLogoSrc,
 } from './brandedEmailHtml.js';
 
@@ -12,11 +13,9 @@ const {
   navy: NAVY,
   navyText: NAVY_TEXT,
   teal: TEAL,
-  coral: CORAL,
   gray: GRAY,
   light: LIGHT,
   border: BORDER,
-  emailBg: EMAIL_BG,
   link: LINK_BLUE,
 } = EMAIL_BRAND_COLORS;
 
@@ -110,19 +109,10 @@ export function buildRegistrationEmailHtml({
     ? `<a href="${escapeHtml(viewTicketUrl)}" target="_blank" style="display:block;text-align:center;text-decoration:none;font-size:16px;font-weight:700;letter-spacing:.2px;padding:14px 22px;border-radius:12px;background:${TEAL};color:#ffffff">View Ticket &rarr;</a>`
     : '';
 
-  return `<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>${escapeHtml(eventTitle ? `Registration Confirmed: ${eventTitle}` : 'Registration Confirmed')}</title>
-  </head>
-  <body style="margin:0;padding:0;background:${EMAIL_BG};font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
-    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">${escapeHtml(previewText)}</div>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${EMAIL_BG}">
-      <tr>
-        <td align="center" style="padding:24px 12px">
-          <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="width:640px;max-width:100%;background:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 8px 30px rgba(11,27,58,0.10)">
+  return renderEmailDocument({
+    title: eventTitle ? `Registration Confirmed: ${eventTitle}` : 'Registration Confirmed',
+    previewText,
+    cardHtml: `
             <tr>
               <td style="background:${NAVY};padding:22px 28px 20px">
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
@@ -194,13 +184,8 @@ export function buildRegistrationEmailHtml({
               <td style="padding:0 18px 8px">
                 ${brandFooterHtml({ brandTagline, websiteUrl, websiteLabel })}
               </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-  </body>
-</html>`;
+            </tr>`,
+  });
 }
 
 export { PUBLIC_WHITE_LOGO_PATH, resolveLogoSrc };
