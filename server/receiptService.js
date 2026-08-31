@@ -12,6 +12,7 @@ import {
 import { loadReceiptLogoDataUrl } from '../shared/receiptLogoAsset.js';
 import { buildPersonTemplateVars } from '../shared/notificationTemplates.js';
 import { buildCalendarChooserUrl, buildGoogleCalendarUrl } from '../shared/googleCalendar.js';
+import { defaultEmailBrand, publicLogoUrl } from '../shared/brandedEmailHtml.js';
 
 export { isReceiptEligible, formatReceiptDisplayNumber } from '../shared/receiptPdf.js';
 export { loadReceiptLogoDataUrl };
@@ -399,6 +400,8 @@ export async function sendReceiptEmail({
     buttonText: calendarUrl ? 'Add to Calendar' : '',
     buttonUrl: calendarUrl,
     footerLines: ['Best regards,', 'Mutale Mubanga'],
+    brand: defaultEmailBrand(appOrigin),
+    logoUrl: publicLogoUrl(appOrigin),
   });
 
   const result = await sendEmailNotification({

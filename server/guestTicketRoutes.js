@@ -24,6 +24,7 @@ import {
   submitSurveyResponse,
 } from './eventSurveyService.js';
 import { getEventTimeBounds } from '../shared/eventRegistration.js';
+import { buildBrandedEmailHtml, defaultEmailBrand, publicLogoUrl } from '../shared/brandedEmailHtml.js';
 
 function getBearerToken(req) {
   const header = String(req.headers?.authorization || '').trim();
@@ -454,6 +455,7 @@ export function registerGuestTicketRoutes(app, deps) {
 
       const settings = await deps.getSystemSettings();
       const eventTitle = loaded.event.title || 'Event';
+      const origin = String(deps.resolvePublicAppUrl?.(req) || '').replace(/\/$/, '');
       await deps.sendEmailNotification({
         settings,
         to: email,
@@ -464,9 +466,18 @@ export function registerGuestTicketRoutes(app, deps) {
           'Use this code on your ticket page to download your certificate or verify access.',
           'This code expires in 15 minutes.',
         ].join('\n'),
-        html: `<p>Your verification code is: <strong>${code}</strong></p>
-<p>Use this code on your ticket page to download your certificate or verify access.</p>
-<p>This code expires in 15 minutes.</p>`,
+        html: buildBrandedEmailHtml({
+          title: `Your access code for ${eventTitle}`,
+          previewText: 'Your verification code is ready.',
+          greeting: 'Hi there,',
+          bodyLines: [
+            'Use this code on your ticket page to download your certificate or verify access.',
+            'This code expires in 15 minutes.',
+          ],
+          code,
+          brand: defaultEmailBrand(origin),
+          logoUrl: publicLogoUrl(origin),
+        }),
         smsTo: resolveAttendeePhone(loaded.registration),
         smsMessage: `Your Mutale access code for ${eventTitle} is ${code}. It expires in 15 minutes.`,
         kind: 'access_code',

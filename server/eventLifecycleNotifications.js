@@ -8,6 +8,7 @@ import {
 import { buildPersonTemplateVars } from '../shared/notificationTemplates.js';
 import { resolvePublicAppUrl } from './publicAppUrl.js';
 import { issueGuestLinkBundle } from '../shared/guestAccessToken.js';
+import { buildBrandedEmailHtml, defaultEmailBrand, publicLogoUrl } from '../shared/brandedEmailHtml.js';
 
 export const LIFECYCLE_LOOKBACK_MS = 48 * 60 * 60 * 1000;
 export const REMINDER_LEAD_MS = 15 * 60 * 1000;
@@ -158,9 +159,35 @@ export function buildLifecycleMessages({
     smsMessage = [`${title} has ended. Please share feedback:`, link].filter(Boolean).join(' ');
   }
 
+  const button = kind === LIFECYCLE_KINDS.ended
+    ? { buttonText: surveyUrl ? 'Share feedback' : (ticketUrl ? 'View ticket' : ''), buttonUrl: surveyUrl || ticketUrl || eventUrl }
+    : { buttonText: joinUrl ? 'Join event' : (ticketUrl ? 'View ticket' : ''), buttonUrl: joinUrl || ticketUrl || eventUrl };
+
+  const html = buildBrandedEmailHtml({
+    title: subject,
+    previewText: text.replace(/\s+/g, ' ').trim().slice(0, 140),
+    greeting: `Hi ${name || 'there'},`,
+    bodyLines: text
+      .split('\n')
+      .filter((line) => {
+        const trimmed = line.trim();
+        if (!trimmed) return false;
+        if (trimmed.startsWith(`Hi ${name}`)) return false;
+        if (trimmed === 'Mutale Mubanga' || trimmed === 'Best regards,') return false;
+        if (trimmed.startsWith('Join with your guest token:')) return false;
+        if (trimmed.startsWith('Please complete this short survey:')) return false;
+        return true;
+      }),
+    buttonText: button.buttonText,
+    buttonUrl: button.buttonUrl,
+    brand: defaultEmailBrand(origin),
+    logoUrl: publicLogoUrl(origin),
+  });
+
   return {
     subject,
     text,
+    html,
     smsMessage,
     smsTo: resolveAttendeePhone(registration),
     to: resolveAttendeeEmail(registration),
@@ -267,6 +294,7 @@ export async function processEventLifecycleNotifications(pool, deps = {}, now = 
             to: message.to,
             subject: message.subject,
             text: message.text,
+            html: message.html,
             smsTo: message.smsTo,
             smsMessage: message.smsMessage,
             kind: 'event_reminder',

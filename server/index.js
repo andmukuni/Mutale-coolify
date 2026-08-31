@@ -94,6 +94,7 @@ import { buildTicketFilename, isValidTicketPdfBuffer } from '../shared/ticketPdf
 import { generateTicketReference, isTicketReference } from '../shared/ticketReference.js';
 import { buildTicketViewModel, isGuestTicket, isTicketPaymentEligible, resolveAttendeePhone } from '../shared/ticketViewModel.js';
 import { loadReceiptLogoDataUrl, loadWhiteLogoDataUrl } from '../shared/receiptLogoAsset.js';
+import { buildBrandedEmailHtml, buildBrandedEmailFromText, defaultEmailBrand, publicLogoUrl } from '../shared/brandedEmailHtml.js';
 import { buildRegistrationEmailHtml, PUBLIC_WHITE_LOGO_PATH } from '../shared/registrationEmailHtml.js';
 import { mergeReceiptRecords } from '../shared/receiptHelpers.js';
 import { buildCvStrengthSuggestions } from '../shared/cvStrengthSuggestions.js';
@@ -3194,67 +3195,13 @@ async function sendGreenApiWhatsApp({ settings, to, message }) {
 }
 
 
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+function emailBrandForOrigin(websiteUrl = '') {
+  const origin = String(websiteUrl || resolvePublicAppUrl() || '').replace(/\/$/, '');
+  return {
+    brand: defaultEmailBrand(origin),
+    logoUrl: publicLogoUrl(origin),
+  };
 }
-
-function buildBrandedEmailHtml({ title, previewText = '', greeting = 'Hi there,', bodyLines = [], buttonText = '', buttonUrl = '', footerLines = [] }) {
-  const safeTitle = escapeHtml(title);
-  const safePreview = escapeHtml(previewText);
-  const safeGreeting = escapeHtml(greeting);
-  const safeBody = bodyLines.map((l) => `<p style="margin:0 0 12px;color:#0f172a;font-size:15px;line-height:1.6">${escapeHtml(l)}</p>`).join('');
-  const button = buttonText && buttonUrl
-    ? `<div style="margin:18px 0 8px">
-        <a href="${escapeHtml(buttonUrl)}" style="display:inline-block;background:#0891b2;color:#ffffff;text-decoration:none;font-weight:700;padding:12px 18px;border-radius:12px">
-          ${escapeHtml(buttonText)}
-        </a>
-      </div>
-      <p style="margin:10px 0 0;color:#64748b;font-size:12px;line-height:1.6">
-        If the button doesn&rsquo;t work, copy and paste this link into your browser:<br/>
-        <span style="word-break:break-all">${escapeHtml(buttonUrl)}</span>
-      </p>`
-    : '';
-  const footer = footerLines.length
-    ? footerLines.map((l) => `<p style="margin:0;color:#94a3b8;font-size:12px;line-height:1.6">${escapeHtml(l)}</p>`).join('')
-    : `<p style="margin:0;color:#94a3b8;font-size:12px;line-height:1.6">You received this email because you have an account on Mutale Mubanga.</p>`;
-
-  return `<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>${safeTitle}</title>
-  </head>
-  <body style="margin:0;background:#f8fafc;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
-    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">${safePreview}</div>
-    <div style="padding:28px 14px">
-      <div style="max-width:560px;margin:0 auto">
-        <div style="text-align:center;margin-bottom:16px">
-          <div style="display:inline-block;background:#0f172a;color:#ffffff;border-radius:16px;padding:10px 14px;font-weight:800;letter-spacing:.2px">
-            Mutale Mubanga
-          </div>
-        </div>
-        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:18px;padding:22px">
-          <h1 style="margin:0 0 10px;font-size:18px;color:#0f172a">${safeTitle}</h1>
-          <p style="margin:0 0 14px;color:#334155;font-size:15px;line-height:1.6">${safeGreeting}</p>
-          ${safeBody}
-          ${button}
-          <div style="margin-top:18px;border-top:1px solid #e2e8f0;padding-top:14px">
-            ${footer}
-          </div>
-        </div>
-        <p style="margin:14px 0 0;text-align:center;color:#94a3b8;font-size:12px">© ${new Date().getFullYear()} Mutale Mubanga</p>
-      </div>
-    </div>
-  </body>
-</html>`;
-}
-
 
 async function lookupUserPhoneByEmail(email) {
   const normalized = String(email || '').trim().toLowerCase();
@@ -3338,13 +3285,21 @@ async function sendEmailNotification({
   let emailResult;
   try {
     const transport = buildSmtpTransport(emailCfg);
+    const brandedHtml = html || (text
+      ? buildBrandedEmailFromText({
+        title: subject,
+        text,
+        ...emailBrandForOrigin(),
+      })
+      : undefined);
+
     await transport.sendMail({
       from: fromName ? `"${fromName}" <${fromEmail}>` : fromEmail,
       to: recipient,
       replyTo: replyTo || undefined,
       subject,
       text,
-      html: html || undefined,
+      html: brandedHtml || undefined,
       attachments: Array.isArray(attachments) ? attachments : [],
     });
 
@@ -3491,6 +3446,20 @@ async function dispatchRegistrationNotifications({ settings, payload = {} }) {
       to: notifications.adminAlertEmail,
       subject,
       text: message,
+      html: buildBrandedEmailHtml({
+        title: subject,
+        previewText: 'A new event registration was received.',
+        greeting: 'Hi,',
+        bodyLines: [
+          'A new event registration was received.',
+          eventTitle ? `Event: ${eventTitle}` : '',
+          userName ? `Attendee: ${userName}` : '',
+          userEmail ? `Email: ${userEmail}` : '',
+          reference ? `Reference: ${reference}` : '',
+          Number.isFinite(amount) ? `Amount: ${currency} ${amount}` : '',
+        ].filter(Boolean),
+        ...emailBrandForOrigin(),
+      }),
       smsTo: notifications.adminAlertPhone,
       smsMessage: message,
       kind: 'registration_alert',
@@ -3546,6 +3515,11 @@ async function dispatchTestNotification({ settings, channel, recipient = '', mes
       to: String(recipient || notifications.adminAlertEmail || '').trim(),
       subject: 'Mutale notification test (Email)',
       text,
+      html: buildBrandedEmailFromText({
+        title: 'Mutale notification test (Email)',
+        text,
+        ...emailBrandForOrigin(),
+      }),
       skipSms: true,
       kind: 'test',
     });
@@ -5259,6 +5233,7 @@ app.post('/api/auth/register', rateLimitAuth({ windowMs: 60 * 60 * 1000, max: 10
           buttonText: 'Confirm email',
           buttonUrl: verifyUrl,
           footerLines: ['Best regards,', 'Mutale Mubanga'],
+          ...emailBrandForOrigin(appUrl),
         }),
         smsTo: String(phone || whatsapp || '').trim(),
         smsMessage: `Hi ${displayName}, confirm your Mutale account: ${verifyUrl} (expires in 24 hours)`,
@@ -5361,6 +5336,7 @@ app.post('/api/auth/resend-verification', rateLimitAuth({ windowMs: 60 * 60 * 10
           buttonText: 'Confirm email',
           buttonUrl: verifyUrl,
           footerLines: ['Best regards,', 'Mutale Mubanga'],
+          ...emailBrandForOrigin(appUrl),
         }),
         smsTo: String(user.phone || user.whatsapp || '').trim(),
         smsMessage: `Hi ${user.name}, confirm your Mutale account: ${verifyUrl} (expires in 24 hours)`,
@@ -5428,6 +5404,7 @@ app.post('/api/auth/forgot-password', rateLimitAuth({ windowMs: 60 * 60 * 1000, 
           buttonText: 'Reset password',
           buttonUrl: resetUrl,
           footerLines: ['Best regards,', 'Mutale Mubanga'],
+          ...emailBrandForOrigin(appUrl),
         }),
         smsTo: String(user.phone || user.whatsapp || '').trim(),
         smsMessage: `Hi ${user.name}, reset your Mutale password: ${resetUrl} (expires in 1 hour)`,
@@ -7160,11 +7137,12 @@ async function sendSiteChatVerifyCode({ user, code, req }) {
       previewText: `Your confirmation code is ${code}.`,
       greeting: `Hi ${displayName},`,
       bodyLines: [
-        `Your confirmation code is ${code}.`,
         'Enter this code in the Ask Mutale chat to finish creating your account.',
         'This code expires in 24 hours.',
       ],
+      code,
       footerLines: ['Best regards,', 'Mutale Mubanga'],
+      ...emailBrandForOrigin(resolvePublicAppUrl(req)),
     }),
     smsTo: String(user.phone || user.whatsapp || '').trim(),
     smsMessage: `Hi ${displayName}, your Mutale confirmation code is ${code} (expires in 24 hours)`,
@@ -11136,6 +11114,11 @@ app.post('/api/contact-messages/:id/reply', async (req, res) => {
       to: String(contactMessage.email || '').trim(),
       subject,
       text: message,
+      html: buildBrandedEmailFromText({
+        title: subject,
+        text: message,
+        ...emailBrandForOrigin(resolvePublicAppUrl(req)),
+      }),
       smsTo: String(contactMessage.phone || '').trim(),
       smsMessage: `Mutale: ${subject}\n${message}`,
       kind: 'contact_reply',

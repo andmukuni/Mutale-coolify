@@ -401,6 +401,10 @@ describe('sendRegistrationConfirmationIfNeeded', () => {
     }));
     expect(sendEmailNotification.mock.calls[0][0].smsMessage).toMatch(/Community Workshop/);
     expect(sendEmailNotification.mock.calls[0][0].smsMessage).toContain('/tickets/MM-FREE-3');
+    expect(sendEmailNotification.mock.calls[0][0].html).toContain('MUTALE');
+    expect(sendEmailNotification.mock.calls[0][0].html).toContain('#00A79D');
+    expect(sendEmailNotification.mock.calls[0][0].html).toContain('You are registered!');
+    expect(sendEmailNotification.mock.calls[0][0].html).toContain('View Ticket');
   });
 
   it('skips when ticket SMS will already go out', async () => {

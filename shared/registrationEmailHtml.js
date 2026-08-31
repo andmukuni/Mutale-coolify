@@ -1,23 +1,24 @@
-const NAVY = '#0B1B3A';
-const NAVY_TEXT = '#141D45';
-const TEAL = '#00A79D';
-const CORAL = '#E76869';
-const GRAY = '#64748b';
-const LIGHT = '#eef6f6';
-const BORDER = '#e6ebf0';
-const EMAIL_BG = '#eef2f5';
-const LINK_BLUE = '#2563eb';
+import {
+  EMAIL_BRAND_COLORS,
+  PUBLIC_WHITE_LOGO_PATH,
+  accentBarHtml,
+  brandFooterHtml,
+  brandHeaderHtml,
+  escapeHtml,
+  resolveLogoSrc,
+} from './brandedEmailHtml.js';
 
-const PUBLIC_WHITE_LOGO_PATH = '/Logo-Website-Mutale_White%20No%20Bg.png';
-
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
+const {
+  navy: NAVY,
+  navyText: NAVY_TEXT,
+  teal: TEAL,
+  coral: CORAL,
+  gray: GRAY,
+  light: LIGHT,
+  border: BORDER,
+  emailBg: EMAIL_BG,
+  link: LINK_BLUE,
+} = EMAIL_BRAND_COLORS;
 
 function initialsFromName(name) {
   return String(name || 'G')
@@ -26,13 +27,6 @@ function initialsFromName(name) {
     .slice(0, 2)
     .map((word) => word[0]?.toUpperCase() || '')
     .join('') || 'G';
-}
-
-function resolveLogoSrc({ logoUrl = '', logoDataUrl = '', websiteUrl = '' } = {}) {
-  if (logoUrl) return logoUrl;
-  if (logoDataUrl) return logoDataUrl;
-  const origin = String(websiteUrl || '').replace(/\/$/, '');
-  return origin ? `${origin}${PUBLIC_WHITE_LOGO_PATH}` : '';
 }
 
 function iconBox(svg) {
@@ -57,46 +51,6 @@ function detailRow({ icon, label, value, last = false }) {
         <div style="font-size:16px;font-weight:800;color:${NAVY_TEXT};line-height:1.35;margin-top:2px">${escapeHtml(value)}</div>
       </td>
     </tr>`;
-}
-
-function brandHeaderHtml({ logoSrc, brandName, brandTagline }) {
-  const mark = logoSrc
-    ? `<img src="${escapeHtml(logoSrc)}" alt="${brandName}" height="56" width="56" style="display:block;height:56px;width:56px;object-fit:contain;border:0;outline:none;text-decoration:none" />`
-    : `<div style="width:56px;height:56px;border:2px solid ${TEAL};border-radius:12px;text-align:center;line-height:52px;color:#ffffff;font-size:24px;font-weight:800">M</div>`;
-
-  return `<table role="presentation" cellpadding="0" cellspacing="0"><tr>
-    <td style="vertical-align:middle;width:56px">${mark}</td>
-    <td style="vertical-align:middle;padding-left:12px">
-      <div style="font-size:18px;font-weight:800;letter-spacing:.4px;color:#ffffff;line-height:1.2">MUTALE <span style="color:${TEAL}">MUBANGA</span></div>
-      <div style="font-size:12px;color:#d5deea;margin-top:3px">${brandTagline}</div>
-    </td>
-  </tr></table>`;
-}
-
-function cornerDots(side) {
-  const cells = side === 'left'
-    ? [
-      [0.10, 0.16, 0.10, 0, 0],
-      [0.16, 0.28, 0.22, 0.10, 0],
-      [0.10, 0.22, 0.34, 0.18, 0.08],
-      [0, 0.10, 0.18, 0.12, 0],
-      [0, 0, 0.08, 0, 0],
-    ]
-    : [
-      [0, 0, 0.10, 0.16, 0.10],
-      [0, 0.10, 0.22, 0.28, 0.16],
-      [0.08, 0.18, 0.34, 0.22, 0.10],
-      [0, 0.12, 0.18, 0.10, 0],
-      [0, 0, 0.08, 0, 0],
-    ];
-
-  const rows = cells.map((row) => `<tr>${row.map((alpha) => {
-    if (!alpha) return '<td style="width:7px;height:7px;padding:1px"></td>';
-    const color = `rgba(0,167,157,${alpha})`;
-    return `<td style="width:7px;height:7px;padding:1px"><div style="width:5px;height:5px;border-radius:50%;background:${color};font-size:0;line-height:0">&nbsp;</div></td>`;
-  }).join('')}</tr>`).join('');
-
-  return `<table role="presentation" cellpadding="0" cellspacing="0">${rows}</table>`;
 }
 
 /**
@@ -185,12 +139,7 @@ export function buildRegistrationEmailHtml({
               </td>
             </tr>
             <tr>
-              <td style="padding:0">
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-                  <td style="background:${TEAL};height:5px;line-height:5px;font-size:0;width:74%">&nbsp;</td>
-                  <td style="background:${CORAL};height:5px;line-height:5px;font-size:0;width:26%">&nbsp;</td>
-                </tr></table>
-              </td>
+              <td style="padding:0">${accentBarHtml()}</td>
             </tr>
             <tr>
               <td style="padding:32px 32px 8px">
@@ -243,18 +192,7 @@ export function buildRegistrationEmailHtml({
             </tr>
             <tr>
               <td style="padding:0 18px 8px">
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-                  <tr>
-                    <td style="vertical-align:bottom;width:80px">${cornerDots('left')}</td>
-                    <td style="text-align:center;padding:8px 10px 18px">
-                      <div style="color:${TEAL};font-size:15px;font-weight:700;margin-bottom:8px">${brandTagline}</div>
-                      <a href="${escapeHtml(websiteUrl || 'https://mutalemubanga.org')}" target="_blank" style="color:${NAVY_TEXT};font-size:14px;font-weight:600;text-decoration:none">
-                        <span style="color:${TEAL};margin-right:6px">&#127760;</span>${websiteLabel}
-                      </a>
-                    </td>
-                    <td style="vertical-align:bottom;width:80px;text-align:right">${cornerDots('right')}</td>
-                  </tr>
-                </table>
+                ${brandFooterHtml({ brandTagline, websiteUrl, websiteLabel })}
               </td>
             </tr>
           </table>

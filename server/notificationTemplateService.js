@@ -8,6 +8,13 @@ import {
   slugifyTemplate,
   systemTemplateKey,
 } from '../shared/notificationTemplates.js';
+import {
+  defaultEmailBrand,
+  escapeHtml,
+  linkifyEscapedText,
+  publicLogoUrl,
+  wrapBrandedEmailHtml,
+} from '../shared/brandedEmailHtml.js';
 
 function newTemplateId(prefix = 'ntpl') {
   const random = Math.random().toString(36).slice(2, 10).toLowerCase();
@@ -274,46 +281,20 @@ export function buildTemplateTestContent({ channel, subject = '', body = '', var
   };
 }
 
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
-
 export function wrapTemplateEmailHtml({ subject, body } = {}) {
-  const safeTitle = escapeHtml(subject || 'Mutale');
-  const safePreview = escapeHtml(String(body || '').replace(/\s+/g, ' ').slice(0, 120));
-  const linkedBody = escapeHtml(body || '')
-    .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" style="color:#0891b2;word-break:break-all">$1</a>')
-    .replace(/\n/g, '<br/>');
+  const safeTitle = subject || 'Mutale';
+  const linkedBody = linkifyEscapedText(escapeHtml(body || '')).replace(/\n/g, '<br/>');
+  const origin = 'https://mutalemubanga.org';
 
-  return `<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>${safeTitle}</title>
-  </head>
-  <body style="margin:0;background:#f8fafc;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
-    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">${safePreview}</div>
-    <div style="padding:28px 14px">
-      <div style="max-width:560px;margin:0 auto">
-        <div style="text-align:center;margin-bottom:16px">
-          <div style="display:inline-block;background:#0f172a;color:#ffffff;border-radius:16px;padding:10px 14px;font-weight:800;letter-spacing:.2px">
-            Mutale Mubanga
-          </div>
-        </div>
-        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:18px;padding:22px">
-          <h1 style="margin:0 0 14px;font-size:18px;color:#0f172a">${safeTitle}</h1>
-          <div style="color:#0f172a;font-size:15px;line-height:1.6">${linkedBody}</div>
-          <p style="margin:18px 0 0;color:#94a3b8;font-size:12px;line-height:1.6">This is a test send from Templates. Sample names and the demo event were used.</p>
-        </div>
-        <p style="margin:14px 0 0;text-align:center;color:#94a3b8;font-size:12px">© ${new Date().getFullYear()} Mutale Mubanga</p>
-      </div>
-    </div>
-  </body>
-</html>`;
+  return wrapBrandedEmailHtml({
+    title: safeTitle,
+    previewText: String(body || '').replace(/\s+/g, ' ').slice(0, 120),
+    logoUrl: publicLogoUrl(origin),
+    brand: defaultEmailBrand(origin),
+    innerHtml: `
+      <h1 style="margin:0 0 14px;color:#141D45;font-size:26px;line-height:1.25;font-weight:800">${escapeHtml(safeTitle)}</h1>
+      <div style="color:#64748b;font-size:15px;line-height:1.65">${linkedBody}</div>
+      <p style="margin:18px 0 0;color:#64748b;font-size:12px;line-height:1.6">This is a test send from Templates. Sample names and the demo event were used.</p>
+    `,
+  });
 }

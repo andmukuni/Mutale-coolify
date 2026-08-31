@@ -124,6 +124,9 @@ describe('event lifecycle notifications', () => {
     expect(started.smsMessage).toContain('has started');
     expect(started.smsMessage).toContain('/tickets/MM-ABC123');
     expect(started.text).toContain('/events/qa-masterclass');
+    expect(started.html).toContain('MUTALE');
+    expect(started.html).toContain('#00A79D');
+    expect(started.html).toContain('Join event');
 
     const ended = buildLifecycleMessages({
       event: endedEvent,

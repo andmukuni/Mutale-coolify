@@ -3,6 +3,13 @@ import { buildTicketViewModel, isGuestTicket, isInPersonEventRecord, isTicketPay
 import { buildTicketFilename, generateTicketPdfBuffer } from '../shared/ticketPdfServer.js';
 import { loadReceiptLogoDataUrl } from '../shared/receiptLogoAsset.js';
 import {
+  defaultEmailBrand,
+  escapeHtml,
+  publicLogoUrl,
+  wrapBrandedEmailHtml,
+} from '../shared/brandedEmailHtml.js';
+import { buildRegistrationEmailHtml } from '../shared/registrationEmailHtml.js';
+import {
   buildPersonTemplateVars,
   buildThankYouLine,
   formatFirstNameSentenceCase,
@@ -175,6 +182,17 @@ export async function sendRegistrationConfirmationIfNeeded({
   const joinUrl = links.join_url;
   const name = String(recipientName || row.user_name || '').trim() || 'there';
   const phone = String(smsTo || row.user_phone || resolveAttendeePhone(row) || '').trim();
+  const eventDate = event.start_date || event.date
+    ? new Date(event.start_date || event.date).toLocaleDateString('en-GB', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    })
+    : 'TBA';
+  const eventTime = [event.start_time, event.end_time].filter(Boolean).join(' – ') || event.time || '';
+  const eventLocation = event.location || event.venue
+    || (String(event.event_mode || '').toLowerCase() === 'in_person' ? 'TBA' : 'Online');
 
   const result = await sendEmailNotification({
     settings,
@@ -188,6 +206,18 @@ export async function sendRegistrationConfirmationIfNeeded({
       ticketUrl ? `View your ticket: ${ticketUrl}` : '',
       joinUrl ? `Join with your guest token: ${joinUrl}` : '',
     ].filter(Boolean).join('\n'),
+    html: buildRegistrationEmailHtml({
+      recipientName: name,
+      recipientEmail: to,
+      eventTitle,
+      eventDate,
+      eventTime,
+      eventLocation,
+      referenceCode: refCode,
+      ticketUrl: ticketUrl || eventUrl,
+      logoUrl: publicLogoUrl(origin),
+      brand: defaultEmailBrand(origin),
+    }),
     smsTo: phone,
     smsMessage: [
       `Registration confirmed: ${eventTitle}.`,
@@ -231,25 +261,25 @@ export async function markTicketEmailSent(registrationId, pool) {
   );
 }
 
-function buildTicketEmailHtmlWrapper({ copy, ticketHtml }) {
-  const bodyLines = [...(copy.introLines || []), '<div style="margin-top:16px"></div>'];
-  const introHtml = bodyLines.map((line) => {
-    if (line.startsWith('<div')) return line;
-    return `<p style="margin:0 0 12px;color:#0f172a;font-size:15px;line-height:1.6">${line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>`;
-  }).join('');
+function buildTicketEmailHtmlWrapper({ copy, ticketHtml, appOrigin = '' }) {
+  const introHtml = (copy.introLines || [])
+    .filter(Boolean)
+    .map((line) => `<p style="margin:0 0 12px;color:#64748b;font-size:15px;line-height:1.65">${escapeHtml(line)}</p>`)
+    .join('');
+  const origin = String(appOrigin || '').replace(/\/$/, '');
 
-  return `<!doctype html>
-<html><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>${copy.subject.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</title></head>
-<body style="margin:0;background:#eef2f5;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
-<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">${copy.previewText}</div>
-<div style="padding:24px 12px">
-<div style="max-width:720px;margin:0 auto">
-<p style="margin:0 0 16px;font-size:16px;color:#0f172a;font-weight:600">${copy.greeting.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</p>
-${introHtml}
-<div style="margin-top:8px">${ticketHtml}</div>
-<p style="margin:20px 0 0;font-size:12px;color:#64748b">Best regards,<br/>Mutale Mubanga</p>
-</div></div></body></html>`;
+  return wrapBrandedEmailHtml({
+    title: copy.subject,
+    previewText: copy.previewText,
+    logoUrl: publicLogoUrl(origin),
+    brand: defaultEmailBrand(origin),
+    innerHtml: `
+      <p style="margin:0 0 8px;color:#64748b;font-size:16px">${escapeHtml(copy.greeting)}</p>
+      <h1 style="margin:0 0 14px;color:#141D45;font-size:26px;line-height:1.25;font-weight:800">${escapeHtml(copy.subject)}</h1>
+      ${introHtml}
+      <div style="margin-top:16px">${ticketHtml}</div>
+    `,
+  });
 }
 
 /**
@@ -323,7 +353,7 @@ export async function sendTicketEmail({
     'Mutale Mubanga',
   ].join('\n');
 
-  const html = buildTicketEmailHtmlWrapper({ copy, ticketHtml });
+  const html = buildTicketEmailHtmlWrapper({ copy, ticketHtml, appOrigin });
   const filename = buildTicketFilename(registration);
 
   const smsTo = role === 'buyer_copy'

@@ -22,6 +22,7 @@ import {
 } from '../shared/ticketViewModel.js';
 import { buildPersonTemplateVars } from '../shared/notificationTemplates.js';
 import { resolvePublicAppUrl } from './publicAppUrl.js';
+import { buildBrandedEmailHtml, defaultEmailBrand, publicLogoUrl } from '../shared/brandedEmailHtml.js';
 
 const NAVY = '#0B1D36';
 const CYAN = '#06B6D4';
@@ -431,18 +432,23 @@ export async function sendCertificateEmailForRow(pool, certRow, appRoot, sendEma
     'Mutale Mubanga',
   ].join('\n');
 
-  const portalHtml = portalUrl
-    ? `<p><a href="${portalUrl}">View your ticket portal</a> to download your certificate anytime.</p>`
-    : '';
-
-  const html = `
-    <p>Dear ${certRow.attendee_name},</p>
-    <p>Thank you for attending <strong>${certRow.event_title}</strong>.</p>
-    <p>Your certificate of attendance is attached to this email.</p>
-    <p><strong>Certificate ID:</strong> ${certRow.certificate_code}</p>
-    ${portalHtml}
-    <p>Best regards,<br/>Mutale Mubanga</p>
-  `;
+  const origin = resolveAppOrigin();
+  const html = buildBrandedEmailHtml({
+    title: `Your certificate: ${certRow.event_title}`,
+    previewText: `Your certificate of attendance for ${certRow.event_title} is attached.`,
+    greeting: `Dear ${certRow.attendee_name},`,
+    bodyLines: [
+      `Thank you for attending "${certRow.event_title}".`,
+      'Your certificate of attendance is attached to this email.',
+      `Certificate ID: ${certRow.certificate_code}`,
+      portalUrl ? 'You can also view your ticket portal to download your certificate anytime.' : '',
+    ].filter(Boolean),
+    buttonText: portalUrl ? 'View ticket portal' : '',
+    buttonUrl: portalUrl,
+    footerLines: ['Best regards,', 'Mutale Mubanga'],
+    brand: defaultEmailBrand(origin),
+    logoUrl: publicLogoUrl(origin),
+  });
 
   const result = await sendEmailWithAttachments({
     settings,
