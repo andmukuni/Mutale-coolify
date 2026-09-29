@@ -46,6 +46,9 @@ beforeEach(() => {
     if (href.includes('/admin/notification-templates/test') && method === 'POST') {
       return response({ ok: true, message: 'Test SMS sent.', data: { status: 'sent', recipient: '0971234567' } });
     }
+    if (href.includes('/admin/notification-templates') && href.includes('/enabled') && method === 'PATCH') {
+      return response({ ok: true, data: { ...smsTemplate, enabled: false } });
+    }
     if (href.includes('/admin/notification-templates') && method === 'GET') {
       return response({ ok: true, data: [smsTemplate] });
     }
@@ -78,5 +81,25 @@ describe('NotificationTemplatesPage test send', () => {
     expect(body.channel).toBe('sms');
     expect(body.recipient).toBe('0971234567');
     expect(body.body).toContain('{{ticket_url}}');
+  });
+
+  it('deactivates an SMS template from the row action', async () => {
+    render(
+      <MemoryRouter>
+        <NotificationTemplatesPage />
+      </MemoryRouter>,
+    );
+
+    await screen.findAllByText('Entry ticket');
+    fireEvent.click(screen.getAllByRole('button', { name: 'Deactivate' })[0]);
+
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith('SMS notification deactivated.');
+    });
+
+    const toggleCall = globalThis.fetch.mock.calls.find(([url]) => String(url).includes('/enabled'));
+    expect(toggleCall).toBeTruthy();
+    expect(String(toggleCall[1].method).toUpperCase()).toBe('PATCH');
+    expect(JSON.parse(toggleCall[1].body)).toEqual({ enabled: false });
   });
 });

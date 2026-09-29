@@ -6,6 +6,8 @@ const colorMap = {
   featured: { bg: 'bg-amber-50', text: 'text-amber-700', ring: 'ring-amber-600/20' },
   draft: { bg: 'bg-navy-50', text: 'text-navy-500', ring: 'ring-navy-500/20' },
   published: { bg: 'bg-green-50', text: 'text-green-700', ring: 'ring-green-600/20' },
+  active: { bg: 'bg-emerald-50', text: 'text-emerald-700', ring: 'ring-emerald-600/20' },
+  inactive: { bg: 'bg-navy-50', text: 'text-navy-500', ring: 'ring-navy-500/20' },
   // booking statuses
   confirmed: { bg: 'bg-emerald-50', text: 'text-emerald-700', ring: 'ring-emerald-600/20' },
   attended: { bg: 'bg-teal-50', text: 'text-teal-700', ring: 'ring-teal-600/20' },
@@ -36,6 +38,8 @@ const labelMap = {
   waitlisted: 'Waitlisted',
   draft: 'Draft',
   published: 'Published',
+  active: 'Active',
+  inactive: 'Inactive',
   upcoming: 'Upcoming',
   ongoing: 'Ongoing',
   past: 'Past',

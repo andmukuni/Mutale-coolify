@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Mail, MessageSquare, Pencil, Plus, RefreshCw, RotateCcw, Send, Trash2 } from 'lucide-react';
+import { Mail, MessageSquare, Pencil, Plus, Power, PowerOff, RefreshCw, RotateCcw, Send, Trash2 } from 'lucide-react';
 import {
   PageHeader,
   Card,
@@ -9,6 +9,7 @@ import {
   ConfirmDialog,
   LoadingButton,
   Spinner,
+  StatusBadge,
 } from '../../components/ui';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
@@ -24,6 +25,7 @@ import {
   fetchNotificationTemplates,
   resetNotificationTemplate,
   sendNotificationTemplateTest,
+  setNotificationTemplateEnabled,
   updateNotificationTemplate,
 } from '../../utils/notificationTemplatesApi';
 
@@ -75,6 +77,7 @@ export default function NotificationTemplatesPage() {
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState('');
   const [confirm, setConfirm] = useState({ open: false, row: null, busy: false });
+  const [togglingId, setTogglingId] = useState('');
 
   const loadRows = useCallback(async () => {
     setLoading(true);
@@ -172,6 +175,22 @@ export default function NotificationTemplatesPage() {
     }
   };
 
+  const handleToggleEnabled = async (row) => {
+    const nextEnabled = row.enabled === false;
+    setTogglingId(row.id);
+    try {
+      await setNotificationTemplateEnabled(row.id, nextEnabled);
+      toast.success(nextEnabled
+        ? `${row.channel === 'sms' ? 'SMS' : 'Email'} notification activated.`
+        : `${row.channel === 'sms' ? 'SMS' : 'Email'} notification deactivated.`);
+      await loadRows();
+    } catch (err) {
+      toast.error(err?.message || 'Could not update notification status.');
+    } finally {
+      setTogglingId('');
+    }
+  };
+
   const handleReset = async (row) => {
     try {
       await resetNotificationTemplate(row.id);
@@ -225,10 +244,31 @@ export default function NotificationTemplatesPage() {
       ),
     },
     {
+      key: 'enabled',
+      label: 'Status',
+      render: (_v, row) => (
+        <StatusBadge status={row.enabled === false ? 'inactive' : 'active'} />
+      ),
+    },
+    {
       key: 'actions',
       label: '',
-      render: (_v, row) => (
+      render: (_v, row) => {
+        const isEnabled = row.enabled !== false;
+        const busy = togglingId === row.id;
+        return (
         <div className="flex items-center justify-end gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void handleToggleEnabled(row)}
+            className={`inline-flex items-center gap-1 text-xs font-medium disabled:opacity-50 ${
+              isEnabled ? 'text-amber-700 hover:text-amber-600' : 'text-emerald-700 hover:text-emerald-600'
+            }`}
+          >
+            {isEnabled ? <PowerOff size={14} /> : <Power size={14} />}
+            {busy ? 'Updating…' : (isEnabled ? 'Deactivate' : 'Activate')}
+          </button>
           <button
             type="button"
             onClick={() => openEdit(row)}
@@ -257,7 +297,8 @@ export default function NotificationTemplatesPage() {
             </button>
           )}
         </div>
-      ),
+        );
+      },
     },
   ];
 

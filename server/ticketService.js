@@ -391,7 +391,7 @@ export async function sendTicketEmail({
     smsTo,
     smsMessage: applied.smsMessage,
     kind: 'ticket',
-    skipSms,
+    skipSms: skipSms || Boolean(applied.skipSms),
   });
 
   return result?.status === 'sent'

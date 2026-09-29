@@ -8,6 +8,7 @@ import {
   getNotificationTemplateById,
   createNotificationTemplate,
   updateNotificationTemplate,
+  setNotificationTemplateEnabled,
   resetNotificationTemplate,
   deleteNotificationTemplate,
   buildTemplateTestContent,
@@ -141,6 +142,17 @@ export function registerNotificationTemplateRoutes(app, {
       return res.json({ ok: true, data });
     } catch (error) {
       const status = error.message === 'Template not found.' ? 404 : (/required/i.test(error.message) ? 400 : 500);
+      return res.status(status).json({ ok: false, message: error.message });
+    }
+  });
+
+  app.patch('/api/admin/notification-templates/:id/enabled', async (req, res) => {
+    try {
+      const enabled = req.body && typeof req.body === 'object' ? req.body.enabled : undefined;
+      const data = await setNotificationTemplateEnabled(pool, req.params.id, enabled);
+      return res.json({ ok: true, data });
+    } catch (error) {
+      const status = error.message === 'Template not found.' ? 404 : 400;
       return res.status(status).json({ ok: false, message: error.message });
     }
   });

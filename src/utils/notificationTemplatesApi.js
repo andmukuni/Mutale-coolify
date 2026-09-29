@@ -74,6 +74,17 @@ export async function updateNotificationTemplate(id, payload) {
   return json.data;
 }
 
+export async function setNotificationTemplateEnabled(id, enabled) {
+  const res = await fetch(`${API_BASE}/admin/notification-templates/${encodeURIComponent(id)}/enabled`, {
+    method: 'PATCH',
+    headers: getAdminAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ enabled: Boolean(enabled) }),
+  });
+  const json = await parseJson(res);
+  if (!res.ok || !json?.ok) throw new Error(json?.message || 'Failed to update template status.');
+  return json.data;
+}
+
 export async function resetNotificationTemplate(id) {
   const res = await fetch(`${API_BASE}/admin/notification-templates/${encodeURIComponent(id)}/reset`, {
     method: 'POST',

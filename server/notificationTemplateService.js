@@ -230,6 +230,15 @@ export async function deleteNotificationTemplate(pool, id) {
   return true;
 }
 
+export async function setNotificationTemplateEnabled(pool, id, enabled) {
+  await seedSystemNotificationTemplates(pool);
+  const existing = await getNotificationTemplateById(pool, id);
+  if (!existing) throw new Error('Template not found.');
+  const next = enabled === false || enabled === 0 || enabled === '0' || enabled === 'false' ? 0 : 1;
+  await pool.query('UPDATE notification_templates SET enabled = ? WHERE id = ?', [next, id]);
+  return getNotificationTemplateById(pool, id);
+}
+
 export async function renderNotification(pool, { slug, channel, vars = {} } = {}) {
   const catalog = getSystemTemplate(slug, channel);
   let subject = catalog?.subject || '';
@@ -237,6 +246,9 @@ export async function renderNotification(pool, { slug, channel, vars = {} } = {}
   if (pool) {
     try {
       const stored = await getNotificationTemplateBySlug(pool, slug, channel);
+      if (stored && stored.enabled === false) {
+        return { subject: '', body: '', enabled: false };
+      }
       if (stored?.enabled !== false) {
         if (stored?.subject != null && stored.subject !== '') subject = stored.subject;
         if (stored?.body) body = stored.body;
@@ -248,6 +260,7 @@ export async function renderNotification(pool, { slug, channel, vars = {} } = {}
   return {
     subject: renderTemplate(subject, vars),
     body: renderTemplate(body, vars),
+    enabled: true,
   };
 }
 
@@ -258,14 +271,21 @@ export async function applyNotificationTemplates(pool, {
   text,
   smsMessage,
 } = {}) {
-  const out = { subject, text, smsMessage };
+  const out = { subject, text, smsMessage, skipSms: false };
   if (!slug) return out;
   try {
     const sms = await renderNotification(pool, { slug, channel: 'sms', vars });
-    if (sms.body) out.smsMessage = sms.body;
+    if (sms.enabled === false) {
+      out.smsMessage = '';
+      out.skipSms = true;
+    } else if (sms.body) {
+      out.smsMessage = sms.body;
+    }
     const email = await renderNotification(pool, { slug, channel: 'email', vars });
-    if (email.subject) out.subject = email.subject;
-    if (email.body) out.text = email.body;
+    if (email.enabled !== false) {
+      if (email.subject) out.subject = email.subject;
+      if (email.body) out.text = email.body;
+    }
   } catch (error) {
     console.warn(`[notification_templates] apply failed: ${error.message}`);
   }

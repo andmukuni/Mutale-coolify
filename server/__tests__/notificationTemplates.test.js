@@ -42,6 +42,34 @@ describe('notification templates', () => {
     );
   });
 
+  it('skips SMS when the SMS template is deactivated', async () => {
+    const pool = {
+      query: async (sql) => {
+        if (String(sql).includes('WHERE slug')) {
+          return [[{
+            id: 'ntpl-sms-ticket',
+            slug: 'ticket',
+            channel: 'sms',
+            name: 'Ticket',
+            description: '',
+            subject: '',
+            body: 'Do not send this',
+            is_system: 1,
+            enabled: 0,
+          }]];
+        }
+        return [[]];
+      },
+    };
+    const applied = await applyNotificationTemplates(pool, {
+      slug: 'ticket',
+      vars: { event_title: 'Summit' },
+      smsMessage: 'fallback SMS',
+    });
+    expect(applied.smsMessage).toBe('');
+    expect(applied.skipSms).toBe(true);
+  });
+
   it('renders a test send with sample values', () => {
     const rendered = buildTemplateTestContent({
       channel: 'sms',

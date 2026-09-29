@@ -3268,6 +3268,7 @@ async function sendEmailNotification({
     subject = applied.subject;
     text = applied.text;
     smsMessage = applied.smsMessage;
+    if (applied.skipSms) skipSms = true;
   }
 
   const recipient = String(to || '').trim();
