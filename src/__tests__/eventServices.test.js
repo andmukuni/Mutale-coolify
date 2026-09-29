@@ -17,6 +17,7 @@ import {
   constrainChildAgeInput,
   isChildAgeNotAllowed,
   validateGuestAttendees,
+  selectHomeFeaturedEvents,
 } from '../utils/eventServices';
 
 // ─── Shared fixtures ──────────────────────────────────────────────────────────
@@ -356,6 +357,55 @@ describe('isEventUpcoming', () => {
 
   it('returns false for events that already started', () => {
     expect(isEventUpcoming(makeEvent({ start_date: YESTERDAY }))).toBe(false);
+  });
+});
+
+describe('selectHomeFeaturedEvents', () => {
+  it('excludes past featured events and keeps upcoming or ongoing ones', () => {
+    const pastFeatured = makeEvent({
+      id: 'past',
+      title: 'PowerPoint tricks everyone should know',
+      featured: true,
+      start_date: YESTERDAY,
+      end_date: YESTERDAY,
+    });
+    const upcomingFeatured = makeEvent({
+      id: 'soon',
+      title: 'Upcoming featured session',
+      featured: true,
+      start_date: NEXT_WEEK,
+      end_date: NEXT_WEEK,
+    });
+    const upcomingSooner = makeEvent({
+      id: 'sooner',
+      title: 'Sooner featured session',
+      featured: true,
+      start_date: TOMORROW,
+      end_date: TOMORROW,
+    });
+    const upcomingNotFeatured = makeEvent({
+      id: 'plain',
+      featured: false,
+      start_date: TOMORROW,
+      end_date: TOMORROW,
+    });
+    const cancelledFeatured = makeEvent({
+      id: 'cancelled',
+      featured: true,
+      status: 'cancelled',
+      start_date: TOMORROW,
+      end_date: TOMORROW,
+    });
+
+    const selected = selectHomeFeaturedEvents([
+      pastFeatured,
+      upcomingFeatured,
+      upcomingSooner,
+      upcomingNotFeatured,
+      cancelledFeatured,
+    ]);
+
+    expect(selected.map((event) => event.id)).toEqual(['sooner', 'soon']);
   });
 });
 

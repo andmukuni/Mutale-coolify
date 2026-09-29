@@ -271,6 +271,21 @@ export function isEventUpcoming(event) {
   return new Date() < start;
 }
 
+/** Homepage featured carousel: published, public, featured, and not yet over. */
+export function selectHomeFeaturedEvents(events = []) {
+  return events
+    .filter((event) => {
+      if (!event.featured || !isEventPubliclyVisible(event)) return false;
+      const status = getEventDisplayStatus(event);
+      return status === 'upcoming' || status === 'ongoing';
+    })
+    .sort((a, b) => {
+      const aTime = new Date(a.start_date || a.date || 0).getTime();
+      const bTime = new Date(b.start_date || b.date || 0).getTime();
+      return aTime - bTime;
+    });
+}
+
 export function getAvailableSpots(event, registrationCount) {
   if (!event.capacity) return null;
   return Math.max(0, event.capacity - registrationCount);

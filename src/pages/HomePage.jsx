@@ -9,7 +9,7 @@ import ExpertiseCard from '../components/ExpertiseCard';
 import EventCard from '../components/EventCard';
 import BlogCard from '../components/BlogCard';
 import { useData } from '../context/DataContext';
-import { getEventDisplayStatus, isEventPubliclyVisible } from '../utils/eventServices';
+import { selectHomeFeaturedEvents } from '../utils/eventServices';
 import heroPortrait from '../assets/mutale-navy-suit-and-tie.png';
 import { defaultWebsitePages, expertiseIconMap } from '../data/websitePages';
 import TrustedBySection from '../components/TrustedBySection';
@@ -53,30 +53,7 @@ export default function HomePage() {
     return () => { cancelled = true; };
   }, []);
 
-  const featuredEvents = events
-    .filter((event) => {
-      if (!isEventPubliclyVisible(event)) return false;
-      const status = getEventDisplayStatus(event);
-      return event.featured && status !== 'cancelled' && status !== 'closed';
-    })
-    .sort((a, b) => {
-      const now = Date.now();
-      const aTime = new Date(a.start_date || a.date || 0).getTime();
-      const bTime = new Date(b.start_date || b.date || 0).getTime();
-      const aUpcoming = aTime >= now;
-      const bUpcoming = bTime >= now;
-
-      // Keep upcoming featured events first.
-      if (aUpcoming !== bUpcoming) {
-        return aUpcoming ? -1 : 1;
-      }
-
-      // Upcoming: soonest first. Past: most recent first.
-      if (aUpcoming && bUpcoming) {
-        return aTime - bTime;
-      }
-      return bTime - aTime;
-    });
+  const featuredEvents = selectHomeFeaturedEvents(events);
 
   const featuredSlides = [];
   for (let i = 0; i < featuredEvents.length; i += 3) {
