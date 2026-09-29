@@ -1,5 +1,5 @@
 const NOMINATIM_SEARCH_URL = 'https://nominatim.openstreetmap.org/search';
-const DEFAULT_USER_AGENT = 'MutaleMubanga/1.0 (https://mutalemubanga.org; contact@mutalemubanga.org)';
+const DEFAULT_USER_AGENT = 'MutaleMubanga/1.0 (https://mutalemubanga.org; grow@mutalemubanga.org)';
 const DEFAULT_MIN_INTERVAL_MS = 1000;
 const DEFAULT_CACHE_TTL_MS = 10 * 60 * 1000;
 const MAX_CACHE_ENTRIES = 80;

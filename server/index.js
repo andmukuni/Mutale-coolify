@@ -790,8 +790,8 @@ const SYSTEM_SETTINGS_DEFAULTS = {
     smtpUser: process.env.SMTP_USER || 'futuretechzm@gmail.com',
     smtpPassword: process.env.SMTP_PASSWORD || '',
     fromName: process.env.SMTP_FROM_NAME || 'Mutale Mubanga',
-    fromEmail: process.env.SMTP_FROM_EMAIL || 'futuretechzm@gmail.com',
-    replyTo: process.env.SMTP_REPLY_TO || 'futuretechzm@gmail.com',
+    fromEmail: process.env.SMTP_FROM_EMAIL || 'grow@mutalemubanga.org',
+    replyTo: process.env.SMTP_REPLY_TO || 'grow@mutalemubanga.org',
   },
   payment: {
     provider: process.env.PAYMENT_PROVIDER || 'lenco',
@@ -10163,7 +10163,7 @@ app.post('/api/registrations', async (req, res) => {
         const brandFooter = {
           name: 'Mutale Mubanga',
           tagline: 'Growing People.',
-          supportEmail: String(emailCfg.replyTo || emailCfg.fromEmail || 'info@mutalemubanga.org').trim(),
+          supportEmail: String(emailCfg.replyTo || emailCfg.fromEmail || 'grow@mutalemubanga.org').trim(),
           websiteUrl: appUrl,
           linkedinUrl: 'https://www.linkedin.com/in/mutale-mubanga',
         };
@@ -15229,7 +15229,72 @@ function startHttpServer() {
   });
 }
 
+const PUBLIC_CONTACT_EMAIL = 'grow@mutalemubanga.org';
+const LEGACY_PUBLIC_CONTACT_EMAILS = new Set([
+  'mubangamubs@gmail.com',
+  'info@mutalemubanga.org',
+  'contact@mutalemubanga.org',
+  'futuretechzm@gmail.com',
+]);
+
+function isLegacyPublicContactEmail(value) {
+  return LEGACY_PUBLIC_CONTACT_EMAILS.has(String(value || '').trim().toLowerCase());
+}
+
+async function migratePublicContactEmail() {
+  try {
+    const [[profileRow]] = await pool.query('SELECT data FROM site_profile WHERE id = 1');
+    const profile = parseJsonColumn(profileRow?.data, null);
+    if (profile && isLegacyPublicContactEmail(profile.email)) {
+      profile.email = PUBLIC_CONTACT_EMAIL;
+      await pool.query('UPDATE site_profile SET data = ? WHERE id = 1', [JSON.stringify(profile)]);
+      console.log(`[contact-email] site profile email → ${PUBLIC_CONTACT_EMAIL}`);
+    }
+  } catch (error) {
+    console.warn(`[contact-email] site profile skip: ${error.message}`);
+  }
+
+  try {
+    const [result] = await pool.query(
+      `UPDATE events SET organizer_email = ?
+       WHERE LOWER(TRIM(organizer_email)) IN (${[...LEGACY_PUBLIC_CONTACT_EMAILS].map(() => '?').join(', ')})`,
+      [PUBLIC_CONTACT_EMAIL, ...LEGACY_PUBLIC_CONTACT_EMAILS],
+    );
+    if (result?.affectedRows) {
+      console.log(`[contact-email] updated ${result.affectedRows} event organizer email(s)`);
+    }
+  } catch (error) {
+    console.warn(`[contact-email] events skip: ${error.message}`);
+  }
+
+  try {
+    const [[settingsRow]] = await pool.query('SELECT data FROM system_settings WHERE id = 1');
+    const settings = parseJsonColumn(settingsRow?.data, null);
+    if (settings?.email) {
+      let changed = false;
+      if (isLegacyPublicContactEmail(settings.email.fromEmail)) {
+        settings.email.fromEmail = PUBLIC_CONTACT_EMAIL;
+        changed = true;
+      }
+      if (isLegacyPublicContactEmail(settings.email.replyTo)) {
+        settings.email.replyTo = PUBLIC_CONTACT_EMAIL;
+        changed = true;
+      }
+      if (changed) {
+        await pool.query(
+          'UPDATE system_settings SET data = ? WHERE id = 1',
+          [JSON.stringify(settings)],
+        );
+        console.log(`[contact-email] settings From/Reply-To → ${PUBLIC_CONTACT_EMAIL} (SMTP username unchanged)`);
+      }
+    }
+  } catch (error) {
+    console.warn(`[contact-email] settings skip: ${error.message}`);
+  }
+}
+
 ensureSchema()
+  .then(() => migratePublicContactEmail())
   .then(() => seedDefaultAdmin())
   .then(() => seedRbac(pool))
   .then(() => {

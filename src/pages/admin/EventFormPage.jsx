@@ -1019,7 +1019,7 @@ export default function EventFormPage() {
 
               <div className="grid sm:grid-cols-3 gap-4">
                 <FormField label="Organizer Name" name="organizer_name" value={form.organizer_name} onChange={handleChange} placeholder="Your name" />
-                <FormField label="Organizer Email" name="organizer_email" type="email" value={form.organizer_email} onChange={handleChange} placeholder="email@example.com" error={fieldErrors.organizer_email} />
+                <FormField label="Organizer Email" name="organizer_email" type="email" value={form.organizer_email} onChange={handleChange} placeholder="grow@mutalemubanga.org" error={fieldErrors.organizer_email} />
                 <FormField label="Organizer Phone" name="organizer_phone" value={form.organizer_phone} onChange={handleChange} placeholder="+260 ..." />
               </div>
             </>

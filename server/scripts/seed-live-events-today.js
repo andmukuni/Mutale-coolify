@@ -65,7 +65,7 @@ function paidEventForToday(today) {
     registration_deadline: today,
     visibility: 'public',
     organizer_name: 'Mutale Mubanga',
-    organizer_email: 'mubangamubs@gmail.com',
+    organizer_email: 'grow@mutalemubanga.org',
     organizer_phone: '',
     category: 'Workshop',
     featured: true,

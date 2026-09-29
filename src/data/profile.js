@@ -3,7 +3,7 @@ export const profileData = {
   title: "Quality Assurance & Diagnostics Professional",
   tagline: "Quality Assurance | Diagnostics | ISO-Based Quality Systems | Public Health",
   location: "Lusaka, Zambia",
-  email: "mubangamubs@gmail.com",
+  email: "grow@mutalemubanga.org",
   phone: "+260 977 960 808",
   linkedin: "https://www.linkedin.com/in/mutale-mubanga",
   heroIntro: "A quality assurance and laboratory systems professional with over 15 years of experience in ISO-based quality management systems, diagnostics, technical documentation, compliance oversight, and public health programme delivery in low- and middle-income settings.",
