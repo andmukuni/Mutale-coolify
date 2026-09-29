@@ -163,7 +163,7 @@ export default function HomePage() {
                   Get in Touch <ArrowRight size={16} />
                 </Link>
                 <Link
-                  to="/"
+                  to="/about"
                   className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white border border-white/20 px-7 py-3.5 rounded-xl font-medium transition-all duration-300"
                 >
                   Read More
