@@ -80,6 +80,11 @@ const PartnerLogosPage = lazy(() => import('./pages/admin/PartnerLogosPage'));
 const MenuManagementPage = lazy(() => import('./pages/admin/MenuManagementPage'));
 const AccessControlPage = lazy(() => import('./pages/admin/AccessControlPage'));
 const NotificationTemplatesPage = lazy(() => import('./pages/admin/NotificationTemplatesPage'));
+const CampaignsListPage = lazy(() => import('./pages/admin/CampaignsListPage'));
+const CampaignWizardPage = lazy(() => import('./pages/admin/CampaignWizardPage'));
+const EmailPreferencesPage = lazy(() => import('./pages/EmailPreferencesPage'));
+const EmailUnsubscribePage = lazy(() => import('./pages/EmailUnsubscribePage'));
+const EventResourcesPage = lazy(() => import('./pages/EventResourcesPage'));
 
 function RouteLoader() {
   return (
@@ -171,6 +176,10 @@ export default function App() {
         <Route path="/shop/:slug" element={<BookDetailPage />} />
         <Route path="/pages/:slug" element={<CustomPage />} />
         <Route path="/certificates/verify/:code" element={<CertificateVerifyPage />} />
+        <Route path="/email/preferences" element={<EmailPreferencesPage />} />
+        <Route path="/email/unsubscribe" element={<EmailUnsubscribePage />} />
+        <Route path="/resources/:eventId/:resourceId" element={<EventResourcesPage />} />
+        <Route path="/resources/:eventId" element={<EventResourcesPage />} />
         <Route path="/tickets/:code" element={<TicketPage />} />
         <Route path="/tickets/:code/join" element={<GuestTicketJoinPage />} />
         <Route path="/tickets/:code/survey" element={<GuestSurveyPage />} />
@@ -262,6 +271,8 @@ export default function App() {
         <Route path="partner-logos" element={<PartnerLogosPage />} />
         <Route path="menu" element={<MenuManagementPage />} />
         <Route path="templates" element={<NotificationTemplatesPage />} />
+        <Route path="campaigns" element={<CampaignsListPage />} />
+        <Route path="campaigns/:id" element={<CampaignWizardPage />} />
         <Route path="access-control" element={<AccessControlPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="finance/ledger" element={<TransactionLedgerPage />} />

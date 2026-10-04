@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Event Communications — How to test</title>
+  <style>
+    @page { size: A4; margin: 18mm 16mm; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", Helvetica, Arial, sans-serif;
+      color: #141D45;
+      line-height: 1.45;
+      font-size: 11.5pt;
+      margin: 0;
+    }
+    h1 { font-size: 22pt; margin: 0 0 6px; }
+    h2 { font-size: 14pt; color: #141D45; border-bottom: 2px solid #00A79D; padding-bottom: 4px; margin: 22px 0 10px; page-break-after: avoid; }
+    h3 { font-size: 12pt; margin: 14px 0 6px; }
+    p, li { margin: 0 0 8px; }
+    .tagline { color: #00A79D; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; font-size: 10pt; }
+    .meta { color: #64748b; font-size: 10pt; margin-bottom: 16px; }
+    .banner {
+      background: #141D45;
+      color: #fff;
+      padding: 16px 18px;
+      border-radius: 12px;
+      margin: 0 0 16px;
+    }
+    .banner strong { color: #00A79D; }
+    .warn {
+      background: #fff6f6;
+      border: 1px solid #E76869;
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin: 10px 0 14px;
+    }
+    .ok {
+      background: #eef6f6;
+      border: 1px solid #00A79D;
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin: 10px 0 14px;
+    }
+    table { width: 100%; border-collapse: collapse; margin: 8px 0 14px; font-size: 10.5pt; }
+    th, td { border: 1px solid #e6ebf0; padding: 6px 8px; text-align: left; vertical-align: top; }
+    th { background: #eef6f6; }
+    code, .path { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9.5pt; background: #eef2f5; padding: 1px 4px; border-radius: 4px; }
+    ol.steps > li { margin-bottom: 10px; }
+    .box { page-break-inside: avoid; }
+    footer { margin-top: 24px; font-size: 9.5pt; color: #64748b; }
+  </style>
+</head>
+<body>
+  <p class="tagline">Mutale Mubanga · Growing People.</p>
+  <h1>Event Communications — How to test</h1>
+  <p class="meta">Phase 1 test sheet · 4 October 2026 · Do not send live audience mail until you authorize it.</p>
+
+  <div class="banner box">
+    Tickets, receipts, certificates, and lifecycle reminders stay on <strong>cPanel SMTP</strong>.
+    Campaigns use <strong>Resend</strong>. Live audience sends stay blocked until
+    <code>RESEND_LIVE_SENDS=1</code> is set after the domain is verified.
+  </div>
+
+  <h2>1. After Coolify pulls this deploy</h2>
+  <ol class="steps">
+    <li>Confirm the app is on one replica. The campaign outbox worker is in-process and is not safe on two containers yet.</li>
+    <li>Open Admin → Access control. Super Admin and Content Manager should now show <code>campaigns.view</code>, <code>campaigns.manage</code>, and <code>campaigns.send</code>. Log out and back in if the Campaigns item is missing.</li>
+    <li>Open <span class="path">/admin/campaigns</span>. You should see an empty list and an amber sandbox notice if live sends are off.</li>
+    <li>Open any event profile. New tabs: <strong>Campaigns</strong> and <strong>Resources</strong>.</li>
+  </ol>
+
+  <div class="ok box">
+    <strong>Safe default:</strong> leave <code>RESEND_API_KEY</code>, <code>RESEND_WEBHOOK_SECRET</code>, and <code>RESEND_LIVE_SENDS</code> empty until you are ready. The UI and drafts work without them. Test sends need an API key. Audience sends also need <code>RESEND_LIVE_SENDS=1</code>.
+  </div>
+
+  <h2>2. Automated checks (no live people)</h2>
+  <p>On your laptop, from the repo:</p>
+  <p><code>npx vitest run shared/emailCampaign.test.js shared/emailDesignCompile.test.js server/__tests__/emailCommunications.test.js src/__tests__/rbacPermissions.test.js server/__tests__/ticketService.test.js</code></p>
+  <p>Expect those files to pass. They use a fake Resend client and synthetic recipients. They never mail real registrants.</p>
+  <table>
+    <tr><th>What it proves</th><th>Pass looks like</th></tr>
+    <tr><td>Event isolation + send vs view</td><td><code>campaigns.send</code> is required to dispatch; view cannot send</td></tr>
+    <tr><td>Merge tags</td><td>HTML is escaped; empty first name falls back to “there”</td></tr>
+    <tr><td>Audience dedupe</td><td>Ada@Example.com and ada@example.com count as one person</td></tr>
+    <tr><td>Unsubscribe after schedule</td><td>Job is skipped, not sent</td></tr>
+    <tr><td>Hard bounce</td><td>Later service campaigns are blocked</td></tr>
+    <tr><td>Worker claim</td><td>A second claim on the same job returns nothing</td></tr>
+    <tr><td>Provider timeout</td><td>Outcome is <code>acceptance_unknown</code>, not a blind retry</td></tr>
+    <tr><td>Webhooks</td><td>Forged signature fails; duplicate Svix id is ignored; late deliver does not overwrite bounce</td></tr>
+    <tr><td>Resources</td><td>Public vs token; wrong event; revoke; GET/HEAD do not consume the grant</td></tr>
+  </table>
+
+  <h2>3. Admin walkthrough (sandbox)</h2>
+  <h3>A. Create a draft</h3>
+  <ol class="steps">
+    <li>Go to an event with a few test registrations, or create a cheap/free test event and register yourself only.</li>
+    <li>Event profile → Campaigns → New campaign, or <span class="path">/admin/campaigns</span> → New campaign.</li>
+    <li>Purpose: start with <strong>Event service</strong> (does not need marketing consent).</li>
+    <li>Wizard steps: Details → Audience → Design → Review / Test → Send / Schedule → Report.</li>
+    <li>On Design, try each starter: Event update, Joining instructions, Resources and workbook, Thank you and feedback.</li>
+    <li>Switch Visual / Blocks / Preview. Desktop and mobile preview should show navy <code>#141D45</code> and teal <code>#00A79D</code>.</li>
+    <li>Insert merge tags such as <code>{{first_name}}</code> and <code>{{event_title}}</code>. Save design.</li>
+  </ol>
+
+  <h3>B. Audience preview</h3>
+  <ol class="steps">
+    <li>On Audience, keep status <code>confirmed</code> or clear filters as needed.</li>
+    <li>Click Preview audience. Included + excluded counts should match the event, not other events.</li>
+    <li>Country and tags must not appear. Those fields do not exist.</li>
+    <li>The notice should say the count can change until send, because the snapshot freezes only at dispatch.</li>
+  </ol>
+
+  <h3>C. Test send (needs Resend API key, not live flag)</h3>
+  <ol class="steps">
+    <li>In Coolify env (or local <code>.env</code>) set <code>RESEND_API_KEY</code> only. Do <em>not</em> set <code>RESEND_LIVE_SENDS=1</code> yet.</li>
+    <li>Redeploy or restart the container.</li>
+    <li>Review / Test → enter <strong>your</strong> address → Send test.</li>
+    <li>Subject should start with <code>[TEST]</code>.</li>
+    <li>Open the message. Check logo, event details, and that links go to the app (preferences / resources), not a raw file URL.</li>
+  </ol>
+  <div class="warn box">
+    Confirm send to the audience must still fail with “Live campaign sends are disabled…” until <code>RESEND_LIVE_SENDS=1</code>. That is correct.
+  </div>
+
+  <h2>4. Resources</h2>
+  <ol class="steps">
+    <li>Event profile → Resources. Create one <strong>Public</strong> and one <strong>Registrant link</strong> item.</li>
+    <li>Upload a small PDF. The note must say files are not malware-scanned and stay unpublished until you publish.</li>
+    <li>Verified access must be disabled / labeled Phase 2.</li>
+    <li>Publish the public file. Open <span class="path">/resources/EVENT_ID</span> signed out. You should see the public title and be able to download.</li>
+    <li>Do not publish the registrant-link file, then try its URL. You should get not found / not published.</li>
+    <li>Publish it. Without a token the download must fail. A token from a campaign email should work. After Revoke links, that token must fail.</li>
+    <li>Expired or revoked links should show the branded “Link expired” page, not a stack trace.</li>
+  </ol>
+
+  <h2>5. Consent, unsubscribe, reports</h2>
+  <ol class="steps">
+    <li>Register for a test event. The marketing checkbox must be <strong>unchecked</strong> by default. Wording: occasional updates about future Mutale events; optional; not required to attend.</li>
+    <li>Leave it unchecked. You may still receive <strong>event service</strong> campaigns for that registration.</li>
+    <li>A <strong>promotional</strong> campaign preview should exclude that address with <code>no_marketing_consent</code>.</li>
+    <li>Check the box on a second registration (or Stay subscribed on the preferences page). Promotional preview should now include that address.</li>
+    <li>Open <span class="path">/email/preferences?token=…</span> from a test email. Loading the page must not unsubscribe you. Only the button should change state.</li>
+    <li>Confirm unsubscribe. Later promotional jobs must skip that address.</li>
+    <li>Report tab: included / delivered / bounced. Opens and clicks are labeled as estimates.</li>
+  </ol>
+
+  <h2>6. Permissions</h2>
+  <table>
+    <tr><th>Role / key</th><th>Should be able to</th><th>Must not</th></tr>
+    <tr><td>Support Agent (<code>campaigns.view</code>)</td><td>See lists and reports</td><td>Create, edit, or send</td></tr>
+    <tr><td><code>campaigns.manage</code> without send</td><td>Draft and design</td><td>Confirm send</td></tr>
+    <tr><td><code>campaigns.send</code></td><td>Test, schedule, send, pause, cancel</td><td>—</td></tr>
+  </table>
+
+  <h2>7. When you are ready for a real Resend test (still not production audience)</h2>
+  <ol class="steps">
+    <li>Create a Resend account. Add API key and webhook secret in Coolify env. Do not commit them.</li>
+    <li>Webhook URL: <code>https://YOUR_DOMAIN/api/webhooks/resend</code>. Events: sent, delivered, delivery_delayed, bounced, complained, failed, opened, clicked.</li>
+    <li>Verify <code>mutalemubanga.org</code> in Resend (DKIM CNAMEs). Do not change DNS until you decide to.</li>
+    <li>Only after you explicitly want live audience sends: set <code>RESEND_LIVE_SENDS=1</code> and restart.</li>
+    <li>First live send: one event, event-service purpose, audience = you (or a tiny confirmed list you control). Confirm send.</li>
+    <li>Watch Coolify logs for outbox ticks, then the campaign Report and the Resend dashboard.</li>
+    <li>Manual inbox checklist (not automated): Gmail, Outlook, Apple Mail on phone and desktop.</li>
+  </ol>
+
+  <div class="warn box">
+    <strong>Do not</strong> set <code>RESEND_LIVE_SENDS=1</code> on production until the domain is verified and you have approved a real send. Transactional SMTP must keep working for tickets and receipts the whole time.
+  </div>
+
+  <h2>8. Regression: SMTP still works</h2>
+  <ol class="steps">
+    <li>Register for an event (or buy a ticket). You should still get the usual branded confirmation / ticket from <code>grow@mutalemubanga.org</code> via cPanel SMTP, not Resend.</li>
+    <li>If you have a certificate or receipt job, that mail should also still go out on SMTP.</li>
+  </ol>
+
+  <h2>9. Coolify environment (empty until you fill them)</h2>
+  <table>
+    <tr><th>Variable</th><th>When</th></tr>
+    <tr><td><code>RESEND_API_KEY</code></td><td>Needed for test send and later live send</td></tr>
+    <tr><td><code>RESEND_WEBHOOK_SECRET</code></td><td>Needed before webhook events are trusted</td></tr>
+    <tr><td><code>RESEND_LIVE_SENDS=1</code></td><td>Only after domain verify + your go-ahead</td></tr>
+    <tr><td><code>APP_URL</code></td><td>Must be the public https origin so preference and resource links are correct</td></tr>
+  </table>
+
+  <h2>10. If something looks wrong</h2>
+  <table>
+    <tr><th>Symptom</th><th>Likely cause</th></tr>
+    <tr><td>No Campaigns tab</td><td>Old JWT — log out/in, or run seed/access-control refresh</td></tr>
+    <tr><td>Test send fails “API key”</td><td><code>RESEND_API_KEY</code> missing in Coolify</td></tr>
+    <tr><td>Confirm send blocked</td><td>Expected until <code>RESEND_LIVE_SENDS=1</code></td></tr>
+    <tr><td>Promotional audience is 0</td><td>No marketing opt-in, or unsubscribed / bounced</td></tr>
+    <tr><td>Resource 403</td><td>Wrong event, unpublished, revoked, or missing token</td></tr>
+    <tr><td>Two containers, duplicate sends</td><td>Scale back to one replica</td></tr>
+  </table>
+
+  <footer>
+    Mutale Mubanga · Growing People. · Sender remains grow@mutalemubanga.org once Resend verifies the domain.
+    This sheet is for Phase 1. Verified resource login and automations are Phase 2 and stay disabled.
+  </footer>
+</body>
+</html>

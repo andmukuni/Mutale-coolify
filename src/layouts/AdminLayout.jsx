@@ -32,6 +32,7 @@ import {
   Handshake,
   Navigation,
   Mail,
+  Megaphone,
 } from 'lucide-react';
 import SiteLogo from '../components/SiteLogo';
 import ThemeToggle from '../components/ThemeToggle';
@@ -50,6 +51,7 @@ const CONTENT_NAVIGATION = [
       { key: 'all-events', name: 'All Events', to: '/admin/events', icon: CalendarDays },
       { key: 'create-event', name: 'Create Event', to: '/admin/events/new', icon: PlusCircle, end: true },
       { key: 'certificates', name: 'Certificates', to: '/admin/certificates', icon: Award },
+      { key: 'campaigns', name: 'Campaigns', to: '/admin/campaigns', icon: Megaphone },
     ],
   },
   { key: 'coupons', name: 'Coupon Management', to: '/admin/coupons', icon: Percent },
@@ -280,7 +282,7 @@ function SidebarNavLink({ item, isItemActive, onNavigate }) {
 }
 
 const GROUP_ACTIVE_CHECKS = {
-  'events-group': (pathname) => pathname.startsWith('/admin/events') || pathname.startsWith('/admin/certificates'),
+  'events-group': (pathname) => pathname.startsWith('/admin/events') || pathname.startsWith('/admin/certificates') || pathname.startsWith('/admin/campaigns'),
   'blog-group': (pathname) => pathname.startsWith('/admin/blog'),
   'publications-group': (pathname) => pathname.startsWith('/admin/publications'),
   'books-group': (pathname) => pathname.startsWith('/admin/books')
@@ -299,6 +301,7 @@ export default function AdminLayout() {
   const systemNavigation = SYSTEM_NAVIGATION.filter((item) => navItemAllowed(item.key, hasPermission));
   const canManageSettings = navItemAllowed('settings', hasPermission);
   const canManageTemplates = navItemAllowed('templates', hasPermission);
+  const canViewCampaigns = navItemAllowed('campaigns', hasPermission);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -533,8 +536,24 @@ export default function AdminLayout() {
           </div>
         </nav>
 
-        {(canManageTemplates || canManageSettings) && (
+        {(canManageTemplates || canManageSettings || canViewCampaigns) && (
           <div className="shrink-0 border-t border-navy-800 p-4 space-y-1">
+            {canViewCampaigns && (
+              <NavLink
+                to="/admin/campaigns"
+                onClick={() => setSidebarOpen(false)}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                    isActive
+                      ? 'bg-cyan-600/10 text-cyan-400'
+                      : 'text-navy-300 hover:bg-navy-800 hover:text-white'
+                  }`
+                }
+              >
+                <Megaphone size={18} />
+                Campaigns
+              </NavLink>
+            )}
             {canManageTemplates && (
               <NavLink
                 to="/admin/templates"

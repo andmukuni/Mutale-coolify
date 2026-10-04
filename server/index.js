@@ -76,6 +76,10 @@ import {
   listEventSurveyResults,
 } from './eventSurveyService.js';
 import { registerNotificationTemplateRoutes } from './notificationTemplateRoutes.js';
+import { ensureEmailCommunicationsSchema } from './emailCampaignSchema.js';
+import { registerEmailCampaignRoutes } from './emailCampaignRoutes.js';
+import { runEmailOutboxTick } from './emailOutboxService.js';
+import { recordMarketingOptIn } from './emailConsentService.js';
 import { applyNotificationTemplates, seedSystemNotificationTemplates } from './notificationTemplateService.js';
 import { buildPersonTemplateVars } from '../shared/notificationTemplates.js';
 import {
@@ -247,6 +251,7 @@ app.use(express.json({
     req.rawBody = buf?.toString('utf8') || '';
   },
 }));
+app.use(express.urlencoded({ extended: false }));
 
 app.use((err, _req, res, next) => {
   if (err?.type === 'entity.too.large') {
@@ -1521,6 +1526,11 @@ function isAdminProtectedRoute(req) {
   if (isCatalogAdminMutation(routePath, method)) return true;
   if (routePath.startsWith('/api/partner-logos') && method !== 'GET') return true;
   if (routePath.startsWith('/api/menu-items') && method !== 'GET') return true;
+  if (routePath === '/api/webhooks/resend') return false;
+  if (routePath.startsWith('/api/email/preferences')) return false;
+  if (routePath.startsWith('/api/email/unsubscribe')) return false;
+  if (routePath.startsWith('/api/event-resources/')) return false;
+  if (/^\/api\/events\/[^/]+\/resources\/public$/.test(routePath) && method === 'GET') return false;
 
   return false;
 }
@@ -4919,6 +4929,7 @@ async function ensureSchema() {
   `);
 
   await ensureEventSurveySchema(pool);
+  await ensureEmailCommunicationsSchema(pool);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS event_chat_sessions (
@@ -9932,6 +9943,19 @@ app.get('/api/registrations', async (req, res) => {
   }
 });
 
+async function applyOptionalMarketingConsent(incoming, emails = []) {
+  const opted = parseBoolean(incoming?.marketing_opt_in ?? incoming?.marketingOptIn, false);
+  if (!opted) return;
+  const unique = [...new Set((emails || []).map((value) => String(value || '').trim().toLowerCase()).filter((value) => value.includes('@')))];
+  for (const email of unique) {
+    try {
+      await recordMarketingOptIn(pool, email, { source: 'registration' });
+    } catch (error) {
+      console.warn('[marketing-consent] skip:', error.message);
+    }
+  }
+}
+
 app.post('/api/registrations', async (req, res) => {
   try {
     const auth = getJwtAuth(req);
@@ -10078,6 +10102,11 @@ app.post('/api/registrations', async (req, res) => {
     conn.release();
 
     const [[row]] = await pool.query('SELECT * FROM event_registrations WHERE id = ?', [enriched.id]);
+
+    await applyOptionalMarketingConsent(incoming, [
+      enriched.user_email,
+      enriched.booked_for_email,
+    ]);
 
     // Send confirmation email/WhatsApp (best-effort — don't fail registration if delivery fails)
     try {
@@ -10550,6 +10579,11 @@ app.post('/api/registrations/batch', async (req, res) => {
 
     const registrations = rows.map(mapDbRegistration);
 
+    await applyOptionalMarketingConsent(incoming, [
+      authUser.email,
+      ...insertedRows.map((row) => row.booked_for_email || row.user_email),
+    ]);
+
     try {
       const settings = await getSystemSettings();
       const appUrl = resolvePublicAppUrl(req);
@@ -10670,6 +10704,13 @@ registerNotificationTemplateRoutes(app, {
   sendEmailNotification,
   sendSmsNotification,
   getSystemSettings,
+});
+
+registerEmailCampaignRoutes(app, {
+  pool,
+  getAdminAuth,
+  sendAuthFailure,
+  __appRoot,
 });
 
 app.post('/api/registrations/check-in', async (req, res) => {
@@ -15303,6 +15344,9 @@ ensureSchema()
     setInterval(() => { void runCertificateJob(); }, 60 * 60 * 1000);
     setTimeout(() => { void runEventLifecycleJob(); }, 20_000);
     setInterval(() => { void runEventLifecycleJob(); }, 5 * 60 * 1000);
+    // Campaign outbox: one Coolify replica. Duplicate containers would need a later lease.
+    setTimeout(() => { void runEmailOutboxTick(pool); }, 15_000);
+    setInterval(() => { void runEmailOutboxTick(pool); }, 20_000);
     startHttpServer();
   })
   .catch((error) => {

@@ -20,4 +20,15 @@ describe('RBAC permission helpers', () => {
   it('includes templates.manage in the current catalog', () => {
     expect(ALL_PERMISSION_KEYS).toContain('templates.manage');
   });
+
+  it('includes campaign permissions and lets events.manage edit but not send', () => {
+    expect(ALL_PERMISSION_KEYS).toContain('campaigns.view');
+    expect(ALL_PERMISSION_KEYS).toContain('campaigns.manage');
+    expect(ALL_PERMISSION_KEYS).toContain('campaigns.send');
+    expect(permissionMatches(['events.manage'], 'campaigns.view')).toBe(true);
+    expect(permissionMatches(['events.manage'], 'campaigns.manage')).toBe(true);
+    expect(permissionMatches(['events.manage'], 'campaigns.send')).toBe(false);
+    expect(permissionMatches(['campaigns.send'], 'campaigns.view')).toBe(true);
+    expect(permissionMatches(['campaigns.view'], 'campaigns.send')).toBe(false);
+  });
 });

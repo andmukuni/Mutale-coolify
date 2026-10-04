@@ -1,4 +1,3 @@
-import { createCanvas, loadImage } from 'canvas';
 import { getCertificateSealSvg } from './certificateSealArt.js';
 import {
   CERTIFICATE_SEAL_GOLD_ROUND,
@@ -17,6 +16,13 @@ const SEAL_SRC_TO_ART_ID = {
 };
 
 async function rasterizeSvgToPngDataUrl(svg, size = 256) {
+  let createCanvas;
+  let loadImage;
+  try {
+    ({ createCanvas, loadImage } = await import('canvas'));
+  } catch {
+    throw new Error('Native canvas module is not available');
+  }
   const canvas = createCanvas(size, size);
   const ctx = canvas.getContext('2d');
   const img = await loadImage(Buffer.from(svg));

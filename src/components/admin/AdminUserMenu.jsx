@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   LogOut,
   Mail,
+  Megaphone,
   Settings,
   Shield,
   User,
@@ -78,6 +79,7 @@ export default function AdminUserMenu() {
 
   const canSettings = hasPermission('settings.manage');
   const canTemplates = hasPermission('templates.manage');
+  const canCampaigns = hasPermission('campaigns.view');
   const canAccessControl = hasPermission('rbac.manage');
 
   return (
@@ -125,6 +127,11 @@ export default function AdminUserMenu() {
             <MenuLink to="/admin" icon={LayoutDashboard} onSelect={close}>
               Dashboard
             </MenuLink>
+            {canCampaigns && (
+              <MenuLink to="/admin/campaigns" icon={Megaphone} onSelect={close}>
+                Campaigns
+              </MenuLink>
+            )}
             {canTemplates && (
               <MenuLink to="/admin/templates" icon={Mail} onSelect={close}>
                 Templates

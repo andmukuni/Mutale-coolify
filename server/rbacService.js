@@ -193,6 +193,14 @@ export function resolveRouteAdminPermission(req) {
 
   if (path.startsWith('/api/admin/rbac')) return 'rbac.manage';
   if (path.startsWith('/api/admin/notification-templates')) return 'templates.manage';
+  if (
+    path.startsWith('/api/admin/campaigns')
+    || (path.startsWith('/api/admin/events/') && (path.includes('/resources') || path.includes('/campaigns')))
+  ) {
+    if (method === 'GET') return 'campaigns.view';
+    if (/\/(send|test|pause|resume|cancel)$/.test(path)) return 'campaigns.send';
+    return 'campaigns.manage';
+  }
 
   if (path.startsWith('/api/settings/')) return 'settings.manage';
   if (path.startsWith('/api/finance/')) return method === 'GET' ? 'finance.view' : 'finance.payouts';

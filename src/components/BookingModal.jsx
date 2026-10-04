@@ -34,6 +34,7 @@ import { getSessionAuthHeaders } from '../utils/authHeaders';
 import { runLencoCardWidget } from '../utils/lencoCardPayment';
 import EventVenueMap from './EventVenueMap';
 import { fieldControlClass } from '../utils/formFieldHighlight';
+import { MARKETING_CONSENT_WORDING } from '../../shared/emailCampaign.js';
 
 const API_BASE = getApiBase();
 
@@ -266,6 +267,7 @@ export default function EventRegistrationFlow({
   const [paymentMethod, setPaymentMethod] = useState(() => isZambia ? 'mobile_money' : 'card');
   const [phone, setPhone] = useState('');
   const [notes, setNotes] = useState('');
+  const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [includeSelf, setIncludeSelf] = useState(true);
   const [guestAttendees, setGuestAttendees] = useState([]);
   const [result, setResult] = useState(null); // { success, registration, registrations, error }
@@ -622,6 +624,7 @@ export default function EventRegistrationFlow({
       paymentAmount,
       paymentCurrency,
       paymentAmountZmw,
+      marketingOptIn,
     });
   };
 
@@ -686,6 +689,7 @@ export default function EventRegistrationFlow({
             registrationStatus: 'confirmed',
             paymentMethod: 'free',
             couponCode: couponForRegistration,
+            marketingOptIn,
           }));
         }
         return;
@@ -835,6 +839,7 @@ export default function EventRegistrationFlow({
           paymentReference: reference,
           referenceCode: reference || undefined,
           couponCode: couponForRegistration,
+          marketingOptIn,
         });
 
         if (!reg?.success) {
@@ -976,6 +981,7 @@ export default function EventRegistrationFlow({
         paymentReference: lencoReference,
         referenceCode: lencoReference,
         couponCode: couponForRegistration,
+        marketingOptIn,
       }));
     } catch (error) {
       setResult({ success: false, error: error.message || 'Unable to process payment.' });
@@ -1286,6 +1292,18 @@ export default function EventRegistrationFlow({
       <div className="mb-4 text-xs text-navy-500">
         Registration type: <span className="font-semibold text-cyan-700">Subscription</span>
       </div>
+
+      {!onPaymentStep && (
+        <label className="mb-4 flex items-start gap-2 text-sm text-navy-600 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={marketingOptIn}
+            onChange={(e) => setMarketingOptIn(e.target.checked)}
+            className="mt-0.5 rounded border-navy-300 text-cyan-600 focus:ring-cyan-500"
+          />
+          <span>{MARKETING_CONSENT_WORDING}</span>
+        </label>
+      )}
 
       {allowsMultiAttendee && !onPaymentStep && (
         <div className="mb-4 space-y-4">

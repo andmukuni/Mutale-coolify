@@ -28,6 +28,9 @@ export const ADMIN_PERMISSIONS = [
   { key: 'website.manage', name: 'Manage website pages', group: 'System' },
   { key: 'settings.manage', name: 'Manage system settings', group: 'System' },
   { key: 'templates.manage', name: 'Manage email & SMS templates', group: 'System' },
+  { key: 'campaigns.view', name: 'View event campaigns', group: 'Events' },
+  { key: 'campaigns.manage', name: 'Create and edit event campaigns', group: 'Events' },
+  { key: 'campaigns.send', name: 'Send or schedule event campaigns', group: 'Events' },
   { key: 'rbac.manage', name: 'Manage roles & permissions', group: 'System' },
 ];
 
@@ -50,6 +53,7 @@ export const DEFAULT_ADMIN_ROLES = [
     permissions: [
       'dashboard.view',
       'events.view', 'events.manage', 'certificates.manage', 'coupons.manage', 'forum.moderate',
+      'campaigns.view', 'campaigns.manage', 'campaigns.send',
       'blog.view', 'blog.manage',
       'publications.view', 'publications.manage',
       'shop.view', 'shop.manage', 'shop.orders',
@@ -78,7 +82,7 @@ export const DEFAULT_ADMIN_ROLES = [
     permissions: [
       'dashboard.view',
       'users.view', 'messages.view',
-      'events.view', 'receipts.view',
+      'events.view', 'campaigns.view', 'receipts.view',
     ],
   },
   {
@@ -121,6 +125,7 @@ export const NAV_PERMISSION_MAP = {
   'partner-logos': 'website.manage',
   menu: 'website.manage',
   templates: 'templates.manage',
+  campaigns: 'campaigns.view',
   settings: 'settings.manage',
   'access-control': 'rbac.manage',
 };
@@ -140,6 +145,8 @@ export function permissionMatches(have = [], need = '') {
   if (set.has(required)) return true;
   // Settings admins can also manage notification templates.
   if (required === 'templates.manage' && set.has('settings.manage')) return true;
+  if (required === 'campaigns.view' && (set.has('campaigns.manage') || set.has('campaigns.send') || set.has('events.manage'))) return true;
+  if (required === 'campaigns.manage' && set.has('events.manage')) return true;
   return false;
 }
 

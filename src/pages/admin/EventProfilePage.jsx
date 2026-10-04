@@ -24,6 +24,8 @@ import {
   IdCard,
   Printer,
   Palette,
+  Megaphone,
+  FolderOpen,
 } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { useBooking } from '../../context/BookingContext';
@@ -37,6 +39,8 @@ import EventProfileSummaryHero from '../../components/admin/event/EventProfileSu
 import EventProfileQuickActions from '../../components/admin/event/EventProfileQuickActions';
 import EventTicketsPanel from '../../components/admin/event/EventTicketsPanel';
 import EventSurveyPanel from '../../components/admin/event/EventSurveyPanel';
+import EventCampaignsPanel from '../../components/admin/event/EventCampaignsPanel';
+import EventResourcesPanel from '../../components/admin/event/EventResourcesPanel';
 import EventSessionsPanel from '../../components/admin/event/EventSessionsPanel';
 import EventForumPanel from '../../components/EventForumPanel';
 import CertificatePreviewModal from '../../components/admin/certificate/CertificatePreviewModal';
@@ -70,6 +74,8 @@ const PROFILE_TABS = [
   { id: 'survey', label: 'Survey', icon: ClipboardList },
   { id: 'forum', label: 'Forum', icon: MessageSquare },
   { id: 'marketing', label: 'Marketing', icon: Percent },
+  { id: 'campaigns', label: 'Campaigns', icon: Megaphone },
+  { id: 'resources', label: 'Resources', icon: FolderOpen },
   { id: 'activity', label: 'Activity', icon: Activity },
 ];
 
@@ -783,6 +789,18 @@ export default function EventProfilePage() {
                 )}
               </FeedCard>
             </>
+          )}
+
+          {activeTab === 'campaigns' && (
+            <FeedCard title="Campaigns" subtitle="Event service and promotional email">
+              <EventCampaignsPanel event={event} />
+            </FeedCard>
+          )}
+
+          {activeTab === 'resources' && (
+            <FeedCard title="Resources" subtitle="Private files for this event">
+              <EventResourcesPanel event={event} />
+            </FeedCard>
           )}
 
           {activeTab === 'marketing' && showMarketingTab && (
