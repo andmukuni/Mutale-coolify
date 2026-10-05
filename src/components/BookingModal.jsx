@@ -625,6 +625,7 @@ export default function EventRegistrationFlow({
       paymentCurrency,
       paymentAmountZmw,
       marketingOptIn,
+      buyerPhone: phone,
     });
   };
 
@@ -690,6 +691,7 @@ export default function EventRegistrationFlow({
             paymentMethod: 'free',
             couponCode: couponForRegistration,
             marketingOptIn,
+            buyerPhone: phone,
           }));
         }
         return;
@@ -840,6 +842,7 @@ export default function EventRegistrationFlow({
           referenceCode: reference || undefined,
           couponCode: couponForRegistration,
           marketingOptIn,
+          buyerPhone: phone,
         });
 
         if (!reg?.success) {
@@ -982,6 +985,7 @@ export default function EventRegistrationFlow({
         referenceCode: lencoReference,
         couponCode: couponForRegistration,
         marketingOptIn,
+        buyerPhone: phone,
       }));
     } catch (error) {
       setResult({ success: false, error: error.message || 'Unable to process payment.' });

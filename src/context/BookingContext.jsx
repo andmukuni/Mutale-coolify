@@ -133,6 +133,7 @@ export function BookingProvider({ children }) {
     bookedForRelation,
     couponCode,
     marketingOptIn = false,
+    buyerPhone = '',
   }) => {
     if (!user) return { success: false, error: 'You must be logged in to register.' };
     if (!event?.id) return { success: false, error: 'Event not found.' };
@@ -172,6 +173,7 @@ export function BookingProvider({ children }) {
         ? { booked_for_name: guestName, ...(relation ? { booked_for_relation: relation } : {}) }
         : {}),
       marketing_opt_in: Boolean(marketingOptIn),
+      buyer_phone: String(buyerPhone || '').trim(),
     };
 
     try {
@@ -218,6 +220,7 @@ export function BookingProvider({ children }) {
     paymentReference,
     couponCode,
     marketingOptIn = false,
+    buyerPhone = '',
   }) => {
     if (!user) return { success: false, error: 'You must be logged in to register.' };
     if (!event?.id) return { success: false, error: 'Event not found.' };
@@ -256,6 +259,7 @@ export function BookingProvider({ children }) {
       ...(coupon_code ? { coupon_code } : {}),
       ...(paymentAmount != null ? { amount: paymentAmount } : {}),
       marketing_opt_in: Boolean(marketingOptIn),
+      buyer_phone: String(buyerPhone || '').trim(),
     };
 
     try {

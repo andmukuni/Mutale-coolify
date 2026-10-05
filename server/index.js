@@ -78,6 +78,8 @@ import {
 import { registerNotificationTemplateRoutes } from './notificationTemplateRoutes.js';
 import { ensureEmailCommunicationsSchema } from './emailCampaignSchema.js';
 import { registerEmailCampaignRoutes } from './emailCampaignRoutes.js';
+import { registerRegistrationAttendeeRoutes } from './registrationAttendeeRoutes.js';
+import { applyRegistrationSnapshots } from './registrationAttendeeService.js';
 import { runEmailOutboxTick } from './emailOutboxService.js';
 import { recordMarketingOptIn } from './emailConsentService.js';
 import { applyNotificationTemplates, seedSystemNotificationTemplates } from './notificationTemplateService.js';
@@ -477,6 +479,8 @@ const EVENT_REGISTRATION_FIELDS = [
   'discount_zmw',
   'volume_discount_zmw',
   'notes',
+  'marketing_opt_in',
+  'buyer_phone',
 ];
 
 function deriveAttendeeSlotKey(bookedForNameRaw = '', slotIndex = null) {
@@ -2435,6 +2439,10 @@ function normalizeRegistrationPayload(payload = {}, idOverride) {
     discount_zmw: roundMoney2(toNumber(payload.discount_zmw, 0)),
     volume_discount_zmw: roundMoney2(toNumber(payload.volume_discount_zmw, 0)),
     notes: String(payload.notes || '').trim(),
+    marketing_opt_in: payload.marketing_opt_in == null || payload.marketing_opt_in === ''
+      ? null
+      : (Number(payload.marketing_opt_in) === 1 || payload.marketing_opt_in === true ? 1 : 0),
+    buyer_phone: String(payload.buyer_phone || '').trim() || null,
   };
 }
 
@@ -4394,6 +4402,8 @@ async function ensureSchema() {
     ['in_meeting', 'TINYINT(1) NOT NULL DEFAULT 0'],
     ['in_meeting_at', 'DATETIME NULL'],
     ['left_meeting_at', 'DATETIME NULL'],
+    ['marketing_opt_in', 'TINYINT(1) NULL'],
+    ['buyer_phone', 'VARCHAR(60) NULL'],
   ];
   for (const [name, sqlType] of registrationColumnsToAdd) {
     try {
@@ -7230,6 +7240,7 @@ async function createSiteChatSelfRegistration(req, authUser, event, extras = {})
     registration_type: 'subscription',
     payment_reference: extras.payment_reference || '',
     payment_method: extras.payment_method || '',
+    buyer_phone: String(authUser.phone || '').trim() || null,
   });
 
   const gateReason = getEventRegistrationGateReason(event);
@@ -9966,12 +9977,12 @@ app.post('/api/registrations', async (req, res) => {
     if (!authUser.email_verified) return res.status(403).json({ ok: false, message: 'Please verify your email before registering.' });
 
     const incoming = req.body && typeof req.body === 'object' ? { ...req.body } : {};
-    const payload = normalizeRegistrationPayload({
+    const payload = applyRegistrationSnapshots(normalizeRegistrationPayload({
       ...incoming,
       user_id: authUser.id,
       user_name: authUser.name,
       user_email: authUser.email,
-    });
+    }), incoming, authUser);
 
     if (!payload.user_id || !payload.user_name || !payload.user_email || !payload.event_id) {
       return res.status(400).json({ ok: false, message: 'user_id, user_name, user_email, and event_id are required.' });
@@ -10509,7 +10520,7 @@ app.post('/api/registrations/batch', async (req, res) => {
           ? unitFinalZmw
           : (payAmountIncoming != null ? payAmountIncoming / ticketCount : unitFinalZmw);
 
-        const mergedForNorm = normalizeRegistrationPayload({
+        const mergedForNorm = applyRegistrationSnapshots(normalizeRegistrationPayload({
           user_id: authUser.id,
           user_name: authUser.name,
           user_email: authUser.email,
@@ -10541,7 +10552,7 @@ app.post('/api/registrations/batch', async (req, res) => {
           discount_zmw: pricing.coupon_discount_zmw,
           volume_discount_zmw: pricing.volume_discount_zmw,
           notes,
-        });
+        }), incoming, authUser);
 
         const enriched = await applyTrustedRegistrationPaymentState(mergedForNorm, event);
         await insertEventRegistrationRow(conn, enriched);
@@ -10712,6 +10723,8 @@ registerEmailCampaignRoutes(app, {
   sendAuthFailure,
   __appRoot,
 });
+
+registerRegistrationAttendeeRoutes(app, { pool });
 
 app.post('/api/registrations/check-in', async (req, res) => {
   try {
@@ -15166,6 +15179,7 @@ app.post('/api/admin/events/:eventId/walk-in-registrations', async (req, res) =>
       booked_for_name: name,
       booked_for_email: email || null,
       booked_for_phone: phone || null,
+      buyer_phone: phone || null,
       attendee_slot_key: deriveAttendeeSlotKey(name),
       notes: 'walk_in',
     }, regId);

@@ -193,6 +193,10 @@ export function resolveRouteAdminPermission(req) {
 
   if (path.startsWith('/api/admin/rbac')) return 'rbac.manage';
   if (path.startsWith('/api/admin/notification-templates')) return 'templates.manage';
+  if (path.startsWith('/api/admin/events/') && path.includes('/attendees')) {
+    return 'events.view';
+  }
+
   if (
     path.startsWith('/api/admin/campaigns')
     || (path.startsWith('/api/admin/events/') && (path.includes('/resources') || path.includes('/campaigns')))

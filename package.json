@@ -52,6 +52,7 @@
     "docx": "^9.7.1",
     "dompurify": "^3.4.7",
     "dotenv": "^17.4.1",
+    "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "grapesjs": "^0.23.6",
     "jsdom": "^29.1.1",
