@@ -1,4 +1,5 @@
-import { EMAIL_DESIGN_TEMPLATE_SEED } from '../shared/emailDesignTemplates.js';
+import { EMAIL_DESIGN_TEMPLATE_SEED, CAMPAIGN_WORKSPACE_TEMPLATE_SEED } from '../shared/emailDesignTemplates.js';
+import { ensureCampaignWorkspaceSchema } from './campaignWorkspaceSchema.js';
 
 export async function ensureEmailCommunicationsSchema(pool) {
   await pool.query(`
@@ -205,11 +206,12 @@ export async function ensureEmailCommunicationsSchema(pool) {
     )
   `);
 
-  for (const item of EMAIL_DESIGN_TEMPLATE_SEED) {
+  await ensureCampaignWorkspaceSchema(pool);
+
+  for (const item of [...EMAIL_DESIGN_TEMPLATE_SEED,...CAMPAIGN_WORKSPACE_TEMPLATE_SEED]) {
     await pool.query(
-      `INSERT INTO email_design_templates (id, slug, name, purpose, subject, preheader, design_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE name = VALUES(name), subject = VALUES(subject), preheader = VALUES(preheader)`,
+      `INSERT IGNORE INTO email_design_templates (id, slug, name, purpose, subject, preheader, design_json,campaign_type)
+       VALUES (?, ?, ?, ?, ?, ?, ?,?)`,
       [
         `edsgn-${item.slug}`,
         item.slug,
@@ -218,6 +220,7 @@ export async function ensureEmailCommunicationsSchema(pool) {
         item.subject,
         item.preheader,
         JSON.stringify(item.design),
+        item.campaign_type || 'event_notification',
       ],
     );
   }

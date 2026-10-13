@@ -196,7 +196,7 @@ if (process.env.TRUST_PROXY === '1' || IS_PRODUCTION) {
 }
 
 /** Bumps when auth/API behavior changes — check GET /api/health on cPanel after deploy */
-const API_DEPLOYMENT_TAG = '2026-07-17-mobile-api';
+const API_DEPLOYMENT_TAG = '2026-10-14-campaign-workspace-v2';
 
 const CORS_ORIGINS = String(process.env.CORS_ORIGINS || '').split(',').map((v) => v.trim()).filter(Boolean);
 
@@ -10719,7 +10719,9 @@ registerNotificationTemplateRoutes(app, {
 
 registerEmailCampaignRoutes(app, {
   pool,
+  uploadImage:(image,req)=>persistImageIfNeeded(image,req,{folder:'campaigns',prefix:'campaign'}),
   getAdminAuth,
+  getJwtAuth,
   sendAuthFailure,
   __appRoot,
 });
@@ -15358,9 +15360,9 @@ ensureSchema()
     setInterval(() => { void runCertificateJob(); }, 60 * 60 * 1000);
     setTimeout(() => { void runEventLifecycleJob(); }, 20_000);
     setInterval(() => { void runEventLifecycleJob(); }, 5 * 60 * 1000);
-    // Campaign outbox: one Coolify replica. Duplicate containers would need a later lease.
-    setTimeout(() => { void runEmailOutboxTick(pool); }, 15_000);
-    setInterval(() => { void runEmailOutboxTick(pool); }, 20_000);
+    // Allow a deployment or test instance to keep the durable outbox paused.
+    const campaignTick = () => { void runEmailOutboxTick(pool).catch(error=>console.error('[campaign-outbox]',error.message)); };
+    if(envBoolean(process.env.CAMPAIGN_OUTBOX_WORKER_ENABLED,true)){setTimeout(campaignTick,15_000);setInterval(campaignTick,20_000);}
     startHttpServer();
   })
   .catch((error) => {

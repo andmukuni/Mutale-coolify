@@ -42,6 +42,7 @@ import {
 } from './eventResourceService.js';
 import { getCampaignReport, ingestResendWebhook } from './emailWebhookService.js';
 import { getResendConfig } from './emailResendAdapter.js';
+import { registerCampaignWorkspaceRoutes } from './campaignWorkspaceRoutes.js';
 
 function actorId(req) {
   return req.adminUser?.sub || req.adminUser?.id || req.adminUser?.email || null;
@@ -55,7 +56,8 @@ function requireCampaignEvent(campaign, eventId) {
   }
 }
 
-export function registerEmailCampaignRoutes(app, { pool, getAdminAuth, sendAuthFailure, __appRoot }) {
+export function registerEmailCampaignRoutes(app, { pool, getAdminAuth, getJwtAuth, sendAuthFailure, __appRoot, uploadImage }) {
+  registerCampaignWorkspaceRoutes(app,{pool,actorId,getJwtAuth,uploadImage});
   app.get('/api/admin/campaigns/provider-status', async (_req, res) => {
     const config = getResendConfig();
     return res.json({
@@ -85,6 +87,8 @@ export function registerEmailCampaignRoutes(app, { pool, getAdminAuth, sendAuthF
       const data = await listCampaigns(pool, {
         eventId: String(req.query.event_id || ''),
         state: String(req.query.state || ''),
+        type:String(req.query.type || ''),search:String(req.query.search || ''),tab:String(req.query.tab || ''),
+        archived:req.query.archived==='1',
       });
       return res.json({ ok: true, data });
     } catch (error) {
@@ -100,13 +104,13 @@ export function registerEmailCampaignRoutes(app, { pool, getAdminAuth, sendAuthF
   app.post('/api/admin/campaigns', async (req, res) => {
     try {
       const body = req.body || {};
-      if (!body.event_id) return res.status(400).json({ ok: false, message: 'event_id is required.' });
       const data = await createCampaign(pool, {
         eventId: body.event_id,
         name: body.name,
         purpose: body.purpose,
         actorId: actorId(req),
         timezone: body.timezone,
+        type:body.campaign_type,
       });
       return res.status(201).json({ ok: true, data });
     } catch (error) {
@@ -162,13 +166,15 @@ export function registerEmailCampaignRoutes(app, { pool, getAdminAuth, sendAuthF
       const data = await previewCampaignAudience(pool, {
         eventId: campaign.event_id,
         segment: req.body?.segment || campaign.segment,
-        purpose: campaign.purpose,
+        purpose: req.body?.purpose==='promotional' ? 'promotional' : campaign.purpose,
+        audience:req.body?.audience || campaign.audience,
+        type:campaign.campaign_type,
       });
       return res.json({
         ok: true,
         data: {
           ...data,
-          notice: 'The count can change before sending. Recipients are frozen at dispatch.',
+          notice: 'The count can change before sending. Scheduled recipients are frozen when the campaign becomes due.',
         },
       });
     } catch (error) {
@@ -192,7 +198,8 @@ export function registerEmailCampaignRoutes(app, { pool, getAdminAuth, sendAuthF
       const data = await startCampaignSend(pool, req.params.id, {
         actorId: actorId(req),
         scheduleAt: req.body?.scheduled_at || null,
-        confirmed: Boolean(req.body?.confirmed),
+        confirmed: req.body?.confirmed === true,
+        timezone:req.body?.timezone || 'Africa/Lusaka',requestKey:req.body?.request_key,version:req.body?.version,push:req.body?.push === true,
       });
       return res.json({ ok: true, data });
     } catch (error) {
@@ -347,7 +354,7 @@ export function registerEmailCampaignRoutes(app, { pool, getAdminAuth, sendAuthF
   app.post('/api/email/unsubscribe', async (req, res) => {
     try {
       const parsed = readPreferenceToken(String(req.body?.token || req.query.token || ''));
-      await recordUnsubscribe(pool, parsed.email, { source: 'one_click' });
+      await recordUnsubscribe(pool, parsed.email, { source: 'one_click', reason:req.body?.reason || '', details:req.body?.details || '' });
       return res.status(200).json({ ok: true });
     } catch (error) {
       return res.status(400).json({ ok: false, message: error.message });

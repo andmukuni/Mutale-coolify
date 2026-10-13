@@ -1,30 +1,42 @@
-import { useCallback, useEffect, useRef } from 'react';
-import grapesjs from 'grapesjs';
-import 'grapesjs/dist/css/grapes.min.css';
-import { designToGrapesComponents, grapesCampaignPlugin, grapesToBlocks } from './grapesCampaignPlugin.js';
+import { useCallback, useEffect, useRef } from "react";
+import grapesjs from "grapesjs";
+import "grapesjs/dist/css/grapes.min.css";
+import {
+  designToGrapesComponents,
+  grapesCampaignPlugin,
+  grapesToBlocks,
+} from "./grapesCampaignPlugin.js";
 
-export default function CampaignGrapesCanvas({ design, onChange, readOnly = false }) {
+export default function CampaignGrapesCanvas({
+  design,
+  onChange,
+  readOnly = false,
+}) {
   const rootRef = useRef(null);
   const editorRef = useRef(null);
   const skipRef = useRef(false);
+  const propsRef = useRef({ design, onChange, readOnly });
+  propsRef.current = { design, onChange, readOnly };
 
   const emit = useCallback(() => {
     const editor = editorRef.current;
-    if (!editor || skipRef.current) return;
+    if (!editor || skipRef.current || propsRef.current.readOnly) return;
     const grapes = editor.getProjectData();
     const blocks = grapesToBlocks(editor);
-    onChange?.({
-      version: 1,
+    propsRef.current.onChange?.({
+      ...propsRef.current.design,
+      html: "",
+      version: 2,
       grapes,
-      blocks: blocks.length ? blocks : design?.blocks || [],
+      blocks: blocks.length ? blocks : propsRef.current.design?.blocks || [],
     });
-  }, [design?.blocks, onChange]);
+  }, []);
 
   useEffect(() => {
     if (!rootRef.current || editorRef.current) return undefined;
     const editor = grapesjs.init({
       container: rootRef.current,
-      height: '520px',
+      height: "520px",
       storageManager: false,
       fromElement: false,
       noticeOnUnload: false,
@@ -34,26 +46,24 @@ export default function CampaignGrapesCanvas({ design, onChange, readOnly = fals
       plugins: [grapesCampaignPlugin],
       deviceManager: {
         devices: [
-          { name: 'Desktop', width: '' },
-          { name: 'Mobile', width: '375px', widthMedia: '480px' },
+          { name: "Desktop", width: "" },
+          { name: "Mobile", width: "375px", widthMedia: "480px" },
         ],
       },
     });
     editorRef.current = editor;
-    if (readOnly) editor.setDragMode('');
-    const html = design?.grapes
-      ? null
-      : designToGrapesComponents(design);
+    if (readOnly) editor.setDragMode("");
+    const html = design?.grapes ? null : designToGrapesComponents(design);
     if (design?.grapes) {
       skipRef.current = true;
       editor.loadProjectData(design.grapes);
       skipRef.current = false;
     } else {
-      editor.setComponents(html || '<div></div>');
+      editor.setComponents(html || "<div></div>");
     }
-    editor.on('update', emit);
+    editor.on("update", emit);
     return () => {
-      editor.off('update', emit);
+      editor.off("update", emit);
       editor.destroy();
       editorRef.current = null;
     };

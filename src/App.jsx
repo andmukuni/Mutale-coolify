@@ -80,6 +80,11 @@ const PartnerLogosPage = lazy(() => import('./pages/admin/PartnerLogosPage'));
 const MenuManagementPage = lazy(() => import('./pages/admin/MenuManagementPage'));
 const AccessControlPage = lazy(() => import('./pages/admin/AccessControlPage'));
 const NotificationTemplatesPage = lazy(() => import('./pages/admin/NotificationTemplatesPage'));
+const CampaignDashboardPage = lazy(() => import('./pages/admin/CampaignDashboardPage'));
+const CampaignReportPage = lazy(() => import('./pages/admin/CampaignReportPage'));
+const CampaignManagePage = lazy(() => import('./pages/admin/CampaignManagePage'));
+const CampaignInvitationPage = lazy(() => import('./pages/CampaignInvitationPage'));
+const CampaignSurveyPage = lazy(() => import('./pages/CampaignSurveyPage'));
 const CampaignsListPage = lazy(() => import('./pages/admin/CampaignsListPage'));
 const CampaignWizardPage = lazy(() => import('./pages/admin/CampaignWizardPage'));
 const EmailPreferencesPage = lazy(() => import('./pages/EmailPreferencesPage'));
@@ -176,6 +181,8 @@ export default function App() {
         <Route path="/shop/:slug" element={<BookDetailPage />} />
         <Route path="/pages/:slug" element={<CustomPage />} />
         <Route path="/certificates/verify/:code" element={<CertificateVerifyPage />} />
+        <Route path="/email/invitation" element={<CampaignInvitationPage />} />
+        <Route path="/email/surveys/:id" element={<CampaignSurveyPage />} />
         <Route path="/email/preferences" element={<EmailPreferencesPage />} />
         <Route path="/email/unsubscribe" element={<EmailUnsubscribePage />} />
         <Route path="/resources/:eventId/:resourceId" element={<EventResourcesPage />} />
@@ -272,6 +279,9 @@ export default function App() {
         <Route path="menu" element={<MenuManagementPage />} />
         <Route path="templates" element={<NotificationTemplatesPage />} />
         <Route path="campaigns" element={<CampaignsListPage />} />
+        <Route path="campaigns/dashboard" element={<CampaignDashboardPage />} />
+        <Route path="campaigns/manage/:section" element={<CampaignManagePage />} />
+        <Route path="campaigns/:id/report" element={<CampaignReportPage />} />
         <Route path="campaigns/:id" element={<CampaignWizardPage />} />
         <Route path="access-control" element={<AccessControlPage />} />
         <Route path="settings" element={<SettingsPage />} />

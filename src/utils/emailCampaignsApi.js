@@ -20,6 +20,8 @@ export function fetchCampaigns(params = {}) {
   const query = new URLSearchParams();
   if (params.eventId) query.set('event_id', params.eventId);
   if (params.state) query.set('state', params.state);
+  for (const key of ['tab','type','search']) if (params[key]) query.set(key,params[key]);
+  if (params.archived) query.set('archived','1');
   const suffix = query.toString() ? `?${query}` : '';
   return request(`/admin/campaigns${suffix}`);
 }

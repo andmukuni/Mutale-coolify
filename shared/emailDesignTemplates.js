@@ -74,6 +74,12 @@ export const EMAIL_DESIGN_TEMPLATE_SEED = [
   },
 ];
 
-export function blankCampaignDesign() {
-  return { version: 1, blocks: defaultBlocks() };
+export const CAMPAIGN_WORKSPACE_TEMPLATE_SEED = [
+  {slug:'newsletter',name:'General newsletter',campaign_type:'regular',purpose:'promotional',subject:'An update from Mutale Mubanga',preheader:'Growing People.',design:{version:2,blocks:[{id:'n-logo',type:'header'},{id:'n-title',type:'heading',text:'Growing People.'},{id:'n-body',type:'text',text:'Dear {{first_name}},\n\nHere is our latest news and an opportunity to stay connected.'},{id:'n-footer',type:'footer'}]}},
+  {slug:'event_invitation',name:'Event invitation',campaign_type:'event_invitation',purpose:'promotional',subject:'You are invited: {{event_title}}',preheader:'Let us know if you will attend.',design:{version:2,blocks:[{id:'i-logo',type:'header'},{id:'i-title',type:'heading',text:'You are invited to {{event_title}}'},{id:'i-body',type:'text',text:'Dear {{first_name}},\n\nWe would love to see you at our event. Please let us know if you will attend.'},{id:'i-event',type:'event_details'},{id:'i-response',type:'invitation_response'},{id:'i-footer',type:'footer'}]}},
+];
+
+export function blankCampaignDesign(type = 'event_notification') {
+  const template = CAMPAIGN_WORKSPACE_TEMPLATE_SEED.find(item=>item.campaign_type===type);
+  return template ? JSON.parse(JSON.stringify(template.design)) : { version: 1, blocks: defaultBlocks() };
 }

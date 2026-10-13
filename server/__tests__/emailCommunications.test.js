@@ -4,7 +4,7 @@ import os from 'os';
 import path from 'path';
 import { previewCampaignAudience } from '../emailAudienceService.js';
 import { evaluateRecipientEligibility, recordMarketingOptIn, recordSuppression, recordUnsubscribe } from '../emailConsentService.js';
-import { createCampaign, getCampaign } from '../emailCampaignService.js';
+import { createCampaign, getCampaign, transitionCampaign } from '../emailCampaignService.js';
 import {
   cancelCampaignJobs,
   claimNextOutboxJob,
@@ -33,6 +33,11 @@ function nowSql(date = new Date()) {
 
 function createMemoryPool() {
   const db = {
+    campaign_sender_identities: [{id:'sender-mutale',status:'verified'}],
+    campaign_send_requests: [],
+    event_invitees: [],
+    email_campaign_links: [],
+    email_campaign_link_events: [],
     events: [],
     event_registrations: [],
     email_campaigns: [],
@@ -73,7 +78,7 @@ function createMemoryPool() {
 
   function applyWhere(rows, whereSql, params) {
     let next = [...rows];
-    const where = String(whereSql || '').split(/ORDER BY|LIMIT/i)[0] || '';
+    const where = String(whereSql || '').split(/ORDER BY|LIMIT|FOR UPDATE/i)[0] || '';
     const parts = where.split(/AND/i).map((item) => item.trim()).filter(Boolean);
     let idx = 0;
     for (const part of parts) {
@@ -119,6 +124,7 @@ function createMemoryPool() {
 
   async function query(sql, params = []) {
     const text = String(sql).replace(/\s+/g, ' ').trim();
+    if (text.startsWith('SELECT j.id FROM email_outbox_jobs j JOIN email_campaigns')) return [db.email_outbox_jobs.filter(job=>job.status==='queued'&&db.email_campaigns.some(c=>c.id===job.campaign_id&&['sending','scheduled'].includes(c.state))&&new Date((job.scheduled_at_utc||job.scheduled_at)+'Z')<=new Date()).slice(0,1).map(job=>({id:job.id}))];
     const table = tableName(text);
     if (!table || !db[table]) return [[]];
 
@@ -134,7 +140,8 @@ function createMemoryPool() {
         else if (/^\d+$/.test(expr)) row[col] = Number(expr);
         else if (/DATE_ADD\(NOW\(\), INTERVAL \? DAY\)/i.test(expr)) {
           row[col] = nowSql(new Date(Date.now() + Number(params[p++] || 30) * 86400000));
-        } else if (/NOW\(\)/i.test(expr)) row[col] = nowSql();
+        } else if (/^NULL$/i.test(expr)) row[col]=null;
+        else if (/NOW\(\)|UTC_TIMESTAMP\(\)/i.test(expr)) row[col] = nowSql();
         else row[col] = params[p++];
       });
       const keyFn = uniques[table];
@@ -143,6 +150,7 @@ function createMemoryPool() {
         Object.assign(existing, row, { id: existing.id });
         return [{ affectedRows: 2 }];
       }
+      if(existing && /^INSERT IGNORE/.test(text)) return [{affectedRows:0}];
       if (existing) {
         const error = new Error('Duplicate');
         error.code = 'ER_DUP_ENTRY';
@@ -178,7 +186,7 @@ function createMemoryPool() {
       let p = 0;
       const setOps = assignments.map((assign) => {
         const col = assign.split('=')[0].trim();
-        if (assign.includes('tries = tries + 1')) return (row) => { row.tries = Number(row.tries || 0) + 1; };
+        if (/tries\s*=\s*tries\s*\+\s*1/.test(assign)) return (row) => { row.tries = Number(row.tries || 0) + 1; };
         if (/IF\(outcome/i.test(assign)) {
           return (row) => {
             if (row.outcome === 'accepted' || row.outcome === 'pending') row.outcome = 'delivered';
@@ -191,7 +199,7 @@ function createMemoryPool() {
           const minutes = Number(params[p++] || 1);
           return (row) => { row[col] = nowSql(new Date(Date.now() + minutes * 60000)); };
         }
-        if (/NOW\(\)/i.test(assign) && !assign.includes('?')) return (row) => { row[col] = nowSql(); };
+        if (/NOW\(\)|UTC_TIMESTAMP\(\)/i.test(assign) && !assign.includes('?')) return (row) => { row[col] = nowSql(); };
         if (assign.includes('?')) {
           const value = params[p++];
           return (row) => { row[col] = value; };
@@ -332,7 +340,10 @@ describe('consent and dispatch', () => {
     seedRegistration(pool);
     await recordMarketingOptIn(pool, 'ada@example.com');
     const created = await createCampaign(pool, { eventId: 'evt-1', name: 'Promo', purpose: 'promotional' });
+    // Legacy campaign fixture: exercise old snapshots under the new delivery state gate.
+    created.audience=null;pool.db.email_campaigns.find(c=>c.id===created.id).audience_spec_json=null;
     await enqueueCampaign(pool, created, { scheduledAt: new Date() });
+    await transitionCampaign(pool,created.id,'sending');
     await recordUnsubscribe(pool, 'ada@example.com');
     const job = await claimNextOutboxJob(pool);
     const result = await dispatchOutboxJob(pool, job, {
@@ -358,7 +369,10 @@ describe('consent and dispatch', () => {
     seedEvent(pool);
     seedRegistration(pool);
     const created = await createCampaign(pool, { eventId: 'evt-1', name: 'Update' });
+    // Legacy campaign fixture: exercise old snapshots under the new delivery state gate.
+    created.audience=null;pool.db.email_campaigns.find(c=>c.id===created.id).audience_spec_json=null;
     await enqueueCampaign(pool, created, { scheduledAt: new Date() });
+    await transitionCampaign(pool,created.id,'sending');
     const job = await claimNextOutboxJob(pool);
     const result = await processClaimedJob(pool, job, {
       config: { apiKey: 're_test', live: true },
@@ -373,7 +387,10 @@ describe('consent and dispatch', () => {
     seedEvent(pool);
     seedRegistration(pool);
     const created = await createCampaign(pool, { eventId: 'evt-1', name: 'Update' });
+    // Legacy campaign fixture: exercise old snapshots under the new delivery state gate.
+    created.audience=null;pool.db.email_campaigns.find(c=>c.id===created.id).audience_spec_json=null;
     await enqueueCampaign(pool, created, { scheduledAt: new Date() });
+    await transitionCampaign(pool,created.id,'sending');
     const first = await claimNextOutboxJob(pool);
     const second = await claimNextOutboxJob(pool);
     expect(first).toBeTruthy();
@@ -391,7 +408,7 @@ describe('webhooks', () => {
     });
     expect(() => verifyResendWebhook({
       rawBody: body,
-      headers: { 'svix-id': 'evt_1', 'svix-timestamp': '1', 'svix-signature': 'v1,forged' },
+      headers: { 'svix-id': 'evt_1', 'svix-timestamp': String(Math.floor(Date.now()/1000)), 'svix-signature': 'v1,forged' },
       secret,
     })).toThrow(/Invalid webhook/);
 
@@ -403,7 +420,7 @@ describe('webhooks', () => {
       outcome: 'accepted',
     });
 
-    const delivered = signWebhook(secret, 'svix-1', '100', body);
+    const delivered = signWebhook(secret, 'svix-1', String(Math.floor(Date.now()/1000)), body);
     const first = await ingestResendWebhook(pool, { rawBody: body, headers: delivered, secret });
     expect(first.duplicate).toBe(false);
     const second = await ingestResendWebhook(pool, { rawBody: body, headers: delivered, secret });
@@ -413,12 +430,12 @@ describe('webhooks', () => {
       type: 'email.bounced',
       data: { email_id: 'msg-1', bounce: { type: 'Permanent', message: '550' } },
     });
-    const bounceHeaders = signWebhook(secret, 'svix-2', '90', bounceBody);
+    const bounceHeaders = signWebhook(secret, 'svix-2', String(Math.floor(Date.now()/1000)-10), bounceBody);
     await ingestResendWebhook(pool, { rawBody: bounceBody, headers: bounceHeaders, secret });
     expect(pool.db.email_campaign_recipients[0].outcome).toBe('bounced');
     expect(pool.db.email_suppressions.some((row) => row.reason === 'hard_bounce')).toBe(true);
 
-    const lateDelivered = signWebhook(secret, 'svix-3', '110', body);
+    const lateDelivered = signWebhook(secret, 'svix-3', String(Math.floor(Date.now()/1000)+10), body);
     await ingestResendWebhook(pool, { rawBody: body, headers: lateDelivered, secret });
     expect(pool.db.email_campaign_recipients[0].outcome).toBe('bounced');
   });

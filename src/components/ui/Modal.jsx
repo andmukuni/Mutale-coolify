@@ -61,6 +61,7 @@ export default function Modal({
               )}
             </div>
             <button
+              type="button"
               onClick={onClose}
               className="p-1.5 rounded-lg hover:bg-navy-100 text-navy-400 hover:text-navy-700 transition-colors"
             >

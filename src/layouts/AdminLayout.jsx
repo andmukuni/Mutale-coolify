@@ -51,9 +51,15 @@ const CONTENT_NAVIGATION = [
       { key: 'all-events', name: 'All Events', to: '/admin/events', icon: CalendarDays },
       { key: 'create-event', name: 'Create Event', to: '/admin/events/new', icon: PlusCircle, end: true },
       { key: 'certificates', name: 'Certificates', to: '/admin/certificates', icon: Award },
-      { key: 'campaigns', name: 'Campaigns', to: '/admin/campaigns', icon: Megaphone },
     ],
   },
+  { key: 'campaigns-group', name: 'Campaigns', icon: Megaphone, children: [
+    { key: 'campaigns', name: 'Dashboard', to: '/admin/campaigns/dashboard', icon: LayoutDashboard, end: true },
+    { key: 'campaigns', name: 'Campaigns', to: '/admin/campaigns', icon: Megaphone, end: true },
+    { key: 'campaigns', name: 'Surveys', to: '/admin/campaigns/manage/surveys', icon: FileText, end: true },
+    { key: 'campaigns', name: 'Subscription Lists', to: '/admin/campaigns/manage/subscriptions', icon: Users, end: true },
+    { key: 'campaigns', name: 'Suppression Lists', to: '/admin/campaigns/manage/suppressions', icon: Shield, end: true },
+  ] },
   { key: 'coupons', name: 'Coupon Management', to: '/admin/coupons', icon: Percent },
   { key: 'attendance', name: 'Subscribers / Attendance', to: '/admin/events', icon: Users },
   {
@@ -232,7 +238,7 @@ function SidebarNavGroup({
           <div className="space-y-0.5 px-2">
             {item.children.map((subItem) => (
               <NavLink
-                key={subItem.key}
+                key={subItem.to}
                 to={subItem.to}
                 end={subItem.end}
                 role="menuitem"
@@ -282,7 +288,8 @@ function SidebarNavLink({ item, isItemActive, onNavigate }) {
 }
 
 const GROUP_ACTIVE_CHECKS = {
-  'events-group': (pathname) => pathname.startsWith('/admin/events') || pathname.startsWith('/admin/certificates') || pathname.startsWith('/admin/campaigns'),
+  'campaigns-group': pathname=>pathname.startsWith('/admin/campaigns'),
+  'events-group': (pathname) => pathname.startsWith('/admin/events') || pathname.startsWith('/admin/certificates'),
   'blog-group': (pathname) => pathname.startsWith('/admin/blog'),
   'publications-group': (pathname) => pathname.startsWith('/admin/publications'),
   'books-group': (pathname) => pathname.startsWith('/admin/books')

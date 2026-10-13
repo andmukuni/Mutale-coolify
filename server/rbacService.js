@@ -201,8 +201,9 @@ export function resolveRouteAdminPermission(req) {
     path.startsWith('/api/admin/campaigns')
     || (path.startsWith('/api/admin/events/') && (path.includes('/resources') || path.includes('/campaigns')))
   ) {
-    if (method === 'GET') return 'campaigns.view';
-    if (/\/(send|test|pause|resume|cancel)$/.test(path)) return 'campaigns.send';
+    if (path.startsWith('/api/admin/campaigns/senders') && method!=='GET') return 'settings.manage';
+    if (method === 'GET' || path.endsWith('/audience-preview')) return 'campaigns.view';
+    if (/\/(send|test|pause|resume|cancel|return-to-draft|reconcile)$/.test(path)) return 'campaigns.send';
     return 'campaigns.manage';
   }
 
