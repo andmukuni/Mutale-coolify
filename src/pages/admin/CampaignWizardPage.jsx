@@ -1,11 +1,48 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { PageHeader, Card, FormField, StatusBadge } from "../../components/ui";
+import {
+  ArrowLeft,
+  ArrowRight,
+  BarChart3,
+  Check,
+  Code,
+  Copy,
+  Lock,
+  CalendarClock,
+  LayoutTemplate,
+  PanelLeft,
+  PanelRight,
+  Pause,
+  Play,
+  RotateCcw,
+  Save,
+  Send,
+  SquareDashed,
+  XCircle,
+  AlertTriangle,
+  Mail,
+} from "lucide-react";
+import {
+  PageHeader,
+  Card,
+  FormField,
+  StatusBadge,
+  Modal,
+  LoadingButton,
+} from "../../components/ui";
 import { useToast } from "../../context/ToastContext";
 import { useAuth } from "../../context/AuthContext";
 import CampaignEmailEditor from "../../components/admin/campaigns/CampaignEmailEditor.jsx";
 import CampaignAudienceSelector from "../../components/admin/campaigns/CampaignAudienceSelector.jsx";
 import CampaignWorkspaceNav from "../../components/admin/campaigns/CampaignWorkspaceNav.jsx";
+import useCampaignConfirm from "../../components/admin/campaigns/useCampaignConfirm.jsx";
+import {
+  BTN_PRIMARY,
+  BTN_SECONDARY,
+  CHECKBOX,
+  INPUT,
+  SECTION_TITLE,
+} from "../../components/admin/campaigns/campaignStyles";
 import {
   CAMPAIGN_LAYOUTS,
   CAMPAIGN_TIMEZONES,
@@ -33,13 +70,19 @@ import {
   campaignAction,
 } from "../../utils/campaignWorkspaceApi";
 
-const input =
-  "w-full rounded-lg border border-navy-200 px-3 py-2 text-sm bg-white disabled:bg-navy-50";
+const layoutIcons = {
+  empty: SquareDashed,
+  left_sidebar: PanelLeft,
+  right_sidebar: PanelRight,
+  custom_html: Code,
+};
+
 export default function CampaignWizardPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
   const { hasPermission } = useAuth();
+  const [confirm, confirmDialog] = useCampaignConfirm();
   const [campaign, setCampaign] = useState(null),
     [form, setForm] = useState(null),
     [directory, setDirectory] = useState({ groups: [], senders: [] }),
@@ -52,6 +95,7 @@ export default function CampaignWizardPage() {
     [dirty, setDirty] = useState(false),
     [testEmail, setTestEmail] = useState(""),
     [dialog, setDialog] = useState(""),
+    [templateName, setTemplateName] = useState(null),
     [schedule, setSchedule] = useState({
       date: "",
       time: "09:00",
@@ -110,22 +154,38 @@ export default function CampaignWizardPage() {
     const navigation = (e) => {
       const anchor = e.target.closest?.("a[href]");
       if (
-        dirty &&
-        anchor &&
-        anchor.target !== "_blank" &&
-        anchor.href !== window.location.href &&
-        !window.confirm("Leave this campaign and discard unsaved changes?")
-      ) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
+        !dirty ||
+        !anchor ||
+        anchor.target === "_blank" ||
+        anchor.href === window.location.href ||
+        e.metaKey ||
+        e.ctrlKey ||
+        e.shiftKey
+      )
+        return;
+      e.preventDefault();
+      e.stopPropagation();
+      const target = new URL(anchor.href);
+      void confirm({
+        title: "Discard unsaved changes?",
+        message:
+          "You have unsaved changes to this campaign. Leave and discard them?",
+        confirmLabel: "Leave page",
+        variant: "danger",
+      }).then((leave) => {
+        if (!leave) return;
+        setDirty(false);
+        if (target.origin === window.location.origin)
+          navigate(`${target.pathname}${target.search}${target.hash}`);
+        else window.location.assign(target.href);
+      });
     };
     document.addEventListener("click", navigation, true);
     return () => {
       window.removeEventListener("beforeunload", handler);
       document.removeEventListener("click", navigation, true);
     };
-  }, [dirty]);
+  }, [dirty, confirm, navigate]);
   useEffect(() => {
     if (!form?.audience || step !== 0) return;
     let active = true;
@@ -272,65 +332,121 @@ export default function CampaignWizardPage() {
           : "Campaign queued for sending.",
       );
     });
+  const saveAsTemplate = (e) => {
+    e.preventDefault();
+    const name = templateName?.trim();
+    if (!name) return;
+    void run(async () => {
+      const saved = await save();
+      const result = await campaignRequest("/templates", {
+        method: "POST",
+        body: {
+          name,
+          campaign_type: campaign.campaign_type,
+          subject: saved.subject,
+          preheader: saved.preheader,
+          layout_key: form.layout_key,
+          design: saved.revision.design,
+        },
+      });
+      setTemplates((await fetchCampaignTemplates()).data);
+      set("template_id", result.id);
+      setTemplateName(null);
+      toast.success("Template saved.");
+    });
+  };
   if (!campaign || !form)
-    return <p className="p-6 text-sm">Loading campaign…</p>;
+    return (
+      <div className="space-y-6">
+        <div className="h-8 w-64 bg-navy-100 rounded-lg animate-pulse" />
+        <div className="h-14 bg-navy-100/70 rounded-2xl animate-pulse" />
+        <div className="h-80 bg-navy-100/50 rounded-2xl animate-pulse" />
+      </div>
+    );
   const type = campaign.campaign_type;
   const isReview = step === steps.length - 1;
+  const canSend =
+    !busy &&
+    hasPermission("campaigns.send") &&
+    review?.provider?.ready &&
+    audience?.included_count > 0 &&
+    campaign.state === "draft";
   return (
-    <div>
-      <CampaignWorkspaceNav />
-      <PageHeader
-        title={campaign.name}
-        subtitle={`${type === "regular" ? "Regular Campaign" : type === "event_invitation" ? "Event Invitation" : "Event Notification"}${campaign.event_title ? ` · ${campaign.event_title}` : ""}`}
-        breadcrumbs={[
-          { label: "Campaigns", to: "/admin/campaigns" },
-          { label: campaign.name },
-        ]}
-        actions={
-          <div className="flex gap-3 items-center">
-            <StatusBadge status={campaign.state} />
-            <Link
-              to={`/admin/campaigns/${id}/report`}
-              className="text-sm text-blue-600"
-            >
-              Report
-            </Link>
-          </div>
-        }
-      />
+    <div className="space-y-6">
+      <div>
+        <PageHeader
+          title={campaign.name}
+          subtitle={`${type === "regular" ? "Regular Campaign" : type === "event_invitation" ? "Event Invitation" : "Event Notification"}${campaign.event_title ? ` · ${campaign.event_title}` : ""}`}
+          breadcrumbs={[
+            { label: "Admin", to: "/admin" },
+            { label: "Campaigns", to: "/admin/campaigns" },
+            { label: campaign.name },
+          ]}
+          actions={
+            <>
+              <StatusBadge status={campaign.state} size="md" />
+              <Link
+                to={`/admin/campaigns/${id}/report`}
+                className={BTN_SECONDARY}
+              >
+                <BarChart3 size={15} />
+                Report
+              </Link>
+            </>
+          }
+        />
+        <CampaignWorkspaceNav />
+      </div>
       {campaign.state !== "draft" && (
-        <Card className="mb-4">
-          <p className="text-sm mb-3">
-            {campaign.state === "scheduled"
-              ? `Scheduled for ${campaign.schedule_wall_time || campaign.scheduled_at_utc} (${campaign.timezone || "UTC"}). Recipients will be checked when the campaign is due.`
-              : "This campaign is locked for delivery. Duplicate it to create an editable campaign."}
-          </p>
-          <div className="flex flex-wrap gap-3 text-sm">
+        <div className="flex flex-col md:flex-row md:items-center gap-4 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">
+          <div className="flex items-start gap-3 flex-1">
+            <div className="p-2 rounded-xl bg-white/70 text-amber-700 shrink-0">
+              {campaign.state === "scheduled" ? (
+                <CalendarClock size={18} />
+              ) : (
+                <Lock size={18} />
+              )}
+            </div>
+            <p className="text-sm text-amber-900 pt-1">
+              {campaign.state === "scheduled"
+                ? `Scheduled for ${campaign.schedule_wall_time || campaign.scheduled_at_utc} (${campaign.timezone || "UTC"}). Recipients will be checked when the campaign is due.`
+                : "This campaign is locked for delivery. Duplicate it to create an editable campaign."}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
             {hasPermission("campaigns.send") && (
               <>
                 {["sending", "scheduled"].includes(campaign.state) && (
                   <button
+                    type="button"
+                    className={BTN_SECONDARY}
                     disabled={busy}
                     onClick={() =>
                       run(async () => {
                         await pauseCampaign(id);
                         await load();
+                        toast.success("Campaign paused.");
                       })
                     }
                   >
+                    <Pause size={15} />
                     Pause
                   </button>
                 )}
                 {campaign.state === "paused" && (
                   <button
+                    type="button"
+                    className={BTN_SECONDARY}
                     disabled={busy}
                     onClick={() =>
                       run(async () => {
                         await resumeCampaign(id);
                         await load();
+                        toast.success("Campaign resumed.");
                       })
                     }
                   >
+                    <Play size={15} />
                     Resume
                   </button>
                 )}
@@ -338,24 +454,35 @@ export default function CampaignWizardPage() {
                   campaign.state,
                 ) && (
                   <button
+                    type="button"
+                    className={`${BTN_SECONDARY} text-red-600`}
                     disabled={busy}
-                    onClick={() => {
+                    onClick={async () => {
                       if (
-                        window.confirm(
-                          "Cancel all messages that have not been sent?",
-                        )
+                        await confirm({
+                          title: "Cancel delivery",
+                          message:
+                            "Cancel all messages that have not been sent yet? Messages already delivered are not affected.",
+                          confirmLabel: "Cancel delivery",
+                          cancelLabel: "Keep sending",
+                          variant: "danger",
+                        })
                       )
                         void run(async () => {
                           await cancelCampaign(id);
                           await load();
+                          toast.success("Delivery cancelled.");
                         });
                     }}
                   >
+                    <XCircle size={15} />
                     Cancel delivery
                   </button>
                 )}
                 {campaign.state === "cancelled" && (
                   <button
+                    type="button"
+                    className={BTN_SECONDARY}
                     disabled={busy}
                     onClick={() =>
                       run(async () => {
@@ -364,12 +491,16 @@ export default function CampaignWizardPage() {
                       })
                     }
                   >
+                    <RotateCcw size={15} />
                     Return to draft
                   </button>
                 )}
               </>
             )}
             <button
+              type="button"
+              className={BTN_SECONDARY}
+              disabled={busy}
               onClick={() =>
                 run(async () => {
                   const copy = await duplicateCampaign(id);
@@ -377,26 +508,47 @@ export default function CampaignWizardPage() {
                 })
               }
             >
+              <Copy size={15} />
               Duplicate
             </button>
           </div>
-        </Card>
+        </div>
       )}
       <nav
         aria-label="Campaign steps"
-        className="flex overflow-x-auto border border-navy-200 mb-6 bg-white rounded-lg"
+        className="app-card bg-white rounded-2xl border border-navy-100 shadow-sm p-2 flex overflow-x-auto gap-1"
       >
-        {steps.map((label, index) => (
-          <button
-            key={label}
-            onClick={() => next(index)}
-            disabled={busy}
-            className={`flex-1 min-w-max px-4 py-4 text-sm border-r last:border-r-0 ${step === index ? "bg-blue-600 text-white font-semibold" : "text-navy-500"}`}
-          >
-            <span className="mr-2">{index + 1}.</span>
-            {label}
-          </button>
-        ))}
+        {steps.map((label, index) => {
+          const active = step === index;
+          const done = index < step;
+          return (
+            <button
+              type="button"
+              key={label}
+              onClick={() => next(index)}
+              disabled={busy}
+              aria-current={active ? "step" : undefined}
+              className={`flex-1 min-w-max inline-flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors disabled:cursor-wait ${
+                active
+                  ? "bg-cyan-600 text-white"
+                  : "text-navy-600 hover:bg-navy-50"
+              }`}
+            >
+              <span
+                className={`grid place-items-center h-6 w-6 rounded-full text-xs font-semibold ${
+                  active
+                    ? "bg-white/20 text-white"
+                    : done
+                      ? "bg-cyan-50 text-cyan-700"
+                      : "bg-navy-100 text-navy-500"
+                }`}
+              >
+                {done ? <Check size={13} /> : index + 1}
+              </span>
+              {label}
+            </button>
+          );
+        })}
       </nav>
       {steps[step] === "Recipients" && (
         <Card>
@@ -427,396 +579,437 @@ export default function CampaignWizardPage() {
         </Card>
       )}
       {steps[step] === "Settings" && (
-        <Card>
-          <div className="max-w-3xl space-y-8">
-            <section>
-              <h2 className="font-semibold text-lg mb-4">
-                Campaign Name & Language
-              </h2>
-              <div className="grid sm:grid-cols-2 gap-4">
-                <FormField label="Internal Campaign Name *">
-                  <input
-                    aria-label="Internal Campaign Name"
-                    className={input}
-                    value={form.name}
-                    disabled={locked}
-                    onChange={(e) => set("name", e.target.value)}
-                    maxLength={180}
-                  />
-                  <p className="text-xs text-navy-400 mt-1">
-                    Internal use only. Not visible to your recipients.
-                  </p>
-                </FormField>
-                <FormField label="Email Language *">
-                  <select
-                    className={input}
-                    value={form.language}
-                    disabled={locked}
-                    onChange={(e) => set("language", e.target.value)}
-                  >
-                    <option value="English">English</option>
-                  </select>
-                </FormField>
-              </div>
-            </section>
-            <section>
-              <h2 className="font-semibold text-lg mb-4">Subject Line</h2>
-              <div className="space-y-4">
-                <FormField label="Subject Line *">
-                  <input
-                    className={input}
-                    value={form.subject}
-                    onChange={(e) => set("subject", e.target.value)}
-                    disabled={locked}
-                    maxLength={250}
-                  />
-                </FormField>
-                <FormField label="Preview text">
-                  <input
-                    aria-label="Preview text"
-                    className={input}
-                    value={form.preheader}
-                    onChange={(e) => set("preheader", e.target.value)}
-                    disabled={locked}
-                    maxLength={250}
-                  />
-                  <p className="text-xs text-navy-400 mt-1">
-                    Shown beside the subject in your recipients’ inbox.
-                  </p>
-                </FormField>
-              </div>
-            </section>
-            <section>
-              <h2 className="font-semibold text-lg mb-4">
-                Sender & Reply-to Emails
-              </h2>
-              <div className="grid sm:grid-cols-2 gap-4">
-                <FormField label="Sender *">
-                  <select
-                    aria-label="Sender"
-                    className={input}
-                    value={form.sender_identity_id}
-                    onChange={(e) => set("sender_identity_id", e.target.value)}
-                    disabled={locked}
-                  >
-                    {directory.senders.map((sender) => (
-                      <option key={sender.id} value={sender.id}>
-                        {sender.name} &lt;{sender.email}&gt; · {sender.status}
-                      </option>
-                    ))}
-                  </select>
-                  <Link
-                    to="/admin/campaigns/manage/senders"
-                    className="text-blue-600 text-xs mt-2 inline-block"
-                  >
-                    Edit senders in Email Settings
-                  </Link>
-                </FormField>
-                <FormField label="Reply-to Email *">
-                  <input
-                    type="email"
-                    className={input}
-                    value={form.reply_to}
-                    onChange={(e) => set("reply_to", e.target.value)}
-                    disabled={locked}
-                  />
-                </FormField>
-              </div>
-            </section>
-            <section>
-              <h2 className="font-semibold text-lg mb-4">CC Emails</h2>
-              <FormField label="CC Email list">
-                <textarea
-                  className={input}
-                  value={form.cc}
-                  onChange={(e) => set("cc", e.target.value)}
+        <div className="grid gap-6 max-w-4xl">
+          <Card
+            title="Campaign name & language"
+            subtitle="How this campaign is identified internally."
+          >
+            <div className="grid sm:grid-cols-2 gap-4">
+              <FormField
+                label="Internal campaign name"
+                required
+                helpText="Internal use only. Not visible to your recipients."
+              >
+                <input
+                  className={INPUT}
+                  value={form.name}
                   disabled={locked}
-                  placeholder="Separate email addresses with commas"
+                  onChange={(e) => set("name", e.target.value)}
+                  maxLength={180}
                 />
               </FormField>
-              <label className="flex gap-2 text-sm mt-4">
+              <FormField label="Email language" required>
+                <select
+                  className={INPUT}
+                  value={form.language}
+                  disabled={locked}
+                  onChange={(e) => set("language", e.target.value)}
+                >
+                  <option value="English">English</option>
+                </select>
+              </FormField>
+            </div>
+          </Card>
+          <Card
+            title="Subject line"
+            subtitle="What recipients see first in their inbox."
+          >
+            <div className="space-y-4">
+              <FormField label="Subject line" required>
                 <input
-                  type="checkbox"
-                  checked={form.cc_assistant}
-                  onChange={(e) => set("cc_assistant", e.target.checked)}
+                  className={INPUT}
+                  value={form.subject}
+                  onChange={(e) => set("subject", e.target.value)}
+                  disabled={locked}
+                  maxLength={250}
+                />
+              </FormField>
+              <FormField
+                label="Preview text"
+                helpText="Shown beside the subject in your recipients’ inbox."
+              >
+                <input
+                  className={INPUT}
+                  value={form.preheader}
+                  onChange={(e) => set("preheader", e.target.value)}
+                  disabled={locked}
+                  maxLength={250}
+                />
+              </FormField>
+            </div>
+          </Card>
+          <Card
+            title="Sender & reply-to"
+            actions={
+              <Link
+                to="/admin/campaigns/manage/senders"
+                className="text-xs font-medium text-cyan-700 hover:text-cyan-600"
+              >
+                Manage senders
+              </Link>
+            }
+          >
+            <div className="grid sm:grid-cols-2 gap-4">
+              <FormField label="Sender" required>
+                <select
+                  className={INPUT}
+                  value={form.sender_identity_id}
+                  onChange={(e) => set("sender_identity_id", e.target.value)}
+                  disabled={locked}
+                >
+                  {directory.senders.map((sender) => (
+                    <option key={sender.id} value={sender.id}>
+                      {sender.name} &lt;{sender.email}&gt; · {sender.status}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+              <FormField label="Reply-to email" required>
+                <input
+                  type="email"
+                  className={INPUT}
+                  value={form.reply_to}
+                  onChange={(e) => set("reply_to", e.target.value)}
                   disabled={locked}
                 />
-                CC to Assistant for each Recipient
-              </label>
-              <p className="text-xs text-navy-400 mt-2">
-                CC addresses receive a copy of each recipient’s personalized
-                email.
-              </p>
-            </section>
-          </div>
-        </Card>
+              </FormField>
+            </div>
+          </Card>
+          <Card
+            title="CC emails"
+            subtitle="CC addresses receive a copy of each recipient’s personalized email."
+          >
+            <FormField label="CC email list">
+              <textarea
+                className={`${INPUT} min-h-[6.5rem] resize-y`}
+                value={form.cc}
+                onChange={(e) => set("cc", e.target.value)}
+                disabled={locked}
+                placeholder="Separate email addresses with commas"
+              />
+            </FormField>
+            <label className="flex items-center gap-2 text-sm text-navy-700 mt-4">
+              <input
+                type="checkbox"
+                className={CHECKBOX}
+                checked={form.cc_assistant}
+                onChange={(e) => set("cc_assistant", e.target.checked)}
+                disabled={locked}
+              />
+              CC to assistant for each recipient
+            </label>
+          </Card>
+        </div>
       )}
       {steps[step] === "Template" && (
-        <Card>
-          <h2 className="font-semibold text-lg mb-4">Select a Template</h2>
+        <Card
+          title="Select a template"
+          subtitle="Start from a saved design, or pick a blank layout below."
+        >
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {templates
               .filter((t) => t.campaign_type === "regular" || !t.campaign_type)
-              .map((t) => (
-                <button
-                  key={t.id}
-                  className={`border rounded-lg text-left p-5 hover:border-blue-600 ${form.template_id === t.id ? "border-blue-600 ring-1 ring-blue-600" : ""}`}
-                  disabled={locked}
-                  onClick={() => {
-                    if (
-                      !dirty ||
-                      window.confirm(
-                        "Replace the current design with this template?",
+              .map((t) => {
+                const selected = form.template_id === t.id;
+                return (
+                  <button
+                    type="button"
+                    key={t.id}
+                    className={`text-left rounded-2xl border p-4 transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
+                      selected
+                        ? "border-cyan-500 ring-2 ring-cyan-500/20"
+                        : "border-navy-100 hover:border-navy-200 hover:bg-navy-50/50"
+                    }`}
+                    disabled={locked}
+                    onClick={async () => {
+                      if (
+                        !dirty ||
+                        (await confirm({
+                          title: "Replace design",
+                          message:
+                            "Replace the current design with this template?",
+                          confirmLabel: "Replace design",
+                        }))
                       )
+                        applyTemplate(t);
+                    }}
+                  >
+                    <div className="h-24 rounded-xl bg-navy-50 flex items-center justify-center mb-3 text-navy-300">
+                      <LayoutTemplate size={32} />
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-sm text-navy-900">
+                        {t.name}
+                      </span>
+                      {selected && (
+                        <Check size={16} className="text-cyan-600 shrink-0" />
+                      )}
+                    </div>
+                    <p className="text-xs text-navy-500 mt-1">
+                      {t.description || "Reusable email design"}
+                    </p>
+                  </button>
+                );
+              })}
+          </div>
+          <h3 className={`${SECTION_TITLE} mt-8 mb-4`}>Or start from a layout</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {CAMPAIGN_LAYOUTS.map((layout) => {
+              const Icon = layoutIcons[layout.id] || SquareDashed;
+              const selected =
+                form.layout_key === layout.id && !form.template_id;
+              return (
+                <button
+                  type="button"
+                  key={layout.id}
+                  onClick={async () => {
+                    if (
+                      await confirm({
+                        title: "Start a new design",
+                        message: `Start a new design using the “${layout.name}” layout? The current design will be replaced.`,
+                        confirmLabel: "Start new design",
+                      })
                     )
-                      applyTemplate(t);
+                      chooseLayout(layout.id);
                   }}
+                  disabled={locked}
+                  className={`rounded-2xl border p-4 text-left transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
+                    selected
+                      ? "border-cyan-500 ring-2 ring-cyan-500/20"
+                      : "border-navy-100 hover:border-navy-200 hover:bg-navy-50/50"
+                  }`}
                 >
-                  <div className="h-24 bg-navy-50 flex items-center justify-center mb-3 text-3xl">
-                    ✉
-                  </div>
-                  <strong>{t.name}</strong>
-                  <p className="text-xs text-navy-500 mt-2">
-                    {t.description || "Reusable email design"}
+                  <Icon
+                    size={22}
+                    className={selected ? "text-cyan-600" : "text-navy-400"}
+                  />
+                  <p className="text-sm font-medium text-navy-900 mt-2">
+                    {layout.name}
+                  </p>
+                  <p className="text-xs text-navy-500 mt-0.5">
+                    {layout.description}
                   </p>
                 </button>
-              ))}
-          </div>
-          <h2 className="font-semibold text-lg mt-8 mb-4">Select a Layout</h2>
-          <div className="grid sm:grid-cols-4 gap-3">
-            {CAMPAIGN_LAYOUTS.map((layout) => (
-              <button
-                key={layout.id}
-                onClick={() => {
-                  if (window.confirm("Start a new design using this layout?"))
-                    chooseLayout(layout.id);
-                }}
-                disabled={locked}
-                className={`border rounded-lg p-4 text-sm ${form.layout_key === layout.id && !form.template_id ? "border-blue-600 text-blue-600" : ""}`}
-              >
-                {layout.name}
-              </button>
-            ))}
+              );
+            })}
           </div>
         </Card>
       )}
-      {steps[step] === "Content & Design" && type !== "regular" && (
-        <div className="mb-5 max-w-md">
-          <label
-            className="text-sm block mb-2"
-            htmlFor="campaign-event-template"
-          >
-            Select a template
-          </label>
-          <select
-            id="campaign-event-template"
-            disabled={locked}
-            className={input}
-            value={form.template_id}
-            onChange={(e) => {
-              const template = templates.find(
-                (row) => row.id === e.target.value,
-              );
-              if (!template) {
-                set("template_id", "");
-                return;
-              }
-              if (
-                window.confirm(
-                  "Replace this design with the selected template?",
-                )
-              )
-                applyTemplate(template);
-            }}
-          >
-            <option value="">Current design</option>
-            {templates
-              .filter((row) => row.campaign_type === type)
-              .map((row) => (
-                <option value={row.id} key={row.id}>
-                  {row.name}
-                </option>
-              ))}
-          </select>
-        </div>
-      )}
       {steps[step] === "Content & Design" && (
-        <CampaignEmailEditor
-          design={form.design}
-          onChange={(value) => set("design", value)}
-          readOnly={locked}
-          subject={form.subject}
-          preheader={form.preheader}
-          campaignType={type}
-          previewVars={preview?.vars || {}}
-          surveys={directory.surveys || []}
-          resources={directory.resources || []}
-          events={directory.events || []}
-        />
+        <Card>
+          {type !== "regular" && (
+            <div className="mb-5 max-w-md">
+              <FormField label="Start from a template">
+                <select
+                  disabled={locked}
+                  className={INPUT}
+                  value={form.template_id}
+                  onChange={async (e) => {
+                    const template = templates.find(
+                      (row) => row.id === e.target.value,
+                    );
+                    if (!template) {
+                      set("template_id", "");
+                      return;
+                    }
+                    if (
+                      await confirm({
+                        title: "Replace design",
+                        message:
+                          "Replace this design with the selected template?",
+                        confirmLabel: "Replace design",
+                      })
+                    )
+                      applyTemplate(template);
+                  }}
+                >
+                  <option value="">Current design</option>
+                  {templates
+                    .filter((row) => row.campaign_type === type)
+                    .map((row) => (
+                      <option value={row.id} key={row.id}>
+                        {row.name}
+                      </option>
+                    ))}
+                </select>
+              </FormField>
+            </div>
+          )}
+          <CampaignEmailEditor
+            design={form.design}
+            onChange={(value) => set("design", value)}
+            readOnly={locked}
+            subject={form.subject}
+            preheader={form.preheader}
+            campaignType={type}
+            previewVars={preview?.vars || {}}
+            surveys={directory.surveys || []}
+            resources={directory.resources || []}
+            events={directory.events || []}
+          />
+        </Card>
       )}
       {isReview && (
-        <div className="grid lg:grid-cols-[1fr_360px] gap-6">
-          <Card>
-            <h2 className="font-semibold text-lg mb-5">Review & Send</h2>
-            <div className="divide-y">
-              {[
-                ["Subject Line", form.subject],
-                [
-                  "Recipients",
-                  `${audience?.included_count ?? 0} Unique Recipients`,
-                ],
-                ["Email Language", "English"],
-                ["Sender", `${campaign.from_name} <${campaign.from_email}>`],
-                ["Internal Campaign Name", form.name],
-                ["Preview text", form.preheader || "Not set"],
-                ["Reply-to Email", form.reply_to],
-                [
-                  "Template",
-                  templates.find((t) => t.id === form.template_id)?.name ||
-                    CAMPAIGN_LAYOUTS.find((l) => l.id === form.layout_key)
-                      ?.name ||
-                    "Custom design",
-                ],
-              ].map(([label, value]) => (
-                <div
-                  key={label}
-                  className="flex justify-between gap-4 py-4 text-sm"
-                >
-                  <span className="text-navy-500">{label}</span>
-                  <strong className="text-right break-all">
-                    {value || "Required"}
-                  </strong>
+        <div className="grid lg:grid-cols-[1fr_380px] gap-6">
+          <div className="space-y-6">
+            <Card title="Review & send" subtitle="Check the details before delivery.">
+              <dl className="divide-y divide-navy-100 -my-2">
+                {[
+                  ["Subject line", form.subject],
+                  [
+                    "Recipients",
+                    `${audience?.included_count ?? 0} unique recipients`,
+                  ],
+                  ["Email language", "English"],
+                  ["Sender", `${campaign.from_name} <${campaign.from_email}>`],
+                  ["Internal campaign name", form.name],
+                  ["Preview text", form.preheader || "Not set"],
+                  ["Reply-to email", form.reply_to],
+                  [
+                    "Template",
+                    templates.find((t) => t.id === form.template_id)?.name ||
+                      CAMPAIGN_LAYOUTS.find((l) => l.id === form.layout_key)
+                        ?.name ||
+                      "Custom design",
+                  ],
+                ].map(([label, value]) => (
+                  <div
+                    key={label}
+                    className="flex justify-between gap-4 py-3 text-sm"
+                  >
+                    <dt className="text-navy-500">{label}</dt>
+                    <dd
+                      className={`text-right break-all font-medium ${value ? "text-navy-900" : "text-red-600"}`}
+                    >
+                      {value || "Required"}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              {review?.provider?.errors?.length > 0 && (
+                <div className="mt-5 flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                  <AlertTriangle size={18} className="shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-semibold mb-2">
+                      Complete these items before sending
+                    </p>
+                    <ul className="list-disc pl-5 space-y-1">
+                      {review.provider.errors.map((issue) => (
+                        <li
+                          key={typeof issue === "string" ? issue : issue.code}
+                        >
+                          {typeof issue === "string" ? issue : issue.message}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 </div>
-              ))}
-            </div>
-            {review?.provider?.errors?.length > 0 && (
-              <div className="mt-5 border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                <p className="font-semibold mb-2">
-                  Complete these items before sending
-                </p>
-                <ul className="list-disc pl-5 space-y-1">
-                  {review.provider.errors.map((issue) => (
-                    <li key={typeof issue === "string" ? issue : issue.code}>
-                      {typeof issue === "string" ? issue : issue.message}
-                    </li>
-                  ))}
-                </ul>
+              )}
+              <div className="mt-6 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  className={BTN_PRIMARY}
+                  disabled={!canSend}
+                  onClick={() => setDialog("send")}
+                >
+                  <Send size={15} />
+                  Send now
+                </button>
+                <button
+                  type="button"
+                  className={BTN_SECONDARY}
+                  disabled={!canSend}
+                  onClick={() => setDialog("schedule")}
+                >
+                  <CalendarClock size={15} />
+                  Schedule
+                </button>
               </div>
-            )}
-            <div className="mt-6 flex gap-3">
-              <button
-                className="bg-blue-600 text-white rounded-lg px-6 py-2 disabled:opacity-50"
-                disabled={
-                  busy ||
-                  !hasPermission("campaigns.send") ||
-                  !review?.provider?.ready ||
-                  !audience?.included_count ||
-                  campaign.state !== "draft"
-                }
-                onClick={() => setDialog("send")}
-              >
-                Send
-              </button>
-              <button
-                className="border border-blue-600 text-blue-600 rounded-lg px-6 py-2 disabled:opacity-50"
-                disabled={
-                  busy ||
-                  !hasPermission("campaigns.send") ||
-                  !review?.provider?.ready ||
-                  !audience?.included_count ||
-                  campaign.state !== "draft"
-                }
-                onClick={() => setDialog("schedule")}
-              >
-                Schedule
-              </button>
-            </div>
-            <h3 className="font-semibold mt-8 mb-3">Send a Test Email</h3>
-            <div className="flex gap-2">
-              <input
-                className={input}
-                type="email"
-                placeholder="Email address"
-                value={testEmail}
-                onChange={(e) => setTestEmail(e.target.value)}
-              />
-              <button
-                className="border rounded-lg px-4 shrink-0 disabled:opacity-50"
-                disabled={
-                  busy || !hasPermission("campaigns.send") || !testEmail
-                }
-                onClick={() =>
-                  run(async () => {
+            </Card>
+            <Card
+              title="Send a test email"
+              subtitle="Send this design to yourself before going live."
+            >
+              <form
+                className="flex flex-col sm:flex-row gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void run(async () => {
                     await sendCampaignTest(id, testEmail);
                     toast.success("Test email accepted for delivery.");
-                  })
-                }
+                  });
+                }}
               >
-                Send test
-              </button>
-            </div>
-          </Card>
-          <Card>
-            <h3 className="font-semibold mb-4">Email Preview</h3>
-            {preview?.html && (
+                <input
+                  className={INPUT}
+                  type="email"
+                  aria-label="Test email address"
+                  placeholder="Email address"
+                  value={testEmail}
+                  onChange={(e) => setTestEmail(e.target.value)}
+                />
+                <button
+                  type="submit"
+                  className={`${BTN_SECONDARY} shrink-0`}
+                  disabled={
+                    busy || !hasPermission("campaigns.send") || !testEmail
+                  }
+                >
+                  <Mail size={15} />
+                  Send test
+                </button>
+              </form>
+            </Card>
+          </div>
+          <Card title="Email preview" className="self-start">
+            {preview?.html ? (
               <iframe
                 title="Campaign preview"
                 sandbox=""
                 srcDoc={preview.html}
-                className="w-full h-[650px] border"
+                className="w-full h-[650px] bg-white rounded-xl border border-navy-100"
               />
+            ) : (
+              <p className="text-sm text-navy-500">Preview unavailable.</p>
             )}
           </Card>
         </div>
       )}
-      <div className="flex justify-between items-center gap-3 mt-6">
+      <div className="flex flex-wrap justify-between items-center gap-3">
         <button
-          className="border rounded-lg px-4 py-2 text-sm"
+          type="button"
+          className={BTN_SECONDARY}
           onClick={() => next(Math.max(0, step - 1))}
           disabled={step === 0 || busy}
         >
+          <ArrowLeft size={15} />
           Back
         </button>
-        <div className="flex gap-3 items-center">
+        <div className="flex flex-wrap gap-3 items-center">
           {dirty && (
-            <span className="text-xs text-amber-700">Unsaved changes</span>
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+              Unsaved changes
+            </span>
           )}
           {steps[step] === "Content & Design" && !locked && (
             <button
               type="button"
-              className="text-sm text-blue-600"
+              className={BTN_SECONDARY}
               disabled={busy}
-              onClick={() => {
-                const name = window.prompt(
-                  "Name this reusable template",
-                  form.name,
-                );
-                if (name?.trim())
-                  void run(async () => {
-                    const saved = await save();
-                    const result = await campaignRequest("/templates", {
-                      method: "POST",
-                      body: {
-                        name: name.trim(),
-                        campaign_type: type,
-                        subject: saved.subject,
-                        preheader: saved.preheader,
-                        layout_key: form.layout_key,
-                        design: saved.revision.design,
-                      },
-                    });
-                    setTemplates((await fetchCampaignTemplates()).data);
-                    set("template_id", result.id);
-                    toast.success("Template saved.");
-                  });
-              }}
+              onClick={() => setTemplateName(form.name)}
             >
-              Save as Template
+              <LayoutTemplate size={15} />
+              Save as template
             </button>
           )}
-          <button
-            className="border rounded-lg px-4 py-2 text-sm disabled:opacity-50"
-            disabled={busy || locked || !dirty}
+          <LoadingButton
+            className={BTN_SECONDARY}
+            disabled={locked || !dirty}
+            loading={busy && dirty}
+            loadingLabel="Saving…"
+            icon={Save}
+            iconSize={15}
             onClick={() =>
               run(async () => {
                 await save();
@@ -824,120 +1017,165 @@ export default function CampaignWizardPage() {
               })
             }
           >
-            {busy ? "Saving…" : "Save"}
-          </button>
+            Save
+          </LoadingButton>
           {!isReview && (
             <button
-              className="bg-blue-600 text-white rounded-lg px-5 py-2 text-sm"
+              type="button"
+              className={BTN_PRIMARY}
               disabled={busy}
               onClick={() => next(step + 1)}
             >
               Next
+              <ArrowRight size={15} />
             </button>
           )}
         </div>
       </div>
-      {dialog && (
-        <div
-          className="fixed inset-0 z-50 bg-black/40 grid place-items-center p-4"
-          role="presentation"
-        >
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="send-title"
-            className="bg-white rounded-xl p-6 max-w-lg w-full shadow-xl"
-          >
-            <h2 id="send-title" className="text-xl font-semibold mb-4">
-              {dialog === "schedule" ? "Schedule" : "Send Campaign"}
-            </h2>
-            <p className="text-sm text-navy-600 mb-5">
-              {dialog === "schedule"
-                ? "Recipients are determined when delivery begins."
-                : `Send “${form.subject}” to ${audience?.included_count} unique recipients now?`}
-            </p>
-            {dialog === "schedule" && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <FormField label="Date">
-                    <input
-                      type="date"
-                      className={input}
-                      value={schedule.date}
-                      onChange={(e) =>
-                        setSchedule((s) => ({ ...s, date: e.target.value }))
-                      }
-                    />
-                  </FormField>
-                  <FormField label="Time">
-                    <input
-                      type="time"
-                      className={input}
-                      value={schedule.time}
-                      onChange={(e) =>
-                        setSchedule((s) => ({ ...s, time: e.target.value }))
-                      }
-                    />
-                  </FormField>
-                </div>
-                <FormField label="Timezone">
-                  <select
-                    className={input}
-                    value={schedule.timezone}
-                    onChange={(e) =>
-                      setSchedule((s) => ({ ...s, timezone: e.target.value }))
-                    }
-                  >
-                    {CAMPAIGN_TIMEZONES.map((zone) => (
-                      <option key={zone}>{zone}</option>
-                    ))}
-                  </select>
-                </FormField>
-                <label className="flex gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    disabled={!directory.push_configured}
-                    checked={schedule.push_enabled}
-                    onChange={(e) =>
-                      setSchedule((s) => ({
-                        ...s,
-                        push_enabled: e.target.checked,
-                      }))
-                    }
-                  />
-                  Send a push notification to registered mobile devices
-                </label>
-                {!directory.push_configured && (
-                  <p className="text-xs text-navy-500">
-                    Mobile push is available after the organization’s mobile
-                    service is connected.
-                  </p>
-                )}
-              </div>
-            )}
-            <div className="flex justify-end gap-3 mt-6">
-              <button
-                disabled={busy}
-                onClick={() => setDialog("")}
-                className="border rounded-lg px-5 py-2"
-              >
-                Cancel
-              </button>
-              <button
-                disabled={busy || (dialog === "schedule" && !schedule.date)}
-                onClick={executeSend}
-                className="bg-blue-600 text-white rounded-lg px-5 py-2 disabled:opacity-50"
-              >
-                {busy
-                  ? "Submitting…"
-                  : dialog === "schedule"
-                    ? "Schedule"
-                    : "Send"}
-              </button>
+      <Modal
+        isOpen={Boolean(dialog)}
+        onClose={() => !busy && setDialog("")}
+        title={dialog === "schedule" ? "Schedule campaign" : "Send campaign"}
+        subtitle={
+          dialog === "schedule"
+            ? "Recipients are determined when delivery begins."
+            : undefined
+        }
+        size="md"
+        footer={
+          <>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setDialog("")}
+              className={BTN_SECONDARY}
+            >
+              Cancel
+            </button>
+            <LoadingButton
+              className={BTN_PRIMARY}
+              loading={busy}
+              loadingLabel="Submitting…"
+              disabled={dialog === "schedule" && !schedule.date}
+              icon={dialog === "schedule" ? CalendarClock : Send}
+              iconSize={15}
+              onClick={executeSend}
+            >
+              {dialog === "schedule" ? "Schedule" : "Send now"}
+            </LoadingButton>
+          </>
+        }
+      >
+        {dialog === "schedule" ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <FormField
+                label="Date"
+                type="date"
+                required
+                value={schedule.date}
+                onChange={(e) =>
+                  setSchedule((s) => ({ ...s, date: e.target.value }))
+                }
+              />
+              <FormField
+                label="Time"
+                type="time"
+                required
+                value={schedule.time}
+                onChange={(e) =>
+                  setSchedule((s) => ({ ...s, time: e.target.value }))
+                }
+              />
             </div>
-          </section>
-        </div>
-      )}
+            <FormField
+              label="Timezone"
+              type="select"
+              value={schedule.timezone}
+              options={CAMPAIGN_TIMEZONES}
+              onChange={(e) =>
+                setSchedule((s) => ({ ...s, timezone: e.target.value }))
+              }
+            />
+            <label className="flex items-start gap-2 text-sm text-navy-700">
+              <input
+                type="checkbox"
+                className={`${CHECKBOX} mt-0.5`}
+                disabled={!directory.push_configured}
+                checked={schedule.push_enabled}
+                onChange={(e) =>
+                  setSchedule((s) => ({
+                    ...s,
+                    push_enabled: e.target.checked,
+                  }))
+                }
+              />
+              <span>
+                Send a push notification to registered mobile devices
+                {!directory.push_configured && (
+                  <span className="block text-xs text-navy-400 mt-1">
+                    Available after the organization’s mobile service is
+                    connected.
+                  </span>
+                )}
+              </span>
+            </label>
+          </div>
+        ) : (
+          <div className="flex items-start gap-4">
+            <div className="p-2.5 rounded-xl bg-cyan-50 text-cyan-600 shrink-0">
+              <Send size={20} />
+            </div>
+            <p className="text-sm text-navy-600 leading-relaxed pt-1">
+              Send “{form.subject}” to{" "}
+              <strong className="text-navy-900">
+                {audience?.included_count ?? 0} unique recipients
+              </strong>{" "}
+              now? This cannot be undone once delivery starts.
+            </p>
+          </div>
+        )}
+      </Modal>
+      <Modal
+        isOpen={templateName !== null}
+        onClose={() => !busy && setTemplateName(null)}
+        title="Save as template"
+        subtitle="Reuse this design in future campaigns."
+        size="sm"
+        footer={
+          <>
+            <button
+              type="button"
+              className={BTN_SECONDARY}
+              disabled={busy}
+              onClick={() => setTemplateName(null)}
+            >
+              Cancel
+            </button>
+            <LoadingButton
+              type="submit"
+              form="campaign-save-template"
+              className={BTN_PRIMARY}
+              loading={busy}
+              loadingLabel="Saving…"
+              disabled={!templateName?.trim()}
+            >
+              Save template
+            </LoadingButton>
+          </>
+        }
+      >
+        <form id="campaign-save-template" onSubmit={saveAsTemplate}>
+          <FormField
+            label="Template name"
+            name="campaign-template-name"
+            required
+            value={templateName || ""}
+            onChange={(e) => setTemplateName(e.target.value)}
+          />
+        </form>
+      </Modal>
+      {confirmDialog}
     </div>
   );
 }

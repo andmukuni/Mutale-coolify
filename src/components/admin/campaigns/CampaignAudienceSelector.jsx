@@ -1,5 +1,15 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Users,
+  UserMinus,
+  SlidersHorizontal,
+  RefreshCw,
+  Info,
+} from "lucide-react";
+import { Spinner } from "../../ui";
+import { BTN_SECONDARY, CHECKBOX, INPUT_SM } from "./campaignStyles";
 
 function ruleKey(rule) {
   return `${rule.source}:${rule.id || ""}:${rule.filter || "all"}`;
@@ -13,13 +23,14 @@ function AudienceGroups({
 }) {
   const [open, setOpen] = useState("Contacts");
   return (
-    <div className="divide-y divide-navy-100 border border-navy-100 bg-white">
+    <div className="app-card divide-y divide-navy-100 rounded-2xl border border-navy-100 bg-white overflow-hidden">
       {groups.map((group) => (
         <section key={group.name}>
           <button
             type="button"
             onClick={() => setOpen(open === group.name ? "" : group.name)}
-            className={`flex items-center justify-between w-full p-4 text-left text-sm font-semibold ${open === group.name ? "bg-blue-50 border-l-2 border-blue-600" : ""}`}
+            aria-expanded={open === group.name}
+            className={`flex items-center justify-between w-full px-4 py-3.5 text-left text-sm font-semibold text-navy-800 transition-colors border-l-2 ${open === group.name ? "bg-cyan-50/60 border-cyan-600" : "border-transparent hover:bg-navy-50"}`}
           >
             <span>
               {group.name}
@@ -28,7 +39,7 @@ function AudienceGroups({
                   (option) => ruleKey(option.rule) === ruleKey(rule),
                 ),
               ).length > 0 && (
-                <span className="ml-2 bg-blue-600 text-white text-xs rounded-full px-1.5">
+                <span className="ml-2 inline-flex items-center rounded-full bg-cyan-600 px-2 py-0.5 text-xs font-medium text-white tabular-nums">
                   {Object.keys(sourceCounts).length
                     ? value
                         .filter((rule) =>
@@ -46,17 +57,17 @@ function AudienceGroups({
               )}
             </span>
             {open === group.name ? (
-              <ChevronDown size={16} />
+              <ChevronDown size={16} className="text-navy-400" />
             ) : (
-              <ChevronRight size={16} />
+              <ChevronRight size={16} className="text-navy-400" />
             )}
           </button>
           {open === group.name && (
-            <div className="px-6 py-4 space-y-3">
+            <div className="px-5 py-4 space-y-3 bg-white">
               {group.options.map((option) => (
                 <label
                   key={ruleKey(option.rule)}
-                  className="flex gap-3 items-start text-sm text-navy-600"
+                  className="flex gap-3 items-start text-sm text-navy-700 cursor-pointer"
                 >
                   <input
                     type="checkbox"
@@ -73,7 +84,7 @@ function AudienceGroups({
                             ),
                       )
                     }
-                    className="mt-0.5 accent-blue-600"
+                    className={`${CHECKBOX} mt-0.5`}
                   />
                   {option.label}
                 </label>
@@ -211,24 +222,30 @@ export default function CampaignAudienceSelector({
     });
   return (
     <div>
-      <div className="flex justify-between items-start gap-4 mb-5">
-        <div>
-          <h2 className="text-lg font-semibold">Include Recipients</h2>
-          <p className="text-sm text-navy-500 mt-2">
-            Please choose from the following lists of contacts. Duplicate
-            contacts will be removed.
-          </p>
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-5">
+        <div className="flex items-start gap-3">
+          <div className="p-2.5 rounded-xl bg-cyan-50 text-cyan-600 shrink-0">
+            <Users size={20} />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-navy-900">
+              Include recipients
+            </h2>
+            <p className="text-sm text-navy-500 mt-1">
+              Choose from the following lists of contacts. Duplicate contacts
+              are removed automatically.
+            </p>
+          </div>
         </div>
-        <div className="text-right shrink-0">
-          <p className="text-xs text-navy-500">
-            This campaign will be
-            <br />
-            sent to
-          </p>
-          <strong className="text-3xl text-navy-900">
+        <div
+          className="shrink-0 rounded-2xl border border-cyan-100 bg-cyan-50/60 px-5 py-3 text-right"
+          aria-live="polite"
+        >
+          <p className="text-xs font-medium text-cyan-800">Will be sent to</p>
+          <strong className="block text-3xl font-bold text-navy-900 tabular-nums">
             {preview?.included_count ?? "—"}
           </strong>
-          <p className="text-xs text-navy-500">Unique Recipients</p>
+          <p className="text-xs text-navy-500">unique recipients</p>
         </div>
       </div>
       <AudienceGroups
@@ -241,9 +258,11 @@ export default function CampaignAudienceSelector({
       <button
         type="button"
         onClick={() => setExcludeOpen(!excludeOpen)}
-        className="font-semibold text-sm my-6 flex items-center gap-2"
+        aria-expanded={excludeOpen}
+        className="my-6 inline-flex items-center gap-2 text-sm font-semibold text-navy-800 hover:text-cyan-700"
       >
         {excludeOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+        <UserMinus size={16} className="text-navy-400" />
         Exclude recipients
       </button>
       {excludeOpen && (
@@ -262,19 +281,20 @@ export default function CampaignAudienceSelector({
         </>
       )}
       {type !== "regular" && segment && (
-        <details className="mt-6 border rounded-lg p-4">
-          <summary className="cursor-pointer text-sm font-semibold">
-            Advanced Event Filters
+        <details className="mt-6 rounded-2xl border border-navy-100 p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-navy-800 inline-flex items-center gap-2">
+            <SlidersHorizontal size={16} className="text-navy-400" />
+            Advanced event filters
           </summary>
           <p className="text-xs text-navy-500 my-3">
             Apply these filters to event registrants. Other included contact
             lists remain independent.
           </p>
           <div className="grid sm:grid-cols-2 gap-3">
-            <label className="text-sm">
+            <label className="text-sm font-medium text-navy-700">
               Selection
               <select
-                className="w-full border rounded p-2 mt-1"
+                className={`${INPUT_SM} mt-1 font-normal`}
                 disabled={disabled}
                 value={segment.mode}
                 onChange={(e) => {
@@ -296,11 +316,15 @@ export default function CampaignAudienceSelector({
               </select>
             </label>
             {segment.mode === "selected" ? (
-              <div className="sm:col-span-2 max-h-60 overflow-auto border rounded p-3">
+              <div className="sm:col-span-2 max-h-60 overflow-auto rounded-xl border border-navy-100 divide-y divide-navy-100">
                 {(directory.registrants || []).map((row) => (
-                  <label className="flex gap-2 text-sm py-2" key={row.id}>
+                  <label
+                    className="flex items-center gap-3 text-sm text-navy-700 px-3 py-2.5 hover:bg-navy-50"
+                    key={row.id}
+                  >
                     <input
                       type="checkbox"
+                      className={CHECKBOX}
                       disabled={disabled}
                       checked={(segment.registration_ids || []).includes(
                         row.id,
@@ -328,10 +352,10 @@ export default function CampaignAudienceSelector({
                   ["registration_type", "Registration Type (comma separated)"],
                   ["attendee_type", "Attendee Type (comma separated)"],
                 ].map(([key, label]) => (
-                  <label className="text-sm" key={key}>
+                  <label className="text-sm font-medium text-navy-700" key={key}>
                     {label}
                     <input
-                      className="w-full border rounded p-2 mt-1"
+                      className={`${INPUT_SM} mt-1 font-normal`}
                       disabled={disabled}
                       value={(segment.filters[key] || []).join(", ")}
                       onChange={(e) => {
@@ -359,10 +383,10 @@ export default function CampaignAudienceSelector({
                     />
                   </label>
                 ))}
-                <label className="text-sm">
+                <label className="text-sm font-medium text-navy-700">
                   Attended
                   <select
-                    className="w-full border rounded p-2 mt-1"
+                    className={`${INPUT_SM} mt-1 font-normal`}
                     disabled={disabled}
                     value={segment.filters.attended || "any"}
                     onChange={(e) =>
@@ -384,12 +408,12 @@ export default function CampaignAudienceSelector({
                   ["registered_from", "Registered From"],
                   ["registered_to", "Registered To"],
                 ].map(([key, label]) => (
-                  <label key={key} className="text-sm">
+                  <label key={key} className="text-sm font-medium text-navy-700">
                     {label}
                     <input
                       type="date"
                       disabled={disabled}
-                      className="w-full border rounded p-2 mt-1"
+                      className={`${INPUT_SM} mt-1 font-normal`}
                       value={segment.filters[key] || ""}
                       onChange={(e) =>
                         onSegmentChange({
@@ -403,9 +427,10 @@ export default function CampaignAudienceSelector({
                     />
                   </label>
                 ))}
-                <label className="flex gap-2 text-sm items-center">
+                <label className="flex gap-2 text-sm text-navy-700 items-center">
                   <input
                     type="checkbox"
+                    className={CHECKBOX}
                     disabled={disabled}
                     checked={!!segment.filters.include_cancelled}
                     onChange={(e) =>
@@ -425,17 +450,19 @@ export default function CampaignAudienceSelector({
           </div>
         </details>
       )}
-      <div className="mt-5 flex items-center gap-3">
+      <div className="mt-5 flex flex-wrap items-center gap-3">
         <button
           type="button"
-          className="border rounded-lg px-4 py-2 text-sm hover:bg-navy-50"
+          className={BTN_SECONDARY}
           disabled={busy}
           onClick={onPreview}
         >
+          {busy ? <Spinner size={15} /> : <RefreshCw size={15} />}
           {busy ? "Calculating…" : "Preview audience"}
         </button>
         {preview && (
-          <p className="text-sm text-navy-500">
+          <p className="inline-flex items-center gap-1.5 text-sm text-navy-500">
+            <Info size={14} />
             {preview.excluded_count} excluded · Eligibility is checked again
             before sending.
           </p>
@@ -443,14 +470,14 @@ export default function CampaignAudienceSelector({
       </div>
       {preview?.excluded?.length > 0 && (
         <details className="mt-4 text-sm">
-          <summary className="text-navy-500 cursor-pointer">
+          <summary className="text-cyan-700 hover:text-cyan-600 font-medium cursor-pointer">
             View exclusion reasons
           </summary>
-          <div className="max-h-48 overflow-y-auto mt-2">
+          <div className="max-h-48 overflow-y-auto mt-2 rounded-xl border border-navy-100 divide-y divide-navy-100">
             {preview.excluded.slice(0, 100).map((row, index) => (
               <p
                 key={`${row.email}-${index}`}
-                className="py-1 text-xs text-navy-500"
+                className="px-3 py-2 text-xs text-navy-600"
               >
                 {row.email || "Missing email"} —{" "}
                 {row.reason.replaceAll("_", " ")}

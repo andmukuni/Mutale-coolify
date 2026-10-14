@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { Modal } from "../../ui";
+import { ImageIcon, Upload, ImagePlus } from "lucide-react";
+import { Modal, Spinner } from "../../ui";
+import { BTN_PRIMARY, BTN_SECONDARY } from "./campaignStyles";
 import { campaignRequest } from "../../../utils/campaignWorkspaceApi";
 import { readFileAsDataUrl } from "../../../utils/uploadBlogImage";
 import { compressImageFile } from "../../../utils/compressImageFile";
@@ -40,9 +42,10 @@ export default function CampaignImagePicker({ onSelect, disabled = false }) {
       <button
         type="button"
         disabled={disabled}
-        className="text-sm text-blue-600"
+        className={`${BTN_SECONDARY} w-full`}
         onClick={() => setOpen(true)}
       >
+        <ImagePlus size={15} />
         Choose or upload image
       </button>
       <Modal
@@ -50,11 +53,15 @@ export default function CampaignImagePicker({ onSelect, disabled = false }) {
         onClose={() => {
           if (!busy) setOpen(false);
         }}
-        title="Image Library"
+        title="Image library"
+        subtitle="Pick a previously uploaded image or upload a new one."
         size="lg"
       >
-        <label className="inline-block bg-blue-600 text-white rounded-lg px-4 py-2 cursor-pointer text-sm">
-          {busy ? "Uploading…" : "Upload Image"}
+        <label
+          className={`${BTN_PRIMARY} cursor-pointer ${busy ? "opacity-60 pointer-events-none" : ""}`}
+        >
+          {busy ? <Spinner size={15} /> : <Upload size={15} />}
+          {busy ? "Uploading…" : "Upload image"}
           <input
             type="file"
             className="hidden"
@@ -73,7 +80,7 @@ export default function CampaignImagePicker({ onSelect, disabled = false }) {
             <button
               type="button"
               key={asset.id}
-              className="text-left border rounded-lg p-2 hover:border-blue-600"
+              className="text-left rounded-xl border border-navy-100 p-2 hover:border-cyan-500 hover:ring-2 hover:ring-cyan-500/20 transition-colors"
               onClick={() => {
                 onSelect(asset.url);
                 setOpen(false);
@@ -82,16 +89,21 @@ export default function CampaignImagePicker({ onSelect, disabled = false }) {
               <img
                 alt={asset.name}
                 src={asset.url}
-                className="w-full h-28 object-contain"
+                className="w-full h-28 object-contain rounded-lg bg-navy-50"
               />
-              <span className="block text-xs truncate mt-2">{asset.name}</span>
+              <span className="block text-xs text-navy-600 truncate mt-2">{asset.name}</span>
             </button>
           ))}
         </div>
         {!assets.length && !busy && (
-          <p className="text-sm text-navy-500 mt-6">
-            Upload your first campaign image.
-          </p>
+          <div className="text-center py-10">
+            <div className="w-14 h-14 rounded-2xl bg-navy-100 text-navy-400 flex items-center justify-center mx-auto mb-3">
+              <ImageIcon size={24} />
+            </div>
+            <p className="text-sm text-navy-500">
+              Upload your first campaign image.
+            </p>
+          </div>
         )}
       </Modal>
     </>

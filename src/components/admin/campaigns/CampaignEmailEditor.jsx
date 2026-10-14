@@ -1,6 +1,43 @@
 import { lazy, Suspense, useMemo, useState } from "react";
 import DOMPurify from "dompurify";
-import { GripVertical, Trash2, ArrowUp, ArrowDown, Plus } from "lucide-react";
+import {
+  GripVertical,
+  Trash2,
+  ArrowUp,
+  ArrowDown,
+  Plus,
+  ArrowLeft,
+  ExternalLink,
+  Smartphone,
+  Monitor,
+  Type,
+  Image as ImageIcon,
+  Heading,
+  Minus,
+  RectangleHorizontal,
+  CalendarCheck,
+  Newspaper,
+  Share2,
+  Users,
+  Hexagon,
+  ClipboardList,
+  FileText,
+  PanelBottom,
+  CalendarDays,
+  AlignLeft,
+  Mic,
+  Handshake,
+  Store,
+  Ticket,
+  MailQuestion,
+  Columns2,
+  Columns3,
+  PanelLeft,
+  PanelRight,
+  RectangleVertical,
+  Upload,
+} from "lucide-react";
+import { Spinner } from "../../ui";
 import {
   compileDesignToHtml,
   flattenBlocks,
@@ -10,9 +47,38 @@ import {
 import CampaignImagePicker from "./CampaignImagePicker";
 import { useToast } from "../../../context/ToastContext";
 import CampaignRichText from "./CampaignRichText";
+import { BTN_SECONDARY, BTN_ICON, CHECKBOX, INPUT_SM, LINK_ACTION, LINK_DANGER } from "./campaignStyles";
 const CampaignGrapesCanvas = lazy(() => import("./CampaignGrapesCanvas"));
-const fieldClass =
-  "border border-navy-200 rounded px-3 py-2 text-sm w-full bg-white";
+const fieldClass = INPUT_SM;
+const elementIcons = {
+  text: Type,
+  image: ImageIcon,
+  heading: Heading,
+  divider: Minus,
+  button: RectangleHorizontal,
+  event_tracker: CalendarCheck,
+  article: Newspaper,
+  social_share: Share2,
+  social_follow: Users,
+  header: Hexagon,
+  survey: ClipboardList,
+  resource_card: FileText,
+  footer: PanelBottom,
+  event_header: CalendarDays,
+  summary: AlignLeft,
+  speakers: Mic,
+  sponsors: Handshake,
+  exhibitors: Store,
+  registration: Ticket,
+  invitation_response: MailQuestion,
+};
+const layoutIcons = {
+  one: RectangleVertical,
+  two: Columns2,
+  three: Columns3,
+  left: PanelLeft,
+  right: PanelRight,
+};
 const common = [
   ["text", "Text"],
   ["image", "Image"],
@@ -318,15 +384,19 @@ function BlockFields({
     const people = vars[block.type] || [];
     return (
       <div>
-        <p className="text-xs mb-2">
-          Please select the{" "}
+        <p className="text-xs text-navy-500 mb-2">
+          Select the{" "}
           {block.type === "speakers" ? "people" : block.type + " and partners"}{" "}
           you want to show
         </p>
         {people.map((row) => (
-          <label key={row.id} className="flex items-center gap-2 text-sm py-1">
+          <label
+            key={row.id}
+            className="flex items-center gap-2 text-sm text-navy-700 py-1"
+          >
             <input
               type="checkbox"
+              className={CHECKBOX}
               disabled={disabled}
               checked={
                 !block.selection_set || block.selected_ids.includes(row.id)
@@ -402,6 +472,7 @@ function BlockFields({
             />
             <button
               type="button"
+              className={`${BTN_ICON} hover:text-red-600 hover:bg-red-50 shrink-0`}
               disabled={disabled}
               aria-label="Remove social link"
               onClick={() =>
@@ -418,7 +489,7 @@ function BlockFields({
         <button
           type="button"
           disabled={disabled}
-          className="text-sm text-blue-600"
+          className={LINK_ACTION}
           onClick={() =>
             update("links", [
               ...block.links,
@@ -429,7 +500,8 @@ function BlockFields({
             ])
           }
         >
-          + Add social link
+          <Plus size={14} />
+          Add social link
         </button>
       </div>
     );
@@ -445,13 +517,13 @@ function BlockFields({
           (column, index) => (
             <div
               key={index}
-              className="border border-dashed border-navy-200 p-2 min-w-0"
+              className="rounded-xl border border-dashed border-navy-200 p-3 min-w-0"
             >
               <p className="text-xs text-navy-400 mb-2">
                 Column {index + 1} ({block.column_widths[index] || 50}%)
               </p>
               {column.map((child, childIndex) => (
-                <div className="mb-3 border-b pb-3" key={child.id}>
+                <div className="mb-3 border-b border-navy-100 pb-3" key={child.id}>
                   <BlockFields
                     block={child}
                     disabled={disabled}
@@ -477,7 +549,7 @@ function BlockFields({
                   {!disabled && (
                     <button
                       type="button"
-                      className="text-xs text-red-600 mt-1"
+                      className={`${LINK_DANGER} mt-2`}
                       onClick={() =>
                         update(
                           "column_blocks",
@@ -489,6 +561,7 @@ function BlockFields({
                         )
                       }
                     >
+                      <Trash2 size={13} />
                       Remove
                     </button>
                   )}
@@ -497,7 +570,7 @@ function BlockFields({
               {!disabled && depth < 5 && (
                 <select
                   aria-label={`Add element to column ${index + 1}`}
-                  className="w-full text-xs border rounded p-1"
+                  className={`${INPUT_SM} text-xs py-1.5`}
                   value=""
                   onChange={(e) => {
                     if (e.target.value)
@@ -716,7 +789,11 @@ export default function CampaignEmailEditor({
   return (
     <div>
       <div className="flex flex-wrap justify-between gap-3 mb-4">
-        <div className="flex border border-navy-200 rounded overflow-hidden">
+        <div
+          role="tablist"
+          aria-label="Editor mode"
+          className="inline-flex rounded-xl border border-navy-200 bg-navy-50 p-1"
+        >
           {(doc.grapes
             ? [["canvas", "Content & Design"]]
             : [
@@ -727,29 +804,32 @@ export default function CampaignEmailEditor({
             <button
               key={id}
               type="button"
+              role="tab"
+              aria-selected={mode === id && !preview}
               onClick={() => {
                 setMode(id);
                 setPreview(false);
               }}
-              className={`px-4 py-2 text-sm ${mode === id ? "bg-blue-50 text-blue-600" : "bg-white"}`}
+              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${mode === id && !preview ? "bg-white text-cyan-700 shadow-sm" : "text-navy-600 hover:text-navy-900"}`}
             >
               {label}
             </button>
           ))}
         </div>
-        <div className="flex gap-2 items-center">
+        <div className="flex flex-wrap gap-2 items-center">
           {preview && (
             <button
               type="button"
-              className="text-sm text-blue-600"
+              className={BTN_SECONDARY}
               onClick={() => setPreview(false)}
             >
+              <ArrowLeft size={15} />
               Back to editor
             </button>
           )}
           <button
             type="button"
-            className="text-sm text-blue-600"
+            className={BTN_SECONDARY}
             onClick={() => {
               const url = URL.createObjectURL(
                 new Blob([html], {
@@ -760,17 +840,19 @@ export default function CampaignEmailEditor({
               setTimeout(() => URL.revokeObjectURL(url), 60000);
             }}
           >
-            Preview In Browser
+            <ExternalLink size={15} />
+            Open in browser
           </button>
           <button
             type="button"
-            className="text-sm border rounded px-3 py-2"
+            className={BTN_SECONDARY}
             onClick={() => {
               setMobile(!mobile);
               setPreview(true);
             }}
           >
-            {mobile ? "Desktop" : "Preview on Mobile"}
+            {mobile ? <Monitor size={15} /> : <Smartphone size={15} />}
+            {mobile ? "Desktop preview" : "Mobile preview"}
           </button>
         </div>
       </div>
@@ -780,7 +862,7 @@ export default function CampaignEmailEditor({
             sandbox=""
             title="Email preview"
             srcDoc={html}
-            className="w-full h-[640px] border bg-white"
+            className="w-full h-[640px] rounded-xl border border-navy-100 bg-white"
           />
         </div>
       ) : mode === "canvas" ? (
@@ -789,10 +871,17 @@ export default function CampaignEmailEditor({
             sandbox=""
             title="Visual email preview"
             srcDoc={html}
-            className="w-full h-[640px] border"
+            className="w-full h-[640px] rounded-xl border border-navy-100 bg-white"
           />
         ) : (
-          <Suspense fallback={<p>Loading visual canvas…</p>}>
+          <Suspense
+            fallback={
+              <div className="flex items-center justify-center gap-2 h-64 text-sm text-navy-500">
+                <Spinner size={16} />
+                Loading visual canvas…
+              </div>
+            }
+          >
             <CampaignGrapesCanvas design={doc} onChange={onChange} />
           </Suspense>
         )
@@ -800,13 +889,13 @@ export default function CampaignEmailEditor({
         <div className="grid lg:grid-cols-[340px_minmax(0,1fr)] gap-6">
           <div className="space-y-5">
             {styleFields.map(([section, fields]) => (
-              <section key={section} className="border-b border-navy-100 pb-4">
-                <h3 className="font-semibold mb-3 text-sm">{section}</h3>
+              <section key={section} className="border-b border-navy-100 pb-4 last:border-0">
+                <h3 className="font-semibold mb-3 text-sm text-navy-900">{section}</h3>
                 <div className="space-y-2">
                   {fields.map(([key, label, kind]) => (
                     <label
                       key={key}
-                      className="flex justify-between gap-3 items-center text-xs"
+                      className="flex justify-between gap-3 items-center text-xs text-navy-600"
                     >
                       {label}
                       {kind === "color" ? (
@@ -820,7 +909,7 @@ export default function CampaignEmailEditor({
                             "#141D45"
                           }
                           onChange={(e) => styleChange(key, e.target.value)}
-                          className="w-20 h-8 border rounded"
+                          className="w-20 h-8 rounded-lg border border-navy-200 bg-white p-0.5 cursor-pointer"
                         />
                       ) : (
                         <select
@@ -844,7 +933,7 @@ export default function CampaignEmailEditor({
                                 : e.target.value,
                             )
                           }
-                          className="border rounded p-1.5 bg-white"
+                          className="rounded-lg border border-navy-200 bg-white px-2 py-1.5 text-xs text-navy-700 min-w-28"
                         >
                           {(kind === "font"
                             ? fonts
@@ -870,12 +959,12 @@ export default function CampaignEmailEditor({
             sandbox=""
             title="Design preview"
             srcDoc={html}
-            className="w-full min-h-[720px] border bg-white"
+            className="w-full min-h-[720px] rounded-xl border border-navy-100 bg-white"
           />
         </div>
       ) : doc.layout === "custom_html" ? (
         <div>
-          <label className="block text-sm mb-2">Custom HTML</label>
+          <label className="block text-sm font-medium text-navy-700 mb-1.5">Custom HTML</label>
           <textarea
             aria-label="Custom HTML"
             disabled={readOnly}
@@ -887,11 +976,16 @@ export default function CampaignEmailEditor({
               })
             }
           />
+          <label
+            className={`${BTN_SECONDARY} mt-3 cursor-pointer ${readOnly ? "opacity-50 pointer-events-none" : ""}`}
+          >
+            <Upload size={15} />
+            Import HTML file
           <input
             type="file"
             accept=".html,.htm"
             disabled={readOnly}
-            className="mt-3 text-sm"
+            className="hidden"
             aria-label="Import HTML"
             onChange={async (e) => {
               const file = e.target.files[0];
@@ -912,8 +1006,10 @@ export default function CampaignEmailEditor({
                   }),
                 });
               }
+              e.target.value = "";
             }}
           />
+          </label>
           <p className="text-xs text-navy-400 mt-2">
             HTML is sanitized when saved. Personalization uses{" "}
             {"{{merge_tags}}"}.
@@ -922,7 +1018,7 @@ export default function CampaignEmailEditor({
       ) : (
         <div className="grid lg:grid-cols-[minmax(0,1fr)_220px] gap-5">
           <div
-            className="min-w-0 bg-navy-50 border border-navy-100 p-3 sm:p-5"
+            className="min-w-0 rounded-2xl bg-navy-50 border border-navy-100 p-3 sm:p-5"
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
               e.preventDefault();
@@ -934,7 +1030,7 @@ export default function CampaignEmailEditor({
             {doc.blocks.map((block, index) => (
               <section
                 key={block.id}
-                className="bg-white border border-navy-200 mb-3 p-3"
+                className="group app-card bg-white rounded-xl border border-navy-100 shadow-sm mb-3 p-4 hover:border-navy-200 transition-colors"
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => {
                   e.preventDefault();
@@ -947,8 +1043,9 @@ export default function CampaignEmailEditor({
                 }}
               >
                 <div className="flex justify-between items-center mb-3">
-                  <span className="flex items-center gap-2 text-xs uppercase font-semibold text-navy-400">
+                  <span className="flex items-center gap-2 text-xs uppercase tracking-wide font-semibold text-navy-500">
                     <span
+                      className={readOnly ? "text-navy-300" : "cursor-grab text-navy-400 hover:text-navy-700"}
                       draggable={!readOnly}
                       onDragStart={(e) =>
                         e.dataTransfer.setData(
@@ -964,9 +1061,10 @@ export default function CampaignEmailEditor({
                       block.type}
                   </span>
                   {!readOnly && (
-                    <span className="flex gap-2">
+                    <span className="flex gap-1">
                       <button
                         type="button"
+                        className={BTN_ICON}
                         aria-label={`Move element ${index + 1} up`}
                         onClick={() => move(index, index - 1)}
                         disabled={index === 0}
@@ -975,6 +1073,7 @@ export default function CampaignEmailEditor({
                       </button>
                       <button
                         type="button"
+                        className={BTN_ICON}
                         aria-label={`Move element ${index + 1} down`}
                         onClick={() => move(index, index + 1)}
                         disabled={index === doc.blocks.length - 1}
@@ -983,6 +1082,7 @@ export default function CampaignEmailEditor({
                       </button>
                       <button
                         type="button"
+                        className={`${BTN_ICON} hover:text-red-600 hover:bg-red-50`}
                         aria-label={`Delete element ${index + 1}`}
                         onClick={() =>
                           change({
@@ -1009,13 +1109,13 @@ export default function CampaignEmailEditor({
               </section>
             ))}
             {!readOnly && (
-              <p className="border border-dashed border-navy-300 p-8 text-center text-sm text-navy-400">
+              <p className="rounded-xl border-2 border-dashed border-navy-200 bg-white/60 p-8 text-center text-sm text-navy-400">
                 Drop an item here
               </p>
             )}
           </div>
-          <aside className="bg-white border border-navy-100 p-3 self-start lg:sticky lg:top-24">
-            <h3 className="text-sm font-semibold mb-3">Elements</h3>
+          <aside className="app-card bg-white rounded-2xl border border-navy-100 shadow-sm p-4 self-start lg:sticky lg:top-24">
+            <h3 className="text-sm font-semibold text-navy-900 mb-3">Elements</h3>
             <div className="grid grid-cols-2 gap-2">
               {elements.map(([type, name]) => (
                 <button
@@ -1027,14 +1127,20 @@ export default function CampaignEmailEditor({
                     e.dataTransfer.setData("application/mm-element", type)
                   }
                   onClick={() => add(type)}
-                  className="border border-navy-200 rounded px-2 py-3 text-xs text-center hover:border-blue-400 disabled:opacity-40"
+                  title={`Add ${name}`}
+                  className="rounded-xl border border-navy-100 px-2 py-3 text-xs font-medium text-navy-700 text-center hover:border-cyan-400 hover:bg-cyan-50/50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  <Plus size={16} className="mx-auto mb-1 text-blue-600" />
+                  {(() => {
+                    const Icon = elementIcons[type] || Plus;
+                    return (
+                      <Icon size={18} className="mx-auto mb-1.5 text-cyan-600" />
+                    );
+                  })()}
                   {name}
                 </button>
               ))}
             </div>
-            <h3 className="text-sm font-semibold mt-6 mb-3">Layouts</h3>
+            <h3 className="text-sm font-semibold text-navy-900 mt-6 mb-3">Layouts</h3>
             <div className="space-y-2">
               {layouts.map(([id, name, widths]) => (
                 <button
@@ -1042,8 +1148,12 @@ export default function CampaignEmailEditor({
                   type="button"
                   key={id}
                   onClick={() => addLayout(widths)}
-                  className="border rounded p-3 w-full text-xs hover:border-blue-400"
+                  className="flex items-center gap-2 rounded-xl border border-navy-100 px-3 py-2.5 w-full text-xs font-medium text-navy-700 hover:border-cyan-400 hover:bg-cyan-50/50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
+                  {(() => {
+                    const Icon = layoutIcons[id] || Columns2;
+                    return <Icon size={16} className="text-cyan-600" />;
+                  })()}
                   {name}
                 </button>
               ))}

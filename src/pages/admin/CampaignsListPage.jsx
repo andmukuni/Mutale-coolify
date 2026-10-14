@@ -6,11 +6,25 @@ import {
   Search,
   Settings2,
   Eye,
+  Smartphone,
   Copy,
   Trash2,
   Undo2,
+  Pencil,
+  BarChart3,
+  FileEdit,
+  CalendarClock,
+  Send,
+  Archive,
+  RefreshCw,
 } from "lucide-react";
-import { PageHeader, Modal } from "../../components/ui";
+import {
+  PageHeader,
+  Modal,
+  DataTable,
+  ConfirmDialog,
+  StatusBadge,
+} from "../../components/ui";
 import { useData } from "../../context/DataContext";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
@@ -29,9 +43,19 @@ import {
 } from "../../utils/campaignWorkspaceApi";
 import CampaignCreateModal from "../../components/admin/campaigns/CampaignCreateModal";
 import CampaignWorkspaceNav from "../../components/admin/campaigns/CampaignWorkspaceNav";
+import CampaignTabs from "../../components/admin/campaigns/CampaignTabs";
+import CampaignPagination from "../../components/admin/campaigns/CampaignPagination";
+import {
+  BTN_PRIMARY,
+  BTN_SECONDARY,
+  BTN_ICON,
+  CHECKBOX,
+  INPUT_SM,
+} from "../../components/admin/campaigns/campaignStyles";
 
 const columns = [
   ["name", "Internal Campaign Name"],
+  ["state", "Status"],
   ["scheduled_at_utc", "Scheduled Date"],
   ["scheduled_by", "Scheduled By"],
   ["campaign_type", "Campaign Type"],
@@ -48,7 +72,14 @@ const columns = [
   ["open_rate", "Open Rate"],
   ["subject", "Subject"],
 ];
-const defaultColumns = columns.slice(0, 12).map(([id]) => id);
+const defaultColumns = columns.slice(0, 13).map(([id]) => id);
+const STATUS_TABS = [
+  { key: "draft", label: "Drafts", icon: FileEdit },
+  { key: "scheduled", label: "Scheduled", icon: CalendarClock },
+  { key: "sent", label: "Sent", icon: Send },
+];
+const EDITABLE_STATES = ["draft", "scheduled", "paused", "cancelled"];
+
 function storedColumns() {
   try {
     const value = JSON.parse(localStorage.getItem("mm_campaign_columns"));
@@ -59,8 +90,9 @@ function storedColumns() {
     return defaultColumns;
   }
 }
-const inputClass =
-  "border border-navy-200 bg-white rounded-lg px-3 py-2 text-sm";
+
+const menuItem =
+  "flex items-center gap-2 px-3 py-2 w-full text-left rounded-lg text-navy-700 hover:bg-navy-50";
 
 export default function CampaignsListPage() {
   const { events } = useData();
@@ -85,8 +117,10 @@ export default function CampaignsListPage() {
   const [preview, setPreview] = useState(null);
   const [mobile, setMobile] = useState(false);
   const [remove, setRemove] = useState(null);
+  const [removing, setRemoving] = useState(false);
   const [archived, setArchived] = useState(false);
   const canManage = hasPermission("campaigns.manage");
+
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -111,6 +145,15 @@ export default function CampaignsListPage() {
   useEffect(() => {
     setPage(1);
   }, [tab, event, type, search, archived]);
+  useEffect(() => {
+    if (!menu) return undefined;
+    const close = (e) => {
+      if (!e.target.closest?.("[data-campaign-menu]")) setMenu("");
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [menu]);
+
   const openPreview = async (row, isMobile = false) => {
     setMenu("");
     try {
@@ -121,6 +164,22 @@ export default function CampaignsListPage() {
       toast.error(err.message);
     }
   };
+  const handleRemove = async () => {
+    setRemoving(true);
+    try {
+      await campaignAction(remove.id, "archive");
+      setRemove(null);
+      await load();
+      toast.success(
+        "Campaign deleted. You can restore it from Deleted campaigns.",
+      );
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setRemoving(false);
+    }
+  };
+
   const showColumns = displayed.length ? displayed : ["name"];
   const pages = Math.max(1, Math.ceil(rows.length / perPage));
   const currentPage = Math.min(page, pages);
@@ -128,21 +187,23 @@ export default function CampaignsListPage() {
     (currentPage - 1) * perPage,
     currentPage * perPage,
   );
+  const editable = (row) => EDITABLE_STATES.includes(row.state);
   const destination = (row) =>
-    `/admin/campaigns/${row.id}${["draft", "scheduled", "paused", "cancelled"].includes(row.state) ? "" : "/report"}`;
+    `/admin/campaigns/${row.id}${editable(row) ? "" : "/report"}`;
   const cell = (row, key) => {
     if (key === "name")
       return (
         <Link
-          className="font-medium text-blue-600 hover:underline"
+          className="font-medium text-navy-900 hover:text-cyan-700"
           to={destination(row)}
         >
           {row.name}
         </Link>
       );
+    if (key === "state") return <StatusBadge status={row.state} />;
     if (key === "campaign_type")
       return (
-        CAMPAIGN_TYPES.find((type) => type.id === row.campaign_type)?.name ||
+        CAMPAIGN_TYPES.find((item) => item.id === row.campaign_type)?.name ||
         "Event Notification"
       );
     if (key === "scheduled_at_utc")
@@ -151,61 +212,68 @@ export default function CampaignsListPage() {
       );
     if (key === "scheduled_by")
       return tab === "sent"
-        ? row.sent_by_name || "--"
-        : row.scheduler_name || "--";
+        ? row.sent_by_name || "—"
+        : row.scheduler_name || "—";
     if (key === "created_at")
-      return String(row.created_at || "").slice(0, 10) || "--";
+      return String(row.created_at || "").slice(0, 10) || "—";
     if (key === "open_rate" || key === "click_rate")
       return `${row.sent ? Math.round((Number(row[key === "open_rate" ? "opened" : "clicked"] || 0) / Number(row.sent)) * 100) : 0}%`;
     if (key === "click_open_rate")
       return `${row.opened ? Math.round((Number(row.clicked || 0) / Number(row.opened)) * 100) : 0}%`;
-    return row[key] ?? "--";
+    return row[key] ?? "—";
   };
   const rowActions = (row) => (
-    <div className="relative">
+    <div className="relative flex justify-end" data-campaign-menu>
       <button
+        type="button"
         aria-label={`Actions for ${row.name}`}
+        aria-expanded={menu === row.id}
         onClick={(e) => {
-          setMenuPosition(e.currentTarget.getBoundingClientRect().bottom);
+          setMenuPosition(e.currentTarget.getBoundingClientRect().bottom + 4);
           setMenu(menu === row.id ? "" : row.id);
         }}
-        className="p-2 rounded hover:bg-navy-50"
+        className={BTN_ICON}
       >
         <MoreVertical size={18} />
       </button>
       {menu === row.id && (
         <div
-          className="fixed bg-white border border-navy-100 shadow-lg rounded-lg min-w-48 z-50 p-1 text-sm"
+          role="menu"
+          className="app-card fixed bg-white border border-navy-100 shadow-lg rounded-xl min-w-52 z-50 p-1 text-sm"
           style={{
             right: 24,
-            top: Math.min(window.innerHeight - 260, menuPosition),
+            top: Math.min(window.innerHeight - 280, menuPosition),
           }}
         >
-          <Link
-            to={destination(row)}
-            className="block px-3 py-2 hover:bg-navy-50"
-          >
-            {["draft", "scheduled", "paused", "cancelled"].includes(row.state)
-              ? "Edit"
-              : "View Report"}
+          <Link role="menuitem" to={destination(row)} className={menuItem}>
+            {editable(row) ? <Pencil size={15} /> : <BarChart3 size={15} />}
+            {editable(row) ? "Edit" : "View report"}
           </Link>
           <button
-            className="flex items-center gap-2 px-3 py-2 w-full hover:bg-navy-50"
+            type="button"
+            role="menuitem"
+            className={menuItem}
             onClick={() => openPreview(row)}
           >
             <Eye size={15} />
             Preview
           </button>
           <button
-            className="block px-3 py-2 w-full text-left hover:bg-navy-50"
+            type="button"
+            role="menuitem"
+            className={menuItem}
             onClick={() => openPreview(row, true)}
           >
-            Preview on Mobile
+            <Smartphone size={15} />
+            Preview on mobile
           </button>
           {canManage && (
             <button
-              className="flex items-center gap-2 px-3 py-2 w-full hover:bg-navy-50"
+              type="button"
+              role="menuitem"
+              className={menuItem}
               onClick={async () => {
+                setMenu("");
                 try {
                   const result = await duplicateCampaign(row.id);
                   navigate(`/admin/campaigns/${result.data.id}`);
@@ -218,22 +286,13 @@ export default function CampaignsListPage() {
               Duplicate
             </button>
           )}
-          {canManage && ["draft", "cancelled"].includes(row.state) && (
-            <button
-              className="flex items-center gap-2 px-3 py-2 w-full text-red-600 hover:bg-red-50"
-              onClick={() => {
-                setRemove(row);
-                setMenu("");
-              }}
-            >
-              <Trash2 size={15} />
-              Delete Campaign
-            </button>
-          )}
           {canManage && row.archived_at && (
             <button
-              className="flex items-center gap-2 px-3 py-2 w-full hover:bg-navy-50"
+              type="button"
+              role="menuitem"
+              className={menuItem}
               onClick={async () => {
+                setMenu("");
                 try {
                   await campaignAction(row.id, "restore");
                   await load();
@@ -247,236 +306,217 @@ export default function CampaignsListPage() {
               Restore
             </button>
           )}
+          {canManage && ["draft", "cancelled"].includes(row.state) && (
+            <>
+              <div className="my-1 border-t border-navy-100" />
+              <button
+                type="button"
+                role="menuitem"
+                className="flex items-center gap-2 px-3 py-2 w-full text-left rounded-lg text-red-600 hover:bg-red-50"
+                onClick={() => {
+                  setRemove(row);
+                  setMenu("");
+                }}
+              >
+                <Trash2 size={15} />
+                Delete campaign
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>
   );
+
+  const tableColumns = [
+    ...columns
+      .filter(([id]) => showColumns.includes(id))
+      .map(([id, label]) => ({
+        key: id,
+        label:
+          tab === "sent" && id === "scheduled_at_utc"
+            ? "Sent Date"
+            : tab === "sent" && id === "scheduled_by"
+              ? "Sent By"
+              : label,
+        render: (_value, row) => cell(row, id),
+      })),
+    {
+      key: "actions",
+      label: "",
+      align: "right",
+      render: (_value, row) => rowActions(row),
+    },
+  ];
+
   return (
-    <div>
-      <PageHeader
-        title="Campaigns"
-        breadcrumbs={[{ label: "Admin", to: "/admin" }, { label: "Campaigns" }]}
-      />
-      <CampaignWorkspaceNav />
-      <div
-        className="grid grid-cols-3 border border-navy-200 bg-white mb-6"
-        role="tablist"
-        aria-label="Campaign status"
-      >
-        {[
-          ["draft", "Draft Campaigns"],
-          ["scheduled", "Scheduled Campaigns"],
-          ["sent", "Sent Campaigns"],
-        ].map(([key, label]) => (
-          <button
-            role="tab"
-            aria-selected={tab === key}
-            key={key}
-            className={`py-3 text-sm border-r last:border-0 ${tab === key ? "bg-blue-50 text-blue-600 font-semibold" : "text-navy-500"}`}
-            onClick={() => {
-              setParams({ tab: key });
-              setMenu("");
-            }}
-          >
-            {label}
-          </button>
-        ))}
+    <div className="space-y-6">
+      <div>
+        <PageHeader
+          title="Campaigns"
+          subtitle="Plan, send and track email campaigns to contacts and event audiences."
+          breadcrumbs={[
+            { label: "Admin", to: "/admin" },
+            { label: "Campaigns" },
+          ]}
+          actions={
+            <>
+              <button
+                type="button"
+                onClick={() => void load()}
+                className={BTN_SECONDARY}
+              >
+                <RefreshCw size={15} />
+                Refresh
+              </button>
+              {canManage && (
+                <button
+                  type="button"
+                  className={BTN_PRIMARY}
+                  onClick={() => setCreateOpen(true)}
+                >
+                  <Plus size={15} />
+                  Create campaign
+                </button>
+              )}
+            </>
+          }
+        />
+        <CampaignWorkspaceNav />
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <h2 className="font-semibold text-navy-900">
-          {archived
-            ? "Deleted Campaigns"
-            : tab === "draft"
-              ? "Draft Campaigns"
-              : tab === "scheduled"
-                ? "Scheduled Campaigns"
-                : "Sent Campaigns"}
-        </h2>
-        <div className="flex flex-wrap gap-2 items-center">
-          <div className="relative">
-            <Search
-              size={16}
-              className="absolute left-3 top-2.5 text-navy-400"
-            />
-            <input
-              aria-label="Search campaigns"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search campaigns"
-              className={`${inputClass} pl-9 w-48`}
-            />
-          </div>
+
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+        <CampaignTabs
+          label="Campaign status"
+          tabs={STATUS_TABS}
+          value={archived ? "" : tab}
+          onChange={(key) => {
+            setArchived(false);
+            setParams({ tab: key });
+            setMenu("");
+          }}
+        />
+        {canManage && (
           <button
-            title="Manage displayed columns"
-            aria-label="Manage displayed columns"
-            onClick={() => setColumnsOpen(true)}
-            className="p-2 border border-navy-200 rounded-lg"
+            type="button"
+            className={
+              archived
+                ? BTN_SECONDARY.replace("bg-white", "bg-navy-100")
+                : BTN_SECONDARY
+            }
+            aria-pressed={archived}
+            onClick={() => setArchived(!archived)}
           >
-            <Settings2 size={18} />
+            <Archive size={15} />
+            {archived ? "Back to active campaigns" : "Deleted campaigns"}
           </button>
-          {canManage && (
-            <button
-              className="bg-blue-600 text-white rounded px-4 py-2 text-sm flex gap-1 items-center"
-              onClick={() => setCreateOpen(true)}
-            >
-              <Plus size={17} />
-              Create Campaign
-            </button>
-          )}
+        )}
+      </div>
+
+      <div className="flex flex-col md:flex-row md:items-center gap-3">
+        <div className="relative md:w-72">
+          <Search
+            size={16}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-navy-400 pointer-events-none"
+          />
+          <input
+            aria-label="Search campaigns"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search campaigns"
+            className={`${INPUT_SM} pl-9`}
+          />
         </div>
-      </div>
-      <div className="flex flex-wrap gap-2 mb-4">
         <select
           aria-label="Campaign type filter"
-          className={inputClass}
+          className={`${INPUT_SM} md:w-56`}
           value={type}
           onChange={(e) => setType(e.target.value)}
         >
-          <option value="">All Campaign Types</option>
-          {CAMPAIGN_TYPES.map((type) => (
-            <option key={type.id} value={type.id}>
-              {type.name}
+          <option value="">All campaign types</option>
+          {CAMPAIGN_TYPES.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name}
             </option>
           ))}
         </select>
         <select
           aria-label="Event filter"
-          className={inputClass}
+          className={`${INPUT_SM} md:w-64`}
           value={event}
           onChange={(e) => setEvent(e.target.value)}
         >
-          <option value="">All Events</option>
-          {events.map((event) => (
-            <option key={event.id} value={event.id}>
-              {event.title}
+          <option value="">All events</option>
+          {events.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.title}
             </option>
           ))}
         </select>
-        {canManage && (
-          <button
-            className="text-sm text-navy-500 underline"
-            onClick={() => setArchived(!archived)}
-          >
-            {archived ? "Back to active campaigns" : "Deleted campaigns"}
-          </button>
-        )}
+        <button
+          type="button"
+          title="Manage displayed columns"
+          onClick={() => setColumnsOpen(true)}
+          className={`${BTN_SECONDARY} md:ml-auto`}
+        >
+          <Settings2 size={15} />
+          Columns
+        </button>
       </div>
+
       {error && (
-        <p role="alert" className="text-red-600 mb-3">
+        <p
+          role="alert"
+          className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-3"
+        >
           {error}
         </p>
       )}
-      <div className="border border-navy-100 bg-white rounded-lg overflow-visible">
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-sm min-w-[1100px]">
-            <thead className="border-b border-navy-100 bg-navy-50">
-              <tr>
-                {columns
-                  .filter(([id]) => showColumns.includes(id))
-                  .map(([id, label]) => (
-                    <th
-                      key={id}
-                      className="text-left px-4 py-3 text-xs uppercase whitespace-nowrap text-navy-500"
-                    >
-                      {tab === "sent" && id === "scheduled_at_utc"
-                        ? "Sent Date"
-                        : tab === "sent" && id === "scheduled_by"
-                          ? "Sent By"
-                          : label}
-                    </th>
-                  ))}
-                <th className="px-3 py-3 sticky right-0 bg-navy-50 text-xs uppercase">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((row) => (
-                <tr
-                  key={row.id}
-                  className="border-b border-navy-100 hover:bg-navy-50/50"
-                >
-                  {columns
-                    .filter(([id]) => showColumns.includes(id))
-                    .map(([id]) => (
-                      <td key={id} className="px-4 py-3 whitespace-nowrap">
-                        {cell(row, id)}
-                      </td>
-                    ))}
-                  <td className="sticky right-0 bg-white px-3">
-                    {rowActions(row)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="md:hidden divide-y divide-navy-100">
-          {visible.map((row) => (
-            <article key={row.id} className="p-4">
-              <div className="flex items-center justify-between">
-                {cell(row, "name")}
-                {rowActions(row)}
-              </div>
-              <p className="text-xs text-navy-500 mt-2">
-                {cell(row, "campaign_type")} · {row.state}
-              </p>
-              <p className="text-sm mt-2">
-                Recipients {row.recipients || 0} · Opened {row.opened || 0} ·
-                Clicked {row.clicked || 0}
-              </p>
-            </article>
-          ))}
-        </div>
-        {loading && (
-          <p role="status" className="p-8 text-center text-navy-400">
-            Loading campaigns…
-          </p>
-        )}
-        {!loading && !rows.length && (
-          <p className="p-10 text-center text-navy-500">
-            No {archived ? "deleted" : tab} campaigns.
-          </p>
-        )}
-      </div>
-      <footer className="flex flex-wrap gap-3 justify-between items-center mt-4 text-sm text-navy-500">
-        <label>
-          Rows per page{" "}
-          <select
-            aria-label="Rows per page"
-            value={perPage}
-            className="ml-2 border rounded p-1"
-            onChange={(e) => {
-              setPerPage(Number(e.target.value));
+
+      <div>
+        <DataTable
+          columns={tableColumns}
+          data={visible}
+          loading={loading}
+          emptyTitle={
+            archived ? "No deleted campaigns" : `No ${tab} campaigns`
+          }
+          emptyDescription={
+            archived
+              ? "Campaigns you delete will appear here so they can be restored."
+              : tab === "draft"
+                ? "Create a campaign to start building your next email."
+                : `Campaigns appear here once they are ${tab}.`
+          }
+          emptyAction={
+            canManage && tab === "draft" && !archived ? (
+              <button
+                type="button"
+                className={BTN_PRIMARY}
+                onClick={() => setCreateOpen(true)}
+              >
+                <Plus size={15} />
+                Create campaign
+              </button>
+            ) : null
+          }
+        />
+        {!loading && (
+          <CampaignPagination
+            page={currentPage}
+            perPage={perPage}
+            total={rows.length}
+            onPageChange={setPage}
+            noun="campaigns"
+            perPageOptions={[20, 50, 100]}
+            onPerPageChange={(value) => {
+              setPerPage(value);
               setPage(1);
             }}
-          >
-            {[20, 50, 100].map((value) => (
-              <option key={value}>{value}</option>
-            ))}
-          </select>
-        </label>
-        <div className="flex items-center gap-3">
-          <button
-            disabled={currentPage === 1}
-            onClick={() => setPage(currentPage - 1)}
-            className="disabled:opacity-40"
-          >
-            Previous
-          </button>
-          <span>
-            {currentPage} / {pages}
-          </span>
-          <button
-            disabled={currentPage === pages}
-            onClick={() => setPage(currentPage + 1)}
-            className="disabled:opacity-40"
-          >
-            Next
-          </button>
-        </div>
-        <span>{rows.length} campaigns</span>
-      </footer>
+          />
+        )}
+      </div>
+
       <CampaignCreateModal
         key={createOpen ? "open" : "closed"}
         open={createOpen}
@@ -490,14 +530,40 @@ export default function CampaignsListPage() {
       <Modal
         isOpen={columnsOpen}
         onClose={() => setColumnsOpen(false)}
-        title="Select the columns you want to display in this list"
+        title="Displayed columns"
+        subtitle="Choose which columns appear in the campaign list."
         size="lg"
+        footer={
+          <>
+            <button
+              type="button"
+              className={BTN_SECONDARY}
+              onClick={() => {
+                setDisplayed(defaultColumns);
+                localStorage.removeItem("mm_campaign_columns");
+              }}
+            >
+              Reset to default
+            </button>
+            <button
+              type="button"
+              className={BTN_PRIMARY}
+              onClick={() => setColumnsOpen(false)}
+            >
+              Done
+            </button>
+          </>
+        }
       >
         <div className="grid sm:grid-cols-2 gap-3">
           {columns.map(([id, label]) => (
-            <label key={id} className="flex gap-2 text-sm">
+            <label
+              key={id}
+              className="flex items-center gap-3 text-sm text-navy-700 rounded-xl border border-navy-100 px-3 py-2.5 hover:bg-navy-50"
+            >
               <input
                 type="checkbox"
+                className={CHECKBOX}
                 checked={displayed.includes(id)}
                 disabled={id === "name"}
                 onChange={(e) => {
@@ -505,10 +571,14 @@ export default function CampaignsListPage() {
                     ? [...displayed, id]
                     : displayed.filter((key) => key !== id);
                   setDisplayed(next);
-                  localStorage.setItem(
-                    "mm_campaign_columns",
-                    JSON.stringify(next),
-                  );
+                  try {
+                    localStorage.setItem(
+                      "mm_campaign_columns",
+                      JSON.stringify(next),
+                    );
+                  } catch {
+                    // Column preference is a convenience; ignore storage errors.
+                  }
                 }}
               />
               {label}
@@ -520,54 +590,27 @@ export default function CampaignsListPage() {
         isOpen={Boolean(preview)}
         onClose={() => setPreview(null)}
         title={preview?.name}
+        subtitle={mobile ? "Mobile preview (375px)" : "Desktop preview"}
         size="xl"
       >
         <div className={mobile ? "max-w-[375px] mx-auto" : ""}>
           <iframe
             title="Campaign preview"
             sandbox=""
-            className="w-full h-[65vh] bg-white border"
+            className="w-full h-[65vh] bg-white rounded-xl border border-navy-100"
             srcDoc={preview?.html || ""}
           />
         </div>
       </Modal>
-      <Modal
+      <ConfirmDialog
         isOpen={Boolean(remove)}
-        onClose={() => setRemove(null)}
-        title="Delete Campaign"
-        footer={
-          <>
-            <button
-              onClick={() => setRemove(null)}
-              className="border rounded px-4 py-2"
-            >
-              Cancel
-            </button>
-            <button
-              className="bg-red-600 text-white rounded px-4 py-2"
-              onClick={async () => {
-                try {
-                  await campaignAction(remove.id, "archive");
-                  setRemove(null);
-                  await load();
-                  toast.success(
-                    "Campaign deleted. You can restore it from Deleted campaigns.",
-                  );
-                } catch (err) {
-                  toast.error(err.message);
-                }
-              }}
-            >
-              Delete Campaign
-            </button>
-          </>
-        }
-      >
-        <p className="text-sm">
-          Remove “{remove?.name}” from the active campaign list? You can restore
-          it from Deleted campaigns.
-        </p>
-      </Modal>
+        onClose={() => !removing && setRemove(null)}
+        onConfirm={handleRemove}
+        loading={removing}
+        title="Delete campaign"
+        message={`Remove “${remove?.name || ""}” from the active campaign list? You can restore it from Deleted campaigns.`}
+        confirmLabel="Delete campaign"
+      />
     </div>
   );
 }

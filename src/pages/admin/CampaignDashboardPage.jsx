@@ -1,102 +1,217 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { PageHeader, Card } from "../../components/ui";
+import {
+  Megaphone,
+  Send,
+  MailCheck,
+  MailOpen,
+  MousePointerClick,
+  AlertTriangle,
+  Ban,
+  UserMinus,
+  Info,
+} from "lucide-react";
+import {
+  PageHeader,
+  Card,
+  AdminStatCard,
+  DataTable,
+} from "../../components/ui";
 import CampaignWorkspaceNav from "../../components/admin/campaigns/CampaignWorkspaceNav";
+import { INPUT_SM } from "../../components/admin/campaigns/campaignStyles";
 import { campaignDashboard } from "../../utils/campaignWorkspaceApi";
 import { useToast } from "../../context/ToastContext";
+
+const PERIODS = [
+  ["week", "Last 7 days"],
+  ["month", "Last 30 days"],
+  ["quarter", "Last 90 days"],
+  ["year", "Last year"],
+  ["all", "All time"],
+];
+
+const rate = (part, whole) =>
+  whole ? `${((Number(part || 0) / Number(whole)) * 100).toFixed(1)}%` : "0%";
+
 export default function CampaignDashboardPage() {
   const toast = useToast();
-  const [period, setPeriod] = useState("month"),
-    [data, setData] = useState(null);
+  const [period, setPeriod] = useState("month");
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
-    void campaignDashboard(period)
-      .then(setData)
-      .catch((e) => toast.error(e.message));
+    let active = true;
+    campaignDashboard(period)
+      .then((result) => {
+        if (active) setData(result);
+      })
+      .catch((e) => toast.error(e.message))
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, [period, toast]);
-  const total = data?.totals;
-  return (
-    <div>
-      <CampaignWorkspaceNav />
-      <PageHeader
-        title="Campaign Dashboard"
-        subtitle="Email delivery and engagement across your campaigns."
-        actions={
-          <select
-            aria-label="Reporting period"
-            className="border rounded-lg p-2 text-sm"
-            value={period}
-            onChange={(e) => setPeriod(e.target.value)}
+
+  const total = data?.totals || {};
+  const stats = [
+    { label: "Campaigns", value: total.campaigns, icon: Megaphone, color: "navy" },
+    { label: "Sent", value: total.sent, icon: Send, color: "cyan" },
+    {
+      label: "Delivered",
+      value: total.delivered,
+      icon: MailCheck,
+      color: "green",
+      subtitle: `${rate(total.delivered, total.sent)} of sent`,
+    },
+    {
+      label: "Opened",
+      value: total.opened,
+      icon: MailOpen,
+      color: "blue",
+      subtitle: `${rate(total.opened, total.sent)} open rate`,
+    },
+    {
+      label: "Clicked",
+      value: total.clicked,
+      icon: MousePointerClick,
+      color: "purple",
+      subtitle: `${rate(total.clicked, total.sent)} click rate`,
+    },
+    {
+      label: "Bounced",
+      value: total.bounced,
+      icon: AlertTriangle,
+      color: "amber",
+      subtitle: `${rate(total.bounced, total.sent)} of sent`,
+    },
+    {
+      label: "Hard bounced",
+      value: data?.hard_bounced,
+      icon: Ban,
+      color: "red",
+      subtitle: "Currently on the suppression list",
+      to: "/admin/campaigns/manage/suppressions",
+    },
+    {
+      label: "Unsubscribed",
+      value: data?.unsubscribed,
+      icon: UserMinus,
+      color: "navy",
+      subtitle: "Currently on the suppression list",
+      to: "/admin/campaigns/manage/suppressions",
+    },
+  ];
+
+  const recentColumns = [
+    {
+      key: "name",
+      label: "Campaign",
+      render: (_v, row) => (
+        <div>
+          <Link
+            className="font-medium text-navy-900 hover:text-cyan-700"
+            to={`/admin/campaigns/${row.id}/report`}
           >
-            {[
-              ["week", "Last 7 Days"],
-              ["month", "Last 30 Days"],
-              ["quarter", "Last 90 Days"],
-              ["year", "Last Year"],
-              ["all", "All Time"],
-            ].map(([id, label]) => (
-              <option value={id} key={id}>
-                {label}
-              </option>
-            ))}
-          </select>
-        }
-      />
-      {!data ? (
-        <p>Loading dashboard…</p>
-      ) : (
-        <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            {[
-              ["Campaigns", total.campaigns],
-              ["Sent", total.sent],
-              ["Delivered", total.delivered],
-              ["Opened", total.opened],
-              ["Clicked", total.clicked],
-              ["Bounced", total.bounced],
-              ["Hard Bounced", data.hard_bounced],
-              ["Unsubscribed", data.unsubscribed],
-            ].map(([label, value]) => (
-              <Card key={label}>
-                <p className="text-navy-500 text-sm">{label}</p>
-                <p className="text-3xl font-semibold mt-3">
-                  {value.toLocaleString()}
-                </p>
-              </Card>
-            ))}
-          </div>
-          <Card>
-            <h2 className="font-semibold text-lg mb-4">Recent Campaigns</h2>
-            {data.recent.map((row) => (
-              <div
-                key={row.id}
-                className="py-4 border-t flex justify-between gap-4"
-              >
-                <div>
-                  <Link
-                    className="font-semibold text-blue-600"
-                    to={`/admin/campaigns/${row.id}/report`}
-                  >
-                    {row.name}
-                  </Link>
-                  <p className="text-xs text-navy-500 mt-1">{row.subject}</p>
-                </div>
-                <p className="text-sm">
-                  {row.sent} sent · {row.opened} opened · {row.clicked} clicked
-                </p>
-              </div>
-            ))}
-            {!data.recent.length && (
-              <p className="text-sm text-navy-500">
-                Your campaign results will appear here after sending.
-              </p>
-            )}
-          </Card>
-          <p className="text-xs text-navy-500 mt-5">
-            Open and click statistics are estimates. Hard bounce and unsubscribe
-            totals show the current suppression lists.
-          </p>
-        </>
-      )}
+            {row.name}
+          </Link>
+          <p className="text-xs text-navy-500 mt-0.5">{row.subject}</p>
+        </div>
+      ),
+    },
+    {
+      key: "sent",
+      label: "Sent",
+      align: "right",
+      render: (v) => <span className="tabular-nums">{v ?? 0}</span>,
+    },
+    {
+      key: "opened",
+      label: "Opened",
+      align: "right",
+      render: (v, row) => (
+        <span className="tabular-nums">
+          {v ?? 0}{" "}
+          <span className="text-xs text-navy-400">({rate(v, row.sent)})</span>
+        </span>
+      ),
+    },
+    {
+      key: "clicked",
+      label: "Clicked",
+      align: "right",
+      render: (v, row) => (
+        <span className="tabular-nums">
+          {v ?? 0}{" "}
+          <span className="text-xs text-navy-400">({rate(v, row.sent)})</span>
+        </span>
+      ),
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <PageHeader
+          title="Campaign dashboard"
+          subtitle="Email delivery and engagement across your campaigns."
+          breadcrumbs={[
+            { label: "Admin", to: "/admin" },
+            { label: "Campaigns", to: "/admin/campaigns" },
+            { label: "Dashboard" },
+          ]}
+          actions={
+            <select
+              aria-label="Reporting period"
+              className={`${INPUT_SM} w-44`}
+              value={period}
+              onChange={(e) => {
+                setLoading(true);
+                setPeriod(e.target.value);
+              }}
+            >
+              {PERIODS.map(([id, label]) => (
+                <option value={id} key={id}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          }
+        />
+        <CampaignWorkspaceNav />
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {stats.map((stat, index) => (
+          <AdminStatCard
+            key={stat.label}
+            {...stat}
+            value={stat.value ?? 0}
+            loading={loading}
+            animationDelay={index * 60}
+          />
+        ))}
+      </div>
+
+      <Card
+        title="Recent campaigns"
+        subtitle="Latest sent campaigns in the selected period."
+      >
+        <DataTable
+          columns={recentColumns}
+          data={data?.recent || []}
+          loading={loading}
+          emptyTitle="No campaign results yet"
+          emptyDescription="Your campaign results will appear here after sending."
+        />
+      </Card>
+
+      <p className="flex items-start gap-2 text-xs text-navy-500">
+        <Info size={14} className="mt-0.5 shrink-0" />
+        Open and click statistics are estimates. Hard bounce and unsubscribe
+        totals show the current suppression lists.
+      </p>
     </div>
   );
 }

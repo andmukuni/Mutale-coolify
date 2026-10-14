@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import CampaignCreateModal from "../campaigns/CampaignCreateModal";
-import { Plus } from "lucide-react";
-import { LoadingButton, StatusBadge } from "../../ui";
+import { Megaphone, Plus } from "lucide-react";
+import { LoadingButton, Spinner, StatusBadge } from "../../ui";
+import EmptyState from "../../EmptyState";
 import { useAuth } from "../../../context/AuthContext";
 import { useToast } from "../../../context/ToastContext";
 import {
@@ -59,19 +60,24 @@ export default function EventCampaignsPanel({ event }) {
         <LoadingButton
           disabled={!hasPermission("campaigns.manage")}
           icon={Plus}
-          className="bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-2 rounded-xl text-sm font-medium"
+          className="bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors"
           onClick={() => setCreating(true)}
         >
           New campaign
         </LoadingButton>
       </div>
       {loading ? (
-        <p className="text-sm text-navy-500">Loading campaigns…</p>
+        <div className="flex items-center gap-2 py-6 text-sm text-navy-500">
+          <Spinner size={16} />
+          Loading campaigns…
+        </div>
       ) : null}
       {!loading && rows.length === 0 ? (
-        <p className="text-sm text-navy-500">
-          No campaigns for this event yet.
-        </p>
+        <EmptyState
+          icon={Megaphone}
+          title="No campaigns yet"
+          description="Create a campaign to send updates or invitations for this event."
+        />
       ) : null}
       <ul className="divide-y divide-navy-100">
         {rows.map((row) => (
@@ -82,11 +88,11 @@ export default function EventCampaignsPanel({ event }) {
             <div>
               <Link
                 to={`/admin/campaigns/${row.id}`}
-                className="font-semibold text-navy-900 hover:text-cyan-700"
+                className="font-medium text-navy-900 hover:text-cyan-700"
               >
                 {row.name}
               </Link>
-              <p className="text-xs text-navy-400">
+              <p className="text-xs text-navy-500 mt-0.5">
                 {row.subject || "No subject"}
               </p>
             </div>

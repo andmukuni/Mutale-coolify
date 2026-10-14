@@ -1,19 +1,26 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Card } from "../../ui";
+import { Ban, Download, Search, UserMinus, UserRound } from "lucide-react";
+import { Card, DataTable } from "../../ui";
 import {
   campaignDate,
   UNSUBSCRIBE_REASONS,
   BOUNCE_REASONS,
 } from "../../../../shared/campaignWorkspace";
 import { downloadCsv } from "../../../utils/campaignWorkspaceApi";
+import CampaignTabs from "./CampaignTabs";
+import CampaignPagination from "./CampaignPagination";
+import { BTN_SECONDARY, INPUT_SM } from "./campaignStyles";
+
+const PAGE_SIZE = 25;
+
 export default function CampaignSuppressionView({ data }) {
   const [tab, setTab] = useState("bounced"),
     [search, setSearch] = useState(""),
     [reason, setReason] = useState(""),
     [from, setFrom] = useState(""),
     [to, setTo] = useState(""),
-    [page, setPage] = useState(0);
+    [page, setPage] = useState(1);
   const date = (row) =>
     tab === "bounced"
       ? row.last_bounced_at || row.created_at
@@ -33,7 +40,7 @@ export default function CampaignSuppressionView({ data }) {
   const columns =
     tab === "bounced"
       ? [
-          ["profile", "Actions"],
+          ["profile", "Contact"],
           ["first_name", "First Name"],
           ["last_name", "Last Name"],
           ["email_normalized", "Email"],
@@ -42,7 +49,7 @@ export default function CampaignSuppressionView({ data }) {
           ["active_member", "Active Member"],
         ]
       : [
-          ["profile", "View Contact Profile"],
+          ["profile", "Contact"],
           ["first_name", "First Name"],
           ["last_name", "Last Name"],
           ["email_normalized", "Email"],
@@ -66,50 +73,80 @@ export default function CampaignSuppressionView({ data }) {
           : key === "bounce_reason"
             ? row.bounce_reason || "Other"
             : row[key] || "—";
+  const tableColumns = columns.map(([key, label]) => ({
+    key,
+    label,
+    render: (_v, row) =>
+      key === "profile" ? (
+        row.contact_id ? (
+          <Link
+            className="inline-flex items-center gap-1 text-xs font-medium text-cyan-700 hover:text-cyan-600"
+            to={value(row, key)}
+          >
+            <UserRound size={14} />
+            View profile
+          </Link>
+        ) : (
+          <span className="text-navy-400">—</span>
+        )
+      ) : (
+        <span className="whitespace-nowrap">{value(row, key)}</span>
+      ),
+  }));
+  const resetPage = (setter) => (e) => {
+    setter(e.target.value);
+    setPage(1);
+  };
   return (
     <Card>
-      <div className="flex gap-5 border-b mb-5">
-        {[
-          ["bounced", "Suppressed by Bounce"],
-          ["unsubscribed", "Unsubscribed"],
-        ].map(([id, label]) => (
-          <button
-            key={id}
-            className={`pb-3 text-sm ${tab === id ? "text-blue-600 border-b-2 border-blue-600" : ""}`}
-            onClick={() => {
-              setTab(id);
-              setReason("");
-              setPage(0);
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      <div className="flex flex-wrap gap-3 mb-5">
-        <input
-          aria-label="Search suppressed contacts"
-          className="border rounded-lg p-2 text-sm flex-1 min-w-36"
-          value={search}
-          placeholder="Search name or email"
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPage(0);
-          }}
-        />
+      <CampaignTabs
+        className="mb-5"
+        label="Suppression list"
+        value={tab}
+        onChange={(id) => {
+          setTab(id);
+          setReason("");
+          setPage(1);
+        }}
+        tabs={[
+          {
+            key: "bounced",
+            label: "Suppressed by bounce",
+            icon: Ban,
+            count: (data.bounced || []).length,
+          },
+          {
+            key: "unsubscribed",
+            label: "Unsubscribed",
+            icon: UserMinus,
+            count: (data.unsubscribed || []).length,
+          },
+        ]}
+      />
+      <div className="flex flex-col lg:flex-row lg:items-end gap-3 mb-5">
+        <div className="relative flex-1 min-w-48">
+          <Search
+            size={16}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-navy-400 pointer-events-none"
+          />
+          <input
+            aria-label="Search suppressed contacts"
+            className={`${INPUT_SM} pl-9`}
+            value={search}
+            placeholder="Search name or email"
+            onChange={resetPage(setSearch)}
+          />
+        </div>
         <select
           aria-label="Suppression reason"
-          className="border rounded-lg p-2 text-sm"
+          className={`${INPUT_SM} lg:w-56`}
           value={reason}
-          onChange={(e) => {
-            setReason(e.target.value);
-            setPage(0);
-          }}
+          onChange={resetPage(setReason)}
         >
           <option value="">
             {tab === "bounced"
-              ? "All Bounce Reasons"
-              : "All Unsubscribe Reasons"}
+              ? "All bounce reasons"
+              : "All unsubscribe reasons"}
           </option>
           {(tab === "bounced" ? BOUNCE_REASONS : UNSUBSCRIBE_REASONS).map(
             (item) => (
@@ -117,32 +154,28 @@ export default function CampaignSuppressionView({ data }) {
             ),
           )}
         </select>
-        <label className="text-xs">
-          From Date
+        <label className="text-xs font-medium text-navy-600 lg:w-40">
+          From date
           <input
-            className="block border rounded p-1"
+            className={`${INPUT_SM} mt-1`}
             type="date"
             value={from}
-            onChange={(e) => {
-              setFrom(e.target.value);
-              setPage(0);
-            }}
+            onChange={resetPage(setFrom)}
           />
         </label>
-        <label className="text-xs">
-          To Date
+        <label className="text-xs font-medium text-navy-600 lg:w-40">
+          To date
           <input
-            className="block border rounded p-1"
+            className={`${INPUT_SM} mt-1`}
             type="date"
             value={to}
-            onChange={(e) => {
-              setTo(e.target.value);
-              setPage(0);
-            }}
+            onChange={resetPage(setTo)}
           />
         </label>
         <button
-          className="border rounded-lg px-4 text-sm"
+          type="button"
+          className={BTN_SECONDARY}
+          disabled={!rows.length}
           onClick={() =>
             downloadCsv(
               `suppression-${tab}.csv`,
@@ -151,64 +184,28 @@ export default function CampaignSuppressionView({ data }) {
             )
           }
         >
+          <Download size={15} />
           Export
         </button>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr>
-              {columns.map(([key, label]) => (
-                <th
-                  className="p-3 text-left border-b whitespace-nowrap"
-                  key={key}
-                >
-                  {label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.slice(page * 25, page * 25 + 25).map((row) => (
-              <tr
-                key={`${row.email_normalized}-${row.reason || "unsubscribe"}`}
-              >
-                {columns.map(([key]) => (
-                  <td key={key} className="p-3 border-b whitespace-nowrap">
-                    {key === "profile" && row.contact_id ? (
-                      <Link className="text-blue-600" to={value(row, key)}>
-                        View Contact Profile
-                      </Link>
-                    ) : (
-                      value(row, key)
-                    )}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {!rows.length && (
-          <p className="p-8 text-sm text-navy-500">
-            No contacts match these filters.
-          </p>
-        )}
-      </div>
-      <div className="flex justify-between text-sm mt-4">
-        <button disabled={!page} onClick={() => setPage((p) => p - 1)}>
-          Previous
-        </button>
-        <span>
-          {rows.length} contacts · Page {page + 1} of{" "}
-          {Math.max(1, Math.ceil(rows.length / 25))}
-        </span>
-        <button
-          disabled={(page + 1) * 25 >= rows.length}
-          onClick={() => setPage((p) => p + 1)}
-        >
-          Next
-        </button>
-      </div>
+      <DataTable
+        columns={tableColumns}
+        data={rows
+          .slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+          .map((row) => ({
+            ...row,
+            id: `${row.email_normalized}-${row.reason || "unsubscribe"}`,
+          }))}
+        emptyTitle="No suppressed contacts"
+        emptyDescription="No contacts match these filters."
+      />
+      <CampaignPagination
+        page={page}
+        perPage={PAGE_SIZE}
+        total={rows.length}
+        onPageChange={setPage}
+        noun="contacts"
+      />
     </Card>
   );
 }

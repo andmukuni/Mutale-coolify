@@ -25,7 +25,8 @@ import {
   escapeHtml,
   sanitizeHttpUrl,
 } from "../../../../shared/emailCampaign";
-import { Modal } from "../../ui";
+import { Modal, FormField } from "../../ui";
+import { BTN_PRIMARY, BTN_SECONDARY } from "./campaignStyles";
 const FontSize = Extension.create({
   name: "campaignFontSize",
   addGlobalAttributes() {
@@ -147,7 +148,7 @@ export default function CampaignRichText({
   ];
   return (
     <div
-      className="border border-navy-200 rounded bg-white"
+      className="rounded-xl border border-navy-200 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-cyan-500 focus-within:border-transparent"
       onPointerDownCapture={() => {
         touched.current = true;
       }}
@@ -162,7 +163,7 @@ export default function CampaignRichText({
       }}
     >
       {!disabled && (
-        <div className="flex flex-wrap gap-1 p-2 border-b border-navy-100 bg-navy-50/60">
+        <div className="flex flex-wrap items-center gap-1 p-2 border-b border-navy-100 bg-navy-50">
           {actions.map(([Icon, title, action]) => (
             <button
               type="button"
@@ -172,7 +173,7 @@ export default function CampaignRichText({
               disabled={!editor}
               onMouseDown={(e) => e.preventDefault()}
               onClick={action}
-              className="p-1.5 hover:bg-navy-100 rounded"
+              className="p-1.5 rounded-lg text-navy-600 hover:bg-navy-100 hover:text-navy-900 disabled:opacity-40"
             >
               <Icon size={15} />
             </button>
@@ -181,7 +182,7 @@ export default function CampaignRichText({
             aria-label="Font Color"
             type="color"
             defaultValue="#141D45"
-            className="w-7 h-7"
+            className="w-7 h-7 rounded-lg border border-navy-200 bg-white p-0.5 cursor-pointer"
             onChange={(e) =>
               editor?.chain().focus().setColor(e.target.value).run()
             }
@@ -189,7 +190,7 @@ export default function CampaignRichText({
           <select
             aria-label="Font Size"
             defaultValue="15px"
-            className="text-xs bg-transparent"
+            className="text-xs rounded-lg border border-navy-200 bg-white px-1.5 py-1 text-navy-700"
             onChange={(e) =>
               editor
                 ?.chain()
@@ -209,7 +210,7 @@ export default function CampaignRichText({
           <select
             aria-label="Font Family"
             defaultValue="Arial"
-            className="text-xs bg-transparent max-w-24"
+            className="text-xs rounded-lg border border-navy-200 bg-white px-1.5 py-1 text-navy-700 max-w-28"
             onChange={(e) =>
               editor?.chain().focus().setFontFamily(e.target.value).run()
             }
@@ -231,7 +232,7 @@ export default function CampaignRichText({
             type="button"
             title="Insert Link"
             aria-label="Insert Link"
-            className="p-1.5"
+            className="p-1.5 rounded-lg text-navy-600 hover:bg-navy-100 hover:text-navy-900"
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => {
               setUrl(editor?.getAttributes("link").href || "");
@@ -243,7 +244,7 @@ export default function CampaignRichText({
           <select
             aria-label="Merge Tags"
             value=""
-            className="text-xs bg-transparent max-w-36"
+            className="text-xs rounded-lg border border-navy-200 bg-white px-1.5 py-1 text-navy-700 max-w-36"
             onChange={(e) => {
               if (e.target.value)
                 editor
@@ -305,19 +306,20 @@ export default function CampaignRichText({
       <Modal
         isOpen={linkOpen}
         onClose={() => setLinkOpen(false)}
-        title="Insert Link"
+        title="Insert link"
+        size="sm"
         footer={
           <>
             <button
               type="button"
               onClick={() => setLinkOpen(false)}
-              className="border rounded px-4 py-2"
+              className={BTN_SECONDARY}
             >
               Cancel
             </button>
             <button
               type="button"
-              className="bg-blue-600 text-white rounded px-4 py-2"
+              className={BTN_PRIMARY}
               onClick={() => {
                 const safe = sanitizeHttpUrl(url);
                 if (!safe) {
@@ -341,14 +343,16 @@ export default function CampaignRichText({
           </>
         }
       >
-        <input
-          aria-label="Link URL"
-          className="w-full border rounded p-2"
+        <FormField
+          label="Link URL"
+          name="campaign-link-url"
+          type="url"
           value={url}
+          error={linkError}
+          onClearError={() => setLinkError("")}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="https://"
         />
-        {linkError && <p className="text-red-600 text-sm mt-2">{linkError}</p>}
       </Modal>
     </div>
   );
