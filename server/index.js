@@ -196,7 +196,7 @@ if (process.env.TRUST_PROXY === '1' || IS_PRODUCTION) {
 }
 
 /** Bumps when auth/API behavior changes — check GET /api/health on cPanel after deploy */
-const API_DEPLOYMENT_TAG = '2026-10-14-campaign-workspace-v2';
+const API_DEPLOYMENT_TAG = '2026-10-14-campaign-collation-fix';
 
 const CORS_ORIGINS = String(process.env.CORS_ORIGINS || '').split(',').map((v) => v.trim()).filter(Boolean);
 

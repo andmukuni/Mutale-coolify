@@ -174,6 +174,7 @@ export async function syncCampaignContacts(pool) {
       batch.flat(),
     );
   }
+  // Imported registrations use general_ci; normalize the campaign operand at this boundary.
   // Automatic subscription enrolment requires prior, explicit marketing consent.
   await pool.query(`INSERT IGNORE INTO campaign_group_members (group_id,contact_id,state,consent_source,consent_at)
     SELECT g.id,c.id,'active','automatic_with_recorded_consent',p.marketing_opt_in_at
@@ -181,7 +182,7 @@ export async function syncCampaignContacts(pool) {
     WHERE g.kind='subscription' AND g.archived_at IS NULL AND c.archived_at IS NULL
     AND p.marketing_opt_in=1 AND p.unsubscribed_at IS NULL AND p.marketing_opt_in_at>=g.created_at
     AND ((g.auto_users=1 AND c.user_id IS NOT NULL) OR (g.auto_attendees=1 AND EXISTS(
-      SELECT 1 FROM event_registrations r WHERE LOWER(TRIM(COALESCE(NULLIF(r.booked_for_email,''),r.user_email)))=c.email_normalized))
+      SELECT 1 FROM event_registrations r WHERE LOWER(TRIM(COALESCE(NULLIF(r.booked_for_email,''),r.user_email)))=c.email_normalized COLLATE utf8mb4_general_ci))
     OR (g.auto_members=1 AND EXISTS(SELECT 1 FROM campaign_memberships m WHERE m.contact_id=c.id AND m.status='active' AND (m.starts_at IS NULL OR m.starts_at<=UTC_DATE()) AND (m.expires_at IS NULL OR m.expires_at>=UTC_DATE()))))
     AND (g.active_only=0 OR EXISTS(SELECT 1 FROM campaign_memberships m WHERE m.contact_id=c.id AND m.status='active' AND (m.starts_at IS NULL OR m.starts_at<=UTC_DATE()) AND (m.expires_at IS NULL OR m.expires_at>=UTC_DATE())))`);
 }

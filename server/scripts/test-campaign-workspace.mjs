@@ -25,6 +25,7 @@ import {
   setCampaignGroupMembers,
   saveCampaignMembership,
   getCampaignDirectory,
+  campaignSuppressions,
   updateSubscription,
   refreshCampaignSenders,
 } from "../campaignDirectoryService.js";
@@ -89,7 +90,7 @@ const deps = {
   }),
 };
 try {
-  await root.query(`CREATE DATABASE \`${database}\``);
+  await root.query(`CREATE DATABASE \`${database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci`);
   pool = mysql.createPool({ ...connectionOptions, database });
   // Copy table structures only, never customer records.
   const [tables] = await root.query(`SHOW TABLES FROM \`${source}\``);
@@ -98,6 +99,14 @@ try {
     await pool.query(
       `CREATE TABLE \`${table}\` LIKE \`${source}\`.\`${table}\``,
     );
+  }
+  // Production imports use general_ci, while campaign tables inherit MySQL 8's default.
+  for (const table of ["events", "users", "event_registrations"])
+    await pool.query(`ALTER TABLE \`${table}\` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci`);
+  for (const row of tables) {
+    const table = Object.values(row)[0];
+    if (/^(campaign_|email_|event_invite|event_resource)/.test(table))
+      await pool.query(`ALTER TABLE \`${table}\` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci`);
   }
   await ensureEmailCommunicationsSchema(pool);
   await ensureEmailCommunicationsSchema(pool);
@@ -1019,6 +1028,14 @@ try {
   check(
     "automatic attendee lists recognize account-backed attendees while requiring recorded consent",
   );
+  const mixedListing = await listCampaigns(pool);
+  assert.ok(mixedListing.some(campaign=>campaign.event_title==='Campaign Test Event'));
+  assert.ok((await getCampaignDirectory(pool)).contacts.length>0);
+  await campaignSuppressions(pool);
+  const [collations] = await pool.query("SELECT TABLE_NAME,TABLE_COLLATION FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('events','users','event_registrations','email_campaigns','campaign_contacts')");
+  for (const table of collations)
+    assert.equal(table.TABLE_COLLATION, ['events','users','event_registrations'].includes(table.TABLE_NAME)?'utf8mb4_general_ci':'utf8mb4_0900_ai_ci');
+  check('campaign listing, directory and suppression views work with unchanged mixed production collations');
   if (keep) {
     await pool.query(
       "UPDATE campaign_sender_identities SET status='unverified'",

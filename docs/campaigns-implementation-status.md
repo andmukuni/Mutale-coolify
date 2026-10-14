@@ -2,7 +2,15 @@
 
 Implemented locally on 14 October 2026 (Africa/Lusaka), using the privately retained Glue Up reference and [implementation plan](event-campaigns-implementation-plan.md). The account-specific reference document and screenshots remain local and are excluded from the public GitHub repository; implementation screenshots below contain disposable test data only.
 
-The local application is available at **http://localhost:5175/admin/campaigns**. The API runs on port 4002 and exposes deployment tag `2026-10-14-campaign-workspace-v2` at `/api/health`. Production deployment and live provider delivery have not been performed.
+The local application is available at **http://localhost:5175/admin/campaigns**. The API runs on port 4002. The original release was deployed through Coolify from GitHub `main` as commit `4d484f3`; live provider delivery has not been performed by this implementation work.
+
+### Production collation correction — 14 October 2026
+
+Production's imported `users`, `events` and `event_registrations` tables use `utf8mb4_general_ci`, while the campaign tables use MySQL 8's `utf8mb4_0900_ai_ci`. Campaign listing joins and the attendee subscription query compared those columns implicitly, producing MySQL error 1267 throughout the shared campaign workspace. The local checks originally used one collation for all tables and missed this production difference.
+
+The correction explicitly collates the campaign reference operands at the five joins/comparisons with imported tables. It does not rewrite customer records, change table collations, reset subscriptions or change mail settings. See [MySQL's collation precedence rules](https://dev.mysql.com/doc/refman/8.4/en/charset-collation-coercibility.html).
+
+The maintained MySQL integration fixture now preserves the same mixed collations as production. It failed with the exact reported error before the correction; all **35 MySQL checks** and **32 focused tests** pass afterward. The corrected API identifies itself as `2026-10-14-campaign-collation-fix` at `/api/health`.
 
 The main local API was restarted and its health/version and additive migration were verified. Its existing database still contains zero events/campaigns and six seeded templates. Test campaigns, contacts, surveys and credentials were confined to disposable databases, which were removed after verification.
 

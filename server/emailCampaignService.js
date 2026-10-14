@@ -102,6 +102,8 @@ export async function listCampaigns(
       "c.state IN ('sending','completed','partially_failed','failed')",
     );
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+  // Imported event/user identifiers can use a different collation from campaign tables.
+  // Collate the campaign references explicitly without changing stored records or indexes.
   const [rows] = await pool.query(
     `SELECT c.*,e.title AS event_title,t.name AS template_name,
       IF(c.audience_frozen_at IS NULL,c.audience_preview_count,(SELECT COUNT(*) FROM email_campaign_recipients r WHERE r.campaign_id=c.id AND r.included=1)) AS recipients,
@@ -111,8 +113,8 @@ export async function listCampaigns(
       (SELECT COUNT(*) FROM email_campaign_recipients r WHERE r.campaign_id=c.id AND r.bounced_at IS NOT NULL) AS bounced,
       (SELECT COUNT(*) FROM email_campaign_recipients r WHERE r.campaign_id=c.id AND (r.outcome='skipped' OR (r.included=0 AND r.exclude_reason IN ('hard_bounce','complaint','unsubscribed','no_marketing_consent')))) AS ignored,
       COALESCE(u.name,c.created_by) AS creator_name,COALESCE(scheduler.name,c.scheduled_by) AS scheduler_name,COALESCE(sender.name,c.sent_by) AS sent_by_name
-     FROM email_campaigns c LEFT JOIN events e ON e.id=c.event_id LEFT JOIN email_design_templates t ON t.id=c.template_id
-     LEFT JOIN users u ON u.id=c.created_by LEFT JOIN users scheduler ON scheduler.id=c.scheduled_by LEFT JOIN users sender ON sender.id=c.sent_by ${where} ORDER BY c.updated_at DESC`,
+     FROM email_campaigns c LEFT JOIN events e ON e.id=c.event_id COLLATE utf8mb4_general_ci LEFT JOIN email_design_templates t ON t.id=c.template_id
+     LEFT JOIN users u ON u.id=c.created_by COLLATE utf8mb4_general_ci LEFT JOIN users scheduler ON scheduler.id=c.scheduled_by COLLATE utf8mb4_general_ci LEFT JOIN users sender ON sender.id=c.sent_by COLLATE utf8mb4_general_ci ${where} ORDER BY c.updated_at DESC`,
     params,
   );
   return (rows || []).map(mapCampaign);
