@@ -27,3 +27,11 @@ export const CHECKBOX =
 
 export const SECTION_TITLE = "text-base font-semibold text-navy-900";
 export const MUTED_TEXT = "text-sm text-navy-500";
+
+// Underline section tab, matching EventProfilePage.
+export const tabClass = (active) =>
+  `relative inline-flex items-center gap-2 px-4 py-3.5 text-sm font-semibold whitespace-nowrap transition-colors disabled:opacity-50 disabled:cursor-wait ${
+    active
+      ? "text-cyan-700"
+      : "text-navy-500 hover:bg-navy-50 hover:text-navy-800"
+  }`;

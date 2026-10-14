@@ -1,4 +1,6 @@
 import { NavLink } from "react-router-dom";
+import { tabClass } from "./campaignStyles";
+import { TabIndicator } from "./CampaignTabBar";
 import {
   LayoutDashboard,
   Megaphone,
@@ -31,25 +33,26 @@ export default function CampaignWorkspaceNav() {
   return (
     <nav
       aria-label="Campaign workspace"
-      className="flex overflow-x-auto gap-1 mb-6 border-b border-navy-100"
+      className="app-card mb-6 bg-white rounded-2xl border border-navy-100 shadow-sm px-1"
     >
-      {sections.map(([name, to, Icon]) => (
-        <NavLink
-          key={to}
-          end={to === "/admin/campaigns"}
-          to={to}
-          className={({ isActive }) =>
-            `inline-flex items-center gap-2 px-3 py-3 -mb-px text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
-              isActive
-                ? "border-cyan-600 text-cyan-700"
-                : "border-transparent text-navy-500 hover:text-navy-800 hover:border-navy-200"
-            }`
-          }
-        >
-          <Icon size={15} />
-          {name}
-        </NavLink>
-      ))}
+      <div className="flex gap-1 overflow-x-auto">
+        {sections.map(([name, to, Icon]) => (
+          <NavLink
+            key={to}
+            end={to === "/admin/campaigns"}
+            to={to}
+            className={({ isActive }) => tabClass(isActive)}
+          >
+            {({ isActive }) => (
+              <>
+                <Icon size={16} />
+                {name}
+                <TabIndicator active={isActive} />
+              </>
+            )}
+          </NavLink>
+        ))}
+      </div>
     </nav>
   );
 }

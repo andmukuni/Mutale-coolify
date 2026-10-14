@@ -6,8 +6,11 @@ import {
   ArrowUp,
   ArrowDown,
   Plus,
-  ArrowLeft,
   ExternalLink,
+  Eye,
+  PenSquare,
+  LayoutList,
+  Palette,
   Smartphone,
   Monitor,
   Type,
@@ -48,6 +51,7 @@ import { formatEventWhen } from "../../../../shared/emailCampaign";
 import CampaignImagePicker from "./CampaignImagePicker";
 import { useToast } from "../../../context/ToastContext";
 import CampaignRichText from "./CampaignRichText";
+import CampaignTabBar from "./CampaignTabBar";
 import { BTN_SECONDARY, BTN_ICON, CHECKBOX, INPUT_SM, LINK_ACTION, LINK_DANGER } from "./campaignStyles";
 const CampaignGrapesCanvas = lazy(() => import("./CampaignGrapesCanvas"));
 const fieldClass = INPUT_SM;
@@ -783,74 +787,76 @@ export default function CampaignEmailEditor({
   ];
   return (
     <div>
-      <div className="flex flex-wrap justify-between gap-3 mb-4">
-        <div
-          role="tablist"
-          aria-label="Editor mode"
-          className="inline-flex rounded-xl border border-navy-200 bg-navy-50 p-1"
-        >
-          {(doc.grapes
-            ? [["canvas", "Content & Design"]]
+      <CampaignTabBar
+        label="Editor mode"
+        className="mb-5 border-b border-navy-200"
+        value={preview ? "preview" : mode}
+        onChange={(key) => {
+          if (key === "preview") {
+            setPreview(true);
+            return;
+          }
+          setMode(key);
+          setPreview(false);
+        }}
+        tabs={[
+          ...(doc.grapes
+            ? [{ key: "canvas", label: "Content & Design", icon: PenSquare }]
             : [
-                ["content", "Content"],
-                ["design", "Design"],
-              ]
-          ).map(([id, label]) => (
+                { key: "content", label: "Content", icon: LayoutList },
+                { key: "design", label: "Design", icon: Palette },
+              ]),
+          { key: "preview", label: "Preview", icon: Eye },
+        ]}
+        trailing={
+          <>
+            {preview && (
+              <div
+                role="group"
+                aria-label="Preview device"
+                className="inline-flex rounded-lg bg-navy-100 p-0.5"
+              >
+                {[
+                  [false, "Desktop", Monitor],
+                  [true, "Mobile", Smartphone],
+                ].map(([isMobile, name, Icon]) => (
+                  <button
+                    key={name}
+                    type="button"
+                    aria-pressed={mobile === isMobile}
+                    onClick={() => setMobile(isMobile)}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                      mobile === isMobile
+                        ? "bg-cyan-600 text-white"
+                        : "text-navy-600 hover:text-navy-900"
+                    }`}
+                  >
+                    <Icon size={14} />
+                    {name}
+                  </button>
+                ))}
+              </div>
+            )}
             <button
-              key={id}
               type="button"
-              role="tab"
-              aria-selected={mode === id && !preview}
+              className={`${BTN_ICON} gap-1.5 text-xs font-medium`}
+              title="Open preview in a new browser tab"
               onClick={() => {
-                setMode(id);
-                setPreview(false);
+                const url = URL.createObjectURL(
+                  new Blob([html], {
+                    type: "text/html",
+                  }),
+                );
+                window.open(url, "_blank", "noopener,noreferrer");
+                setTimeout(() => URL.revokeObjectURL(url), 60000);
               }}
-              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${mode === id && !preview ? "bg-white text-cyan-700 shadow-sm" : "text-navy-600 hover:text-navy-900"}`}
             >
-              {label}
+              <ExternalLink size={15} />
+              <span className="hidden sm:inline">Open in browser</span>
             </button>
-          ))}
-        </div>
-        <div className="flex flex-wrap gap-2 items-center">
-          {preview && (
-            <button
-              type="button"
-              className={BTN_SECONDARY}
-              onClick={() => setPreview(false)}
-            >
-              <ArrowLeft size={15} />
-              Back to editor
-            </button>
-          )}
-          <button
-            type="button"
-            className={BTN_SECONDARY}
-            onClick={() => {
-              const url = URL.createObjectURL(
-                new Blob([html], {
-                  type: "text/html",
-                }),
-              );
-              window.open(url, "_blank", "noopener,noreferrer");
-              setTimeout(() => URL.revokeObjectURL(url), 60000);
-            }}
-          >
-            <ExternalLink size={15} />
-            Open in browser
-          </button>
-          <button
-            type="button"
-            className={BTN_SECONDARY}
-            onClick={() => {
-              setMobile(!mobile);
-              setPreview(true);
-            }}
-          >
-            {mobile ? <Monitor size={15} /> : <Smartphone size={15} />}
-            {mobile ? "Desktop preview" : "Mobile preview"}
-          </button>
-        </div>
-      </div>
+          </>
+        }
+      />
       {preview ? (
         <div className={mobile ? "max-w-[375px] mx-auto" : ""}>
           <iframe

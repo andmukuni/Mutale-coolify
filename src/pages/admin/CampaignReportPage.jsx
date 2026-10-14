@@ -30,7 +30,7 @@ import {
   Modal,
 } from "../../components/ui";
 import CampaignWorkspaceNav from "../../components/admin/campaigns/CampaignWorkspaceNav";
-import CampaignTabs from "../../components/admin/campaigns/CampaignTabs";
+import CampaignTabBar from "../../components/admin/campaigns/CampaignTabBar";
 import CampaignPagination from "../../components/admin/campaigns/CampaignPagination";
 import {
   BTN_PRIMARY,
@@ -479,7 +479,8 @@ export default function CampaignReportPage() {
           </div>
         </div>
       )}
-      <CampaignTabs
+      <CampaignTabBar
+        className="app-card bg-white rounded-2xl border border-navy-100 shadow-sm px-1"
         label="Report sections"
         value={tab}
         onChange={setTab}

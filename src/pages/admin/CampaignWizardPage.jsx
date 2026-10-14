@@ -21,6 +21,11 @@ import {
   XCircle,
   AlertTriangle,
   Mail,
+  CheckCircle2,
+  Circle,
+  Users,
+  Settings2,
+  PenSquare,
 } from "lucide-react";
 import {
   PageHeader,
@@ -36,12 +41,14 @@ import CampaignEmailEditor from "../../components/admin/campaigns/CampaignEmailE
 import CampaignAudienceSelector from "../../components/admin/campaigns/CampaignAudienceSelector.jsx";
 import CampaignWorkspaceNav from "../../components/admin/campaigns/CampaignWorkspaceNav.jsx";
 import useCampaignConfirm from "../../components/admin/campaigns/useCampaignConfirm.jsx";
+import { TabIndicator } from "../../components/admin/campaigns/CampaignTabBar.jsx";
 import {
   BTN_PRIMARY,
   BTN_SECONDARY,
   CHECKBOX,
   INPUT,
   SECTION_TITLE,
+  tabClass,
 } from "../../components/admin/campaigns/campaignStyles";
 import {
   CAMPAIGN_LAYOUTS,
@@ -70,6 +77,13 @@ import {
   campaignAction,
 } from "../../utils/campaignWorkspaceApi";
 
+const stepIcons = {
+  Recipients: Users,
+  Settings: Settings2,
+  Template: LayoutTemplate,
+  "Content & Design": PenSquare,
+  "Review & Send": Send,
+};
 const layoutIcons = {
   empty: SquareDashed,
   left_sidebar: PanelLeft,
@@ -516,39 +530,32 @@ export default function CampaignWizardPage() {
       )}
       <nav
         aria-label="Campaign steps"
-        className="app-card bg-white rounded-2xl border border-navy-100 shadow-sm p-2 flex overflow-x-auto gap-1"
+        className="app-card sticky top-16 z-20 bg-white rounded-2xl border border-navy-100 shadow-sm px-1"
       >
-        {steps.map((label, index) => {
-          const active = step === index;
-          const done = index < step;
-          return (
-            <button
-              type="button"
-              key={label}
-              onClick={() => next(index)}
-              disabled={busy}
-              aria-current={active ? "step" : undefined}
-              className={`flex-1 min-w-max inline-flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors disabled:cursor-wait ${
-                active
-                  ? "bg-cyan-600 text-white"
-                  : "text-navy-600 hover:bg-navy-50"
-              }`}
-            >
-              <span
-                className={`grid place-items-center h-6 w-6 rounded-full text-xs font-semibold ${
-                  active
-                    ? "bg-white/20 text-white"
-                    : done
-                      ? "bg-cyan-50 text-cyan-700"
-                      : "bg-navy-100 text-navy-500"
-                }`}
+        <div className="flex gap-1 overflow-x-auto">
+          {steps.map((label, index) => {
+            const active = step === index;
+            const done = index < step;
+            const Icon = done ? CheckCircle2 : stepIcons[label] || Circle;
+            return (
+              <button
+                type="button"
+                key={label}
+                onClick={() => next(index)}
+                disabled={busy}
+                aria-current={active ? "step" : undefined}
+                className={tabClass(active)}
               >
-                {done ? <Check size={13} /> : index + 1}
-              </span>
-              {label}
-            </button>
-          );
-        })}
+                <Icon size={16} className={done ? "text-cyan-600" : ""} />
+                <span className="text-xs tabular-nums opacity-60">
+                  {index + 1}.
+                </span>
+                {label}
+                <TabIndicator active={active} />
+              </button>
+            );
+          })}
+        </div>
       </nav>
       {steps[step] === "Recipients" && (
         <Card>
