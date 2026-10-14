@@ -6,6 +6,7 @@ import {
 import crypto from "node:crypto";
 import {
   DEFAULT_CAMPAIGN_SENDER,
+  formatEventWhen,
   missingRequiredMergeValues,
   newCampaignId,
   normalizeCampaignEmail,
@@ -188,13 +189,7 @@ export async function loadCampaignEventContext(pool, eventId) {
   return {
     event,
     event_title: event.title,
-    event_when: [
-      event.start_date,
-      event.start_time,
-      event.timezone || "Africa/Lusaka",
-    ]
-      .filter(Boolean)
-      .join(" "),
+    event_when: formatEventWhen(event),
     venue_or_join: venue,
     event_url: `${appOrigin()}/events/${encodeURIComponent(event.slug || event.id)}`,
     event_slug: event.slug,

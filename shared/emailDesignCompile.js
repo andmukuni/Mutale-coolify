@@ -12,8 +12,17 @@ import {
 
 const NAVY = EMAIL_BRAND_COLORS.navyText;
 const TEAL = EMAIL_BRAND_COLORS.teal;
-const CORAL = EMAIL_BRAND_COLORS.coral;
 const GRAY = EMAIL_BRAND_COLORS.gray;
+const BODY_TEXT = "#475569";
+const MUTED = "#94a3b8";
+const BORDER = "#e6ebf0";
+const SOFT_TEAL = "#eef6f6";
+// Horizontal gutter shared by every content block so edges line up.
+const GUTTER = 32;
+// Blocks that paint their own edge-to-edge background.
+const FULL_BLEED = new Set(["header", "logo", "event_header", "footer"]);
+const label = (text) =>
+  `<div style="font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:${MUTED};margin:0 0 2px">${text}</div>`;
 
 export function normalizeDesignDocument(raw) {
   const incoming = raw && typeof raw === "object" ? raw : {};
@@ -189,13 +198,18 @@ export function compileDesignToHtml(design, vars = {}, options = {}) {
   const source = doc.html || (doc.grapes ? grapesProjectHtml(doc.grapes) : "");
   let inner = source
     ? merge(source, vars, "html")
-    : doc.blocks.map((block) => renderBlock(block, vars, opts)).join("");
+    : doc.blocks.map((block) => renderTopLevel(block, vars, opts)).join("");
+  let endsWithFooter =
+    !source && doc.blocks[doc.blocks.length - 1]?.type === "footer";
   if (
     vars.unsubscribe_url &&
     !inner.includes(vars.unsubscribe_url) &&
     !inner.includes(escapeHtml(vars.unsubscribe_url))
-  )
+  ) {
     inner += renderBlock({ type: "footer" }, vars, opts);
+    endsWithFooter = true;
+  }
+  if (!endsWithFooter) inner += `<div style="height:28px;line-height:28px">&nbsp;</div>`;
   return wrapEmailDocument(inner, opts);
 }
 
@@ -215,6 +229,13 @@ export function compileDesignToText(design, vars = {}) {
     .join("\n\n");
 }
 
+function renderTopLevel(block, vars, options) {
+  const html = renderBlock(block, vars, options);
+  if (!html || FULL_BLEED.has(block.type)) return html;
+  // A logo/header with a custom image renders inline, so keep it in the gutter.
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="padding:0 ${GUTTER}px">${html}</td></tr></table>`;
+}
+
 function merge(text, vars, mode = "text") {
   return renderMergeTemplate(text, vars, { mode });
 }
@@ -226,7 +247,7 @@ function renderBlock(block, vars, options) {
   const font = (value) =>
     String(value || "Arial").replace(/[^a-zA-Z0-9 ,_-]/g, "");
   const point = (value) => Math.min(48, Math.max(10, Number(value) || 16));
-  const textStyle = `color:${color(styles.textColor, GRAY)};font-family:${font(styles.textFont)},Arial,sans-serif;font-size:${point(styles.textSize)}px;line-height:1.65`;
+  const textStyle = `color:${color(styles.textColor, BODY_TEXT)};font-family:${font(styles.textFont)},Arial,sans-serif;font-size:${point(styles.textSize)}px;line-height:1.65`;
   switch (block.type) {
     case "header":
     case "logo":
@@ -235,15 +256,15 @@ function renderBlock(block, vars, options) {
         if (src)
           return `<div style="padding:16px;text-align:${block.align}"><img alt="${escapeHtml(block.alt || "Mutale Mubanga")}" src="${escapeHtml(src)}" width="${block.size === "large" ? 240 : block.size === "medium" ? 160 : 100}" style="max-width:100%;height:auto"/></div>`;
       }
-      return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${NAVY};border-radius:16px 16px 0 0"><tr><td align="${block.align}" style="padding:22px 28px;color:#fff;font-family:Montserrat,Arial,sans-serif;font-size:16px;font-weight:800"><img src="${escapeHtml(`${vars.app_url || "https://mutalemubanga.org"}${PUBLIC_WHITE_LOGO_PATH}`)}" alt="Mutale Mubanga" width="${block.size === "large" ? 112 : block.size === "medium" ? 84 : 56}" style="vertical-align:middle;height:auto;margin-right:12px;max-width:100%;border:0"/>MUTALE <span style="color:${TEAL}">MUBANGA</span><div style="font-size:12px;font-weight:500;color:#d5deea;margin-top:4px">Growing People.</div></td></tr></table>`;
+      return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${NAVY}"><tr><td align="${block.align}" style="padding:24px ${GUTTER}px"><table role="presentation" cellpadding="0" cellspacing="0" align="${block.align}"><tr><td valign="middle" style="padding-right:14px"><img src="${escapeHtml(`${vars.app_url || "https://mutalemubanga.org"}${PUBLIC_WHITE_LOGO_PATH}`)}" alt="Mutale Mubanga" width="${block.size === "large" ? 88 : block.size === "medium" ? 64 : 48}" style="display:block;height:auto;max-width:100%;border:0"/></td><td valign="middle" style="color:#ffffff;font-family:Montserrat,Arial,sans-serif;font-size:17px;font-weight:800;letter-spacing:0.02em;line-height:1.2;text-align:left">MUTALE <span style="color:${TEAL}">MUBANGA</span><div style="font-size:12px;font-weight:500;letter-spacing:0;color:#d5deea;margin-top:3px">Growing People.</div></td></tr></table></td></tr></table>`;
     case "heading":
-      return `<h1 style="padding:12px 20px;margin:0 0 14px;color:${color(styles.titleColor, NAVY)};background:${color(styles.titleBackground, "#ffffff")};font-size:${point(styles.titleSize)}px;line-height:1.3;font-family:${font(styles.titleFont)},Arial,sans-serif;text-align:${styles.titleAlign === "center" ? "center" : styles.titleAlign === "right" ? "right" : "left"}">${merge(block.text || "Update", vars, "html")}</h1>`;
+      return `<h1 style="${String(styles.titleBackground || "#ffffff").toLowerCase() === "#ffffff" ? "padding:28px 0 4px" : "padding:14px 18px;margin-top:20px;border-radius:10px"};margin-bottom:0;color:${color(styles.titleColor, NAVY)};background:${color(styles.titleBackground, "#ffffff")};font-size:${point(styles.titleSize)}px;line-height:1.3;font-family:${font(styles.titleFont)},Arial,sans-serif;text-align:${styles.titleAlign === "center" ? "center" : styles.titleAlign === "right" ? "right" : "left"}">${merge(block.text || "Update", vars, "html")}</h1>`;
     case "text":
-      return `<div style="margin:0 0 14px;padding:12px 20px;${textStyle}">${block.html ? merge(block.html, vars, "html") : merge(block.text, vars, "html").replace(/\n/g, "<br/>")}</div>`;
+      return `<div style="margin:0;padding:12px 0;${textStyle}">${block.html ? merge(block.html, vars, "html") : merge(block.text, vars, "html").replace(/\n/g, "<br/>")}</div>`;
     case "image": {
       const src = sanitizeHttpUrl(merge(block.src, vars, "text"));
       if (!src) return "";
-      return `<img src="${escapeBrandHtml(src)}" alt="${merge(block.alt || "Image", vars, "html")}" width="540" style="display:block;width:100%;max-width:540px;height:auto;border:0;margin:0 0 16px" />`;
+      return `<img src="${escapeBrandHtml(src)}" alt="${merge(block.alt || "Image", vars, "html")}" width="${EMAIL_CARD_WIDTH - GUTTER * 2}" style="display:block;width:100%;max-width:${EMAIL_CARD_WIDTH - GUTTER * 2}px;height:auto;border:0;border-radius:12px;margin:12px 0" />`;
     }
     case "button": {
       const href =
@@ -251,18 +272,18 @@ function renderBlock(block, vars, options) {
         options.fallbackUrl ||
         "";
       if (!href) return "";
-      return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:8px 0 18px;width:100%"><tr><td align="${block.align}"><a href="${escapeBrandHtml(href)}" style="display:inline-block;background:${color(styles.buttonBackground, TEAL)};border-radius:${styles.buttonShape === "rectangular" ? "0" : "10px"};padding:12px 20px;color:${color(styles.buttonColor, "#ffffff")};text-decoration:none;font-family:${font(styles.buttonFont)},Arial,sans-serif;font-size:${point(styles.buttonSize)}px;font-weight:700">${merge(block.label || "Open", vars, "html")}</a></td></tr></table>`;
+      return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:16px 0 20px;width:100%"><tr><td align="${block.align}"><a href="${escapeBrandHtml(href)}" style="display:inline-block;background:${color(styles.buttonBackground, TEAL)};border-radius:${styles.buttonShape === "rectangular" ? "0" : "10px"};padding:14px 28px;line-height:1.2;color:${color(styles.buttonColor, "#ffffff")};text-decoration:none;font-family:${font(styles.buttonFont)},Arial,sans-serif;font-size:${point(styles.buttonSize)}px;font-weight:700">${merge(block.label || "Open", vars, "html")}</a></td></tr></table>`;
     }
     case "divider":
-      return `<hr style="border:0;border-top:1px solid #e6ebf0;margin:8px 0 18px" />`;
+      return `<hr style="border:0;border-top:1px solid ${BORDER};margin:16px 0" />`;
     case "spacer":
       return `<div style="height:18px;line-height:18px">&nbsp;</div>`;
     case "columns":
       return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>${(block.column_blocks.length ? block.column_blocks : (block.columns || ["", ""]).slice(0, 3)).map((col, index, array) => `<td class="email-column" width="${block.column_widths[index] || Math.round(100 / array.length)}%" valign="top" style="padding:8px;${textStyle}">${Array.isArray(col) ? col.map((child) => renderBlock(child, vars, options)).join("") : merge(col, vars, "html").replace(/\n/g, "<br/>")}</td>`).join("")}</tr></table>`;
     case "event_header":
-      return `${vars.event_image ? `<img src="${escapeHtml(sanitizeHttpUrl(vars.event_image))}" alt="${escapeHtml(vars.event_title || "Event")}" style="width:100%;max-width:600px;height:auto"/>` : ""}<h1 style="padding:20px;color:${NAVY}">${escapeHtml(vars.event_title || "Event")}</h1>`;
+      return `${vars.event_image ? `<img src="${escapeHtml(sanitizeHttpUrl(vars.event_image))}" alt="${escapeHtml(vars.event_title || "Event")}" width="${EMAIL_CARD_WIDTH}" style="display:block;width:100%;max-width:${EMAIL_CARD_WIDTH}px;height:auto;border:0"/>` : ""}<h1 style="margin:0;padding:28px ${GUTTER}px 4px;color:${NAVY};font-family:Arial,Helvetica,sans-serif;font-size:26px;line-height:1.3">${escapeHtml(vars.event_title || "Event")}</h1>`;
     case "summary":
-      return `<div style="padding:16px;${textStyle}">${vars.event_summary_html || escapeHtml(vars.event_summary || "").replace(/\n/g, "<br/>")}</div>`;
+      return `<div style="padding:12px 0;${textStyle}">${vars.event_summary_html || escapeHtml(vars.event_summary || "").replace(/\n/g, "<br/>")}</div>`;
     case "speakers":
     case "sponsors":
     case "exhibitors": {
@@ -273,7 +294,7 @@ function renderBlock(block, vars, options) {
           !block.selection_set || block.selected_ids.includes(String(row.id)),
       );
       if (!rows.length) return "";
-      return `<div style="padding:16px;${textStyle}"><h2>${block.type.toUpperCase()}</h2>${rows.map((row) => `<div style="display:inline-block;width:45%;padding:10px;vertical-align:top">${sanitizeHttpUrl(row.image || row.logo || row.avatar) ? `<img src="${escapeHtml(row.image || row.logo || row.avatar)}" alt="${escapeHtml(row.name || "")}" width="120" style="max-width:100%;height:auto"/>` : ""}<p>${escapeHtml(row.name || row.title || "")}</p><p>${escapeHtml(row.position || row.organization || "")}</p></div>`).join("")}</div>`;
+      return `<div style="padding:16px 0;${textStyle}"><h2 style="margin:0 0 12px;color:${NAVY};font-size:18px;font-family:Arial,Helvetica,sans-serif">${block.type[0].toUpperCase()}${block.type.slice(1)}</h2>${rows.map((row) => `<div style="display:inline-block;width:46%;padding:8px 2% 12px 0;vertical-align:top">${sanitizeHttpUrl(row.image || row.logo || row.avatar) ? `<img src="${escapeHtml(row.image || row.logo || row.avatar)}" alt="${escapeHtml(row.name || "")}" width="96" style="display:block;max-width:100%;height:auto;border-radius:10px;margin-bottom:8px"/>` : ""}<div style="color:${NAVY};font-weight:700;font-size:15px">${escapeHtml(row.name || row.title || "")}</div><div style="color:${GRAY};font-size:13px">${escapeHtml(row.position || row.organization || "")}</div></div>`).join("")}</div>`;
     }
     case "registration":
       return renderBlock(
@@ -303,24 +324,47 @@ function renderBlock(block, vars, options) {
         options,
       );
     case "article":
-      return `<div style="padding:16px;background:${color(styles.articleBackground, "#eef6f6")};${textStyle}"><h2 style="color:${color(styles.articleTitleColor, NAVY)};font-size:${point(styles.articleTitleSize || 20)}px">${merge(block.label || "Article", vars, "html")}</h2><p style="color:${color(styles.articleTextColor, styles.textColor)};font-size:${point(styles.articleTextSize || styles.textSize)}px">${merge(block.text, vars, "html")}</p>${renderBlock({ ...block, type: "button", label: "Read more" }, vars, options)}</div>`;
+      return `<div style="padding:20px 22px;margin:12px 0;border-radius:12px;background:${color(styles.articleBackground, SOFT_TEAL)};${textStyle}"><h2 style="margin:0 0 8px;color:${color(styles.articleTitleColor, NAVY)};font-size:${point(styles.articleTitleSize || 20)}px">${merge(block.label || "Article", vars, "html")}</h2><p style="margin:0;color:${color(styles.articleTextColor, styles.textColor)};font-size:${point(styles.articleTextSize || styles.textSize)}px">${merge(block.text, vars, "html")}</p>${renderBlock({ ...block, type: "button", label: "Read more" }, vars, options)}</div>`;
     case "event_tracker": {
       vars = vars.event_tracker_contexts?.[block.id] || vars;
-      return `<div style="background:${color(styles.articleBackground, "#eef6f6")};color:${color(styles.articleTextColor, GRAY)};font-size:${point(styles.articleTextSize)}px;padding:16px"><h2 style="color:${color(styles.articleTitleColor, NAVY)};font-size:${point(styles.articleTitleSize)}px">${escapeHtml(vars.event_title || "Event")}</h2><p>${escapeHtml(vars.event_when || "")}</p><p>${escapeHtml(vars.venue_or_join || "")}</p>${renderBlock({ ...block, type: "registration" }, vars, options)}</div>`;
+      return `<div style="background:${color(styles.articleBackground, SOFT_TEAL)};border-left:4px solid ${TEAL};border-radius:12px;margin:12px 0;color:${color(styles.articleTextColor, GRAY)};font-family:Arial,Helvetica,sans-serif;font-size:${point(styles.articleTextSize)}px;padding:20px 22px"><h2 style="margin:0 0 10px;color:${color(styles.articleTitleColor, NAVY)};font-size:${point(styles.articleTitleSize)}px">${escapeHtml(vars.event_title || "Event")}</h2>${vars.event_when ? `<div style="margin:0 0 8px">${label("When")}${escapeHtml(vars.event_when)}</div>` : ""}${vars.venue_or_join ? `<div style="margin:0 0 4px">${label("Where")}${escapeHtml(vars.venue_or_join)}</div>` : ""}${renderBlock({ ...block, type: "registration" }, vars, options)}</div>`;
     }
     case "social_share":
     case "social_follow":
-      return `<p style="padding:16px;${textStyle}">${block.links.map((link) => (sanitizeHttpUrl(link.url) ? `<a href="${escapeHtml(link.url)}" style="margin-right:12px;color:${color(styles.linkColor, TEAL)}">${escapeHtml(link.label)}</a>` : "")).join("")}</p>`;
+      return `<p style="margin:0;padding:12px 0;${textStyle}">${block.links.map((link) => (sanitizeHttpUrl(link.url) ? `<a href="${escapeHtml(link.url)}" style="margin-right:14px;color:${color(styles.linkColor, TEAL)};font-weight:700;text-decoration:none">${escapeHtml(link.label)}</a>` : "")).join("")}</p>`;
     case "event_details":
-      return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef6f6;border-radius:12px;margin:0 0 18px"><tr><td style="padding:16px;color:${NAVY};font-family:Arial,Helvetica,sans-serif"><div style="font-weight:800;margin-bottom:6px">${merge("{{event_title}}", vars, "html")}</div><div style="color:${GRAY};font-size:14px">${merge("{{event_when}}", vars, "html")}</div><div style="color:${GRAY};font-size:14px;margin-top:4px">${merge("{{venue_or_join}}", vars, "html")}</div><div style="color:${GRAY};font-size:13px;margin-top:8px">Ref ${merge("{{registration_ref}}", vars, "html")}</div></td></tr></table>`;
+    {
+      const when = merge("{{event_when}}", vars, "html");
+      const where = merge("{{venue_or_join}}", vars, "html");
+      const ref = merge("{{registration_ref}}", vars, "html");
+      const row = (title, value) =>
+        value
+          ? `<div style="margin-top:12px;color:${BODY_TEXT};font-size:14px;line-height:1.5">${label(title)}${value}</div>`
+          : "";
+      return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${SOFT_TEAL};border-left:4px solid ${TEAL};border-radius:12px;margin:12px 0"><tr><td style="padding:20px 22px;color:${NAVY};font-family:Arial,Helvetica,sans-serif"><div style="font-size:17px;font-weight:800;line-height:1.35">${merge("{{event_title}}", vars, "html")}</div>${row("When", when)}${row("Where", where)}${row("Registration ref", ref)}</td></tr></table>`;
+    }
     case "resource_card": {
       const href = sanitizeHttpUrl(
         merge(block.url || "{{resource_page_url}}", vars, "text"),
       );
-      return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e6ebf0;border-radius:12px;margin:0 0 18px"><tr><td style="padding:16px;font-family:Arial,Helvetica,sans-serif"><div style="font-weight:800;color:${NAVY}">${merge(block.resource_title || "Event resource", vars, "html")}</div><div style="color:${GRAY};font-size:14px;margin:6px 0 10px">${merge(block.resource_description, vars, "html")}</div><div style="color:${GRAY};font-size:12px">${merge(block.resource_meta, vars, "html")}</div>${href ? `<a href="${escapeBrandHtml(href)}" style="display:inline-block;margin-top:10px;color:${TEAL};font-weight:700;text-decoration:none">Download</a>` : ""}</td></tr></table>`;
+      return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${BORDER};border-radius:12px;margin:12px 0"><tr><td style="padding:20px 22px;font-family:Arial,Helvetica,sans-serif"><div style="font-weight:800;color:${NAVY}">${merge(block.resource_title || "Event resource", vars, "html")}</div><div style="color:${GRAY};font-size:14px;margin:6px 0 10px">${merge(block.resource_description, vars, "html")}</div><div style="color:${GRAY};font-size:12px">${merge(block.resource_meta, vars, "html")}</div>${href ? `<a href="${escapeBrandHtml(href)}" style="display:inline-block;margin-top:10px;color:${TEAL};font-weight:700;text-decoration:none">Download</a>` : ""}</td></tr></table>`;
     }
     case "footer":
-      return `<p style="margin:22px 20px 0;color:${GRAY};font-size:12px;line-height:1.6;font-family:Arial,Helvetica,sans-serif">Mutale Mubanga · Growing People.<br/>${vars.unsubscribe_url ? `<a href="${escapeHtml(vars.unsubscribe_url)}">Unsubscribe from this list</a> | ` : ""}${vars.preferences_url ? `<a href="${escapeHtml(vars.preferences_url)}">Manage my subscriptions</a>` : "Manage preferences using your registration email"}<br/><span style="color:${CORAL}">Mutale Mubanga communications.</span></p>`;
+    {
+      const link = (href, text) =>
+        `<a href="${escapeHtml(href)}" style="color:${TEAL};font-weight:700;text-decoration:none">${text}</a>`;
+      const links = [
+        vars.unsubscribe_url
+          ? link(vars.unsubscribe_url, "Unsubscribe from this list")
+          : "",
+        vars.preferences_url
+          ? link(vars.preferences_url, "Manage my subscriptions")
+          : "Manage preferences using your registration email",
+      ]
+        .filter(Boolean)
+        .join(`<span style="color:${MUTED}">&nbsp;&nbsp;·&nbsp;&nbsp;</span>`);
+      return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:28px"><tr><td align="center" style="padding:24px ${GUTTER}px 28px;background:#f6f8fa;border-top:1px solid ${BORDER};color:${GRAY};font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.8;text-align:center"><div style="color:${NAVY};font-weight:700;font-size:13px">Mutale Mubanga <span style="color:${TEAL}">· Growing People.</span></div><div style="margin-top:6px">${links}</div><div style="margin-top:6px;color:${MUTED}">Mutale Mubanga communications.</div></td></tr></table>`;
+    }
     default:
       throw new Error(`Unsupported email element: ${block.type}`);
   }
@@ -344,7 +388,9 @@ function renderBlockText(block, vars) {
         merge("{{event_title}}", vars),
         merge("{{event_when}}", vars),
         merge("{{venue_or_join}}", vars),
-        `Ref ${merge("{{registration_ref}}", vars)}`,
+        vars.registration_ref
+          ? `Registration ref ${merge("{{registration_ref}}", vars)}`
+          : "",
       ]
         .filter(Boolean)
         .join("\n");
@@ -425,9 +471,9 @@ function wrapEmailDocument(inner, options = {}) {
     : "#ffffff";
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeBrandHtml(options.title || "Mutale")}</title><style>@media(max-width:480px){.email-column{display:block!important;width:100%!important}}</style></head><body style="margin:0;padding:0;background:${outer}">
 ${preview ? `<div style="display:none;max-height:0;overflow:hidden">${preview}</div>` : ""}
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px 12px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 12px">
 <center><table role="presentation" width="${width}" cellpadding="0" cellspacing="0" style="width:100%;max-width:${width}px;background:${innerBackground};border-radius:16px;overflow:hidden">
-<tr><td style="padding:0 0 28px">${inner}</td></tr>
+<tr><td style="padding:0">${inner}</td></tr>
 </table></center>
 </td></tr></table>
 </body></html>`;
@@ -471,7 +517,7 @@ export const DEFAULT_EMAIL_STYLES = {
   outerBackground: "#eef2f5",
   innerBackground: "#ffffff",
   textFont: "Arial",
-  textColor: "#64748b",
+  textColor: "#475569",
   textSize: 15,
   titleFont: "Arial",
   titleColor: "#141D45",

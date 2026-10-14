@@ -44,6 +44,7 @@ import {
   normalizeDesignDocument,
   DEFAULT_EMAIL_STYLES,
 } from "../../../../shared/emailDesignCompile";
+import { formatEventWhen } from "../../../../shared/emailCampaign";
 import CampaignImagePicker from "./CampaignImagePicker";
 import { useToast } from "../../../context/ToastContext";
 import CampaignRichText from "./CampaignRichText";
@@ -649,13 +650,7 @@ export default function CampaignEmailEditor({
           event
             ? {
                 event_title: event.title,
-                event_when: [
-                  event.start_date,
-                  event.start_time,
-                  event.timezone || "Africa/Lusaka",
-                ]
-                  .filter(Boolean)
-                  .join(" "),
+                event_when: formatEventWhen(event),
                 venue_or_join:
                   event.event_mode === "virtual"
                     ? "Virtual event"

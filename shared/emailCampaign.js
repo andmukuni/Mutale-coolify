@@ -183,3 +183,26 @@ export function newCampaignId(prefix = 'ecmp') {
 
 export const MARKETING_CONSENT_VERSION = '2026-10-growing-people-v1';
 export const MARKETING_CONSENT_WORDING = 'I would like occasional updates about future Mutale events and programmes. This is optional and is not required to attend this event.';
+
+// "Monday, 17 August 2026 · 21:30 (Africa/Lusaka)" from stored event fields.
+// The date is formatted as a calendar date so no timezone shift is applied.
+export function formatEventWhen({ start_date, start_time, timezone } = {}) {
+  const zone = timezone || 'Africa/Lusaka';
+  const raw =
+    start_date instanceof Date && !Number.isNaN(start_date.getTime())
+      ? `${start_date.getFullYear()}-${String(start_date.getMonth() + 1).padStart(2, '0')}-${String(start_date.getDate()).padStart(2, '0')}`
+      : String(start_date || '');
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const time = String(start_time || '').match(/^(\d{1,2}):(\d{2})/);
+  const clock = time ? `${time[1].padStart(2, '0')}:${time[2]}` : '';
+  if (!match) return [raw, clock, raw || clock ? `(${zone})` : ''].filter(Boolean).join(' ');
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  const day = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'UTC',
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(date);
+  return `${day}${clock ? ` · ${clock}` : ''} (${zone})`;
+}
