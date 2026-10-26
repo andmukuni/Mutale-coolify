@@ -13,7 +13,6 @@ import {
   Trash2,
   Undo2,
   Upload,
-  UserPlus,
   Users,
   X,
   CheckCircle2,
@@ -33,6 +32,7 @@ import { useAuth } from "../../context/AuthContext";
 import CampaignSuppressionView from "../../components/admin/campaigns/CampaignSuppressionView";
 import CampaignWorkspaceNav from "../../components/admin/campaigns/CampaignWorkspaceNav";
 import CampaignEmailEditor from "../../components/admin/campaigns/CampaignEmailEditor";
+import CampaignEventInvitees from "../../components/admin/campaigns/CampaignEventInvitees";
 import useCampaignConfirm from "../../components/admin/campaigns/useCampaignConfirm";
 import {
   BTN_PRIMARY,
@@ -370,9 +370,6 @@ export default function CampaignManagePage() {
     [members, setMembers] = useState(null),
     [selected, setSelected] = useState([]),
     [results, setResults] = useState(null),
-    [events, setEvents] = useState([]),
-    [eventId, setEventId] = useState(""),
-    [eventData, setEventData] = useState(null),
     [importing, setImporting] = useState(null),
     [confirmConsent, setConfirmConsent] = useState(false),
     [importResult, setImportResult] = useState(null),
@@ -403,7 +400,6 @@ export default function CampaignManagePage() {
     else if (section === "templates")
       setRows((await fetchCampaignTemplates()).data);
     else if (section === "surveys") setRows(await campaignRequest("/surveys"));
-    else if (section === "events") setEvents(await campaignRequest("/events"));
     else setRows([]);
   }, [section]);
   useEffect(() => {
@@ -535,18 +531,6 @@ export default function CampaignManagePage() {
         toast.success("Item archived.");
       });
   };
-  const loadEvent = async (id) => {
-    setEventId(id);
-    if (!id) {
-      setEventData(null);
-      return;
-    }
-    const [content, invitees] = await Promise.all([
-      campaignRequest(`/events/${id}/content`),
-      campaignRequest(`/events/${id}/invitees`),
-    ]);
-    setEventData({ ...content, invitees });
-  };
 
   const header = (
     <div>
@@ -593,11 +577,6 @@ export default function CampaignManagePage() {
       ? g.kind === "subscription"
       : g.kind !== "subscription",
   );
-  const updateEventPeople = (key, updater) =>
-    setEventData((d) => ({
-      ...d,
-      content: { ...d.content, [key]: updater(d.content[key] || []) },
-    }));
 
   const formFields = form && (
     <>
@@ -1602,210 +1581,12 @@ export default function CampaignManagePage() {
       )}
 
       {section === "events" && (
-        <Card>
-          <div className="max-w-md">
-            <FormField
-              label="Event"
-              type="select"
-              value={eventId}
-              onChange={(e) => run(() => loadEvent(e.target.value))}
-              options={[
-                { value: "", label: "Select event" },
-                ...(Array.isArray(events) ? events : []).map((event) => ({
-                  value: event.id,
-                  label: event.title,
-                })),
-              ]}
-            />
-          </div>
-          {!eventData && (
-            <p className="text-sm text-navy-500 mt-4">
-              Select an event to manage its invitees, sponsors and exhibitors.
-            </p>
-          )}
-          {eventData && (
-            <div className="mt-6 space-y-8">
-              <section>
-                <div className="flex items-center justify-between gap-3 mb-3">
-                  <h2 className={SECTION_TITLE}>
-                    Event invitees{" "}
-                    <span className="text-sm font-normal text-navy-400">
-                      ({eventData.invitees.length})
-                    </span>
-                  </h2>
-                </div>
-                <DataTable
-                  columns={[
-                    {
-                      key: "display_name",
-                      label: "Name",
-                      render: (v) => (
-                        <span className="font-medium text-navy-900">
-                          {v || "—"}
-                        </span>
-                      ),
-                    },
-                    { key: "email_normalized", label: "Email" },
-                    {
-                      key: "state",
-                      label: "Status",
-                      render: (v) => <StatusBadge status={v} />,
-                    },
-                  ]}
-                  data={eventData.invitees}
-                  emptyTitle="No invitees yet"
-                  emptyDescription="Add contacts below to build the invitation list."
-                />
-                {canManage && (
-                  <details className="mt-4 rounded-xl border border-navy-100 p-4">
-                    <summary className="inline-flex items-center gap-2 text-sm font-medium text-cyan-700 cursor-pointer">
-                      <UserPlus size={15} />
-                      Add contacts to invitees
-                    </summary>
-                    <div className="mt-4">
-                      <ContactPicker
-                        contacts={directory.contacts}
-                        selected={selected}
-                        onChange={setSelected}
-                      />
-                      <LoadingButton
-                        className={`${BTN_PRIMARY} mt-3`}
-                        disabled={!selected.length}
-                        loading={busy}
-                        loadingLabel="Adding…"
-                        icon={UserPlus}
-                        iconSize={15}
-                        onClick={() =>
-                          run(async () => {
-                            await campaignRequest(
-                              `/events/${eventId}/invitees`,
-                              {
-                                method: "POST",
-                                body: { contact_ids: selected },
-                              },
-                            );
-                            setSelected([]);
-                            await loadEvent(eventId);
-                            toast.success("Invitees added.");
-                          })
-                        }
-                      >
-                        Add invitees
-                      </LoadingButton>
-                    </div>
-                  </details>
-                )}
-              </section>
-              {["sponsors", "exhibitors"].map((key) => (
-                <section key={key}>
-                  <h2 className={`${SECTION_TITLE} capitalize mb-3`}>{key}</h2>
-                  <div className="space-y-2">
-                    {(eventData.content[key] || []).map((person, index) => (
-                      <div
-                        className="flex flex-col sm:flex-row gap-2"
-                        key={person.id}
-                      >
-                        <input
-                          className={INPUT_SM}
-                          aria-label={`${key} ${index + 1} name`}
-                          placeholder="Name"
-                          value={person.name}
-                          disabled={!canManage}
-                          onChange={(e) =>
-                            updateEventPeople(key, (list) =>
-                              list.map((p, i) =>
-                                i === index ? { ...p, name: e.target.value } : p,
-                              ),
-                            )
-                          }
-                        />
-                        <input
-                          className={INPUT_SM}
-                          aria-label={`${key} ${index + 1} image URL`}
-                          placeholder="Image URL"
-                          disabled={!canManage}
-                          value={person.image}
-                          onChange={(e) =>
-                            updateEventPeople(key, (list) =>
-                              list.map((p, i) =>
-                                i === index
-                                  ? { ...p, image: e.target.value }
-                                  : p,
-                              ),
-                            )
-                          }
-                        />
-                        {canManage && (
-                          <button
-                            type="button"
-                            aria-label={`Remove ${key === "sponsors" ? "sponsor" : "exhibitor"} ${index + 1}`}
-                            className={`${BTN_ICON} hover:text-red-600 hover:bg-red-50 self-end sm:self-auto`}
-                            onClick={() =>
-                              updateEventPeople(key, (list) =>
-                                list.filter((_, i) => i !== index),
-                              )
-                            }
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                    {!(eventData.content[key] || []).length && (
-                      <p className="text-sm text-navy-400">
-                        No {key} added yet.
-                      </p>
-                    )}
-                  </div>
-                  {canManage && (
-                    <button
-                      type="button"
-                      className={`${LINK_ACTION} mt-3 text-sm`}
-                      onClick={() =>
-                        updateEventPeople(key, (list) => [
-                          ...list,
-                          {
-                            id: crypto.randomUUID(),
-                            name: "",
-                            image: "",
-                            position: "",
-                          },
-                        ])
-                      }
-                    >
-                      <Plus size={14} />
-                      Add {key === "sponsors" ? "sponsor" : "exhibitor"}
-                    </button>
-                  )}
-                </section>
-              ))}
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-4 border-t border-navy-100">
-                <p className="text-xs text-navy-500">
-                  Speakers are managed in the event editor. Invitation
-                  responses do not replace booking, payment, or registration.
-                </p>
-                {canManage && (
-                  <LoadingButton
-                    className={BTN_PRIMARY}
-                    loading={busy}
-                    loadingLabel="Saving…"
-                    onClick={() =>
-                      run(async () => {
-                        await campaignRequest(`/events/${eventId}/content`, {
-                          method: "PUT",
-                          body: eventData.content,
-                        });
-                        toast.success("Event campaign content saved.");
-                      })
-                    }
-                  >
-                    Save event content
-                  </LoadingButton>
-                )}
-              </div>
-            </div>
-          )}
-        </Card>
+        <CampaignEventInvitees
+          events={directory.events || []}
+          contacts={directory.contacts}
+          canManage={canManage}
+          toast={toast}
+        />
       )}
 
       {canManage && archivedItems.length > 0 && (
