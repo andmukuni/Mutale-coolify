@@ -13,6 +13,7 @@ import {
   getEventDisplayStatus,
   isEventPubliclyVisible,
   allowsMultiAttendeeRegistration,
+  showsEventLocation,
 } from '../utils/eventServices';
 import { formatDate, formatTime } from '../utils/helpers';
 import { resolveUserBearerToken } from '../utils/authHeaders';
@@ -77,6 +78,7 @@ export default function EventDetailPage() {
     event.event_mode
     || (String(event.location || '').toLowerCase().includes('virtual') ? 'virtual' : 'in_person');
   const allowsMultiAttendee = allowsMultiAttendeeRegistration(event);
+  const showLocation = showsEventLocation(event);
 
   const startAt = getEventStartDateTime(event);
   const countdown = getCountdown(startAt, now);
@@ -166,10 +168,12 @@ export default function EventDetailPage() {
             {event.title}
           </h1>
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 max-w-4xl">
+          <div className={`grid grid-cols-2 ${showLocation ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-3 max-w-4xl`}>
             <HeroMetric label="Date" value={formatDate(event.start_date || event.date)} icon={Calendar} />
             <HeroMetric label="Time" value={event.start_time ? formatTime(event.start_time) : 'TBA'} icon={Clock} />
-            <HeroMetric label="Location" value={event.location || 'TBA'} icon={MapPin} />
+            {showLocation && (
+              <HeroMetric label="Location" value={event.location || 'TBA'} icon={MapPin} />
+            )}
             <HeroMetric
               label="Spots"
               value={event.capacity ? `${Math.max(0, spotsLeft || 0)} left` : 'Unlimited'}
@@ -193,7 +197,7 @@ export default function EventDetailPage() {
               </div>
             </div>
 
-            {hasEventMapPin(event) && (
+            {showLocation && hasEventMapPin(event) && (
               <div className="bg-white rounded-2xl border border-navy-100 p-6 sm:p-8 shadow-sm">
                 <h2 className="text-xl font-bold text-navy-900 mb-4">Venue</h2>
                 <EventVenueMap event={event} />

@@ -18,6 +18,7 @@ import {
   isChildAgeNotAllowed,
   validateGuestAttendees,
   selectHomeFeaturedEvents,
+  showsEventLocation,
 } from '../utils/eventServices';
 
 // ─── Shared fixtures ──────────────────────────────────────────────────────────
@@ -531,5 +532,17 @@ describe('multi-guest registration helpers', () => {
     const event = { capacity: 5 };
     expect(getMaxGuestTickets(event, 3, { includeSelf: true, hardCap: 20 })).toBe(1);
     expect(getMaxGuestTickets(event, 3, { includeSelf: false, hardCap: 20 })).toBe(2);
+  });
+});
+
+describe('showsEventLocation', () => {
+  it('hides the place of online events, even when an old city is still stored', () => {
+    expect(showsEventLocation({ event_mode: 'virtual', location: 'Lusaka' })).toBe(false);
+    expect(showsEventLocation({ location: 'Virtual (Zoom)' })).toBe(false);
+  });
+
+  it('shows the place of in-person and hybrid events', () => {
+    expect(showsEventLocation({ event_mode: 'in_person', location: 'Lusaka' })).toBe(true);
+    expect(showsEventLocation({ event_mode: 'hybrid', location: 'Lusaka' })).toBe(true);
   });
 });

@@ -6,10 +6,12 @@ import {
   CheckCircle2,
   Clock,
   MapPin,
+  Video,
   XCircle,
 } from "lucide-react";
 import { Spinner } from "../components/ui";
 import { getApiBase } from "../utils/apiBase";
+import { showsEventLocation } from "../utils/eventServices";
 
 export default function CampaignInvitationPage() {
   const [params] = useSearchParams();
@@ -97,11 +99,18 @@ export default function CampaignInvitationPage() {
                   {event.start_time}
                 </li>
               )}
-              {(event.venue || event.location || event.event_mode) && (
+              {!showsEventLocation(event) ? (
                 <li className="flex items-center gap-2">
-                  <MapPin size={16} className="text-cyan-600 shrink-0" />
-                  {event.venue || event.location || event.event_mode}
+                  <Video size={16} className="text-cyan-600 shrink-0" />
+                  Online event
                 </li>
+              ) : (
+                (event.venue || event.location) && (
+                  <li className="flex items-center gap-2">
+                    <MapPin size={16} className="text-cyan-600 shrink-0" />
+                    {[event.venue, event.location].filter(Boolean).join(", ")}
+                  </li>
+                )
               )}
             </ul>
             {responded ? (

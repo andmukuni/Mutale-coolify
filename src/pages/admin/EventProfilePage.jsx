@@ -26,12 +26,13 @@ import {
   Palette,
   Megaphone,
   FolderOpen,
+  Video,
 } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { useBooking } from '../../context/BookingContext';
 import { StatusBadge, LoadingButton, Spinner } from '../../components/ui';
 import { formatDate, formatTime } from '../../utils/helpers';
-import { getEventDisplayStatus, isEventPast, resolveEventMode } from '../../utils/eventServices';
+import { getEventDisplayStatus, isEventPast, resolveEventMode, showsEventLocation } from '../../utils/eventServices';
 import { getApiBase } from '../../utils/apiBase';
 import { getAdminAuthHeaders } from '../../utils/authHeaders';
 import { useToast } from '../../context/ToastContext';
@@ -669,7 +670,11 @@ export default function EventProfilePage() {
                 <div className="grid sm:grid-cols-2 gap-4 text-sm">
                   <OverviewRow icon={Calendar} label="Date" value={`${formatDate(event.start_date || event.date)}${event.end_date && event.end_date !== (event.start_date || event.date) ? ` – ${formatDate(event.end_date)}` : ''}`} />
                   <OverviewRow icon={Clock} label="Time" value={`${event.start_time ? formatTime(event.start_time) : '—'}${event.end_time ? ` – ${formatTime(event.end_time)}` : ''}`} />
-                  <OverviewRow icon={MapPin} label="Location" value={event.location || event.venue || '—'} />
+                  {showsEventLocation(event) ? (
+                    <OverviewRow icon={MapPin} label="Location" value={event.location || event.venue || '—'} />
+                  ) : (
+                    <OverviewRow icon={Video} label="Format" value="Online event" />
+                  )}
                   <div className="flex items-start gap-3">
                     <div className="p-2 rounded-lg bg-navy-50 text-navy-500">
                       <CheckCircle2 size={14} />

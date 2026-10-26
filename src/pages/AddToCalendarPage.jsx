@@ -9,6 +9,7 @@ import {
   buildIcsFilename,
 } from '../../shared/googleCalendar.js';
 import EventVenueMap from '../components/EventVenueMap';
+import { showsEventLocation } from '../utils/eventServices';
 
 const API_BASE = getApiBase();
 
@@ -104,15 +105,19 @@ export default function AddToCalendarPage() {
                 {event.start_time ? ` · ${formatTime(event.start_time)}` : ''}
                 {event.end_time ? ` – ${formatTime(event.end_time)}` : ''}
               </p>
-              {(event.location || event.venue) && (
-                <p className="mt-1 flex items-center gap-2 text-sm text-navy-600">
-                  <MapPin size={15} className="text-navy-400" />
-                  {event.location || event.venue}
-                </p>
+              {showsEventLocation(event) && (
+                <>
+                  {(event.location || event.venue) && (
+                    <p className="mt-1 flex items-center gap-2 text-sm text-navy-600">
+                      <MapPin size={15} className="text-navy-400" />
+                      {event.location || event.venue}
+                    </p>
+                  )}
+                  <div className="mt-3">
+                    <EventVenueMap event={event} compact />
+                  </div>
+                </>
               )}
-              <div className="mt-3">
-                <EventVenueMap event={event} compact />
-              </div>
             </div>
 
             {options.length === 0 ? (

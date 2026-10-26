@@ -5,6 +5,7 @@ import {
   eventMapLabel,
   hasEventMapPin,
   normalizeEventMapFields,
+  normalizeEventPlaceFields,
   parseEventCoords,
 } from '../../shared/eventMaps.js';
 
@@ -89,5 +90,23 @@ describe('normalizeEventMapFields', () => {
       location_lng: 28.2833,
       location_place: physical.location_place,
     });
+  });
+});
+
+describe('normalizeEventPlaceFields', () => {
+  it('drops the venue and city of online events', () => {
+    expect(normalizeEventPlaceFields({ event_mode: 'virtual', venue: 'Hall', location: 'Lusaka' })).toEqual({
+      venue: '',
+      location: '',
+    });
+  });
+
+  it('keeps the venue and city of in-person and hybrid events', () => {
+    for (const mode of ['in_person', 'hybrid']) {
+      expect(normalizeEventPlaceFields({ event_mode: mode, venue: 'Hall', location: 'Lusaka' })).toEqual({
+        venue: 'Hall',
+        location: 'Lusaka',
+      });
+    }
   });
 });

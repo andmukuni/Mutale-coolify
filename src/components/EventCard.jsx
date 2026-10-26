@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Calendar, Clock, MapPin, Tag, ArrowRight, Ticket, CheckCircle2 } from 'lucide-react';
 import { formatDate, formatTime } from '../utils/helpers';
-import { getEventDisplayStatus, isInPersonEvent } from '../utils/eventServices';
+import { getEventDisplayStatus, isInPersonEvent, showsEventLocation } from '../utils/eventServices';
 import { useCurrency } from '../context/CurrencyContext';
 import { useUserAuth } from '../context/UserAuthContext';
 import { useBooking } from '../context/BookingContext';
@@ -112,10 +112,12 @@ export default function EventCard({ event }) {
               {(event.end_time || event.endTime) && ` – ${formatTime(event.end_time || event.endTime)}`}
             </div>
           )}
-          <div className="flex items-center gap-2 text-xs text-navy-500">
-            <MapPin size={13} className="text-navy-400 shrink-0" />
-            {event.location}
-          </div>
+          {showsEventLocation(event) && event.location && (
+            <div className="flex items-center gap-2 text-xs text-navy-500">
+              <MapPin size={13} className="text-navy-400 shrink-0" />
+              {event.location}
+            </div>
+          )}
         </div>
 
         <p className="text-xs text-navy-500 leading-relaxed mb-4 line-clamp-2 flex-1">

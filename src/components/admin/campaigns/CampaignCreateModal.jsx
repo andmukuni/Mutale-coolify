@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Send, CalendarClock, MailOpen, CheckCircle2, Circle } from "lucide-react";
 import { Modal, FormField, LoadingButton } from "../../ui";
 import { CAMPAIGN_TYPES } from "../../../../shared/campaignWorkspace.js";
+import { showsEventLocation } from "../../../utils/eventServices";
 import { BTN_PRIMARY, BTN_SECONDARY, INPUT_SM } from "./campaignStyles";
 
 const icons = {
@@ -160,7 +161,9 @@ export default function CampaignCreateModal({
                             {[
                               row.start_date,
                               row.title,
-                              row.location || row.venue,
+                              showsEventLocation(row)
+                                ? row.location || row.venue
+                                : "Online",
                             ]
                               .filter(Boolean)
                               .join(" - ")}

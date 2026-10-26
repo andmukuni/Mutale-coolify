@@ -65,6 +65,13 @@ export function buildOsmEmbedUrl(event = {}, { delta = 0.012 } = {}) {
   return `https://www.openstreetmap.org/export/embed.html?${params.toString()}`;
 }
 
+/** Online (virtual) events have no venue or city, so nothing can show a leftover place. */
+export function normalizeEventPlaceFields(payload = {}) {
+  const mode = String(payload.event_mode || 'virtual').trim().toLowerCase();
+  if (mode === 'virtual') return { venue: '', location: '' };
+  return { venue: payload.venue || '', location: payload.location || '' };
+}
+
 export function normalizeEventMapFields(payload = {}) {
   const mode = String(payload.event_mode || 'virtual').trim().toLowerCase();
   if (mode === 'virtual') {

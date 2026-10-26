@@ -23,3 +23,15 @@ describe('buildEventSharePayload', () => {
     expect(payload.text).toContain('Free');
   });
 });
+
+describe('buildEventSharePayload for online events', () => {
+  it('says Online event instead of a leftover city', () => {
+    const payload = buildEventSharePayload(
+      { title: 'QA Webinar', start_date: '2026-06-01', event_mode: 'virtual', location: 'Lusaka' },
+      'https://mutale.dev/events/qa-webinar',
+    );
+
+    expect(payload.text).toContain('Online event');
+    expect(payload.text).not.toContain('Lusaka');
+  });
+});

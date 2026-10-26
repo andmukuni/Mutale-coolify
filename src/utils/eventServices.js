@@ -42,6 +42,11 @@ export function isInPersonEvent(event) {
   return resolveEventMode(event) === 'in_person';
 }
 
+/** Online (virtual) events have no physical place, so pages never show a venue or city for them. */
+export function showsEventLocation(event) {
+  return resolveEventMode(event) !== 'virtual';
+}
+
 /** All event modes allow multi-attendee (self + guest) registration. */
 export function allowsMultiAttendeeRegistration(event) {
   return Boolean(event?.id);

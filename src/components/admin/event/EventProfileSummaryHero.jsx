@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { StatusBadge } from '../../ui';
 import { formatDate } from '../../../utils/helpers';
+import { showsEventLocation } from '../../../utils/eventServices';
 import { buildPublicEventPageUrl } from '../../../../shared/receiptQr.js';
 import { getAppOrigin } from '../../../utils/apiBase.js';
 import EventPublicQrCard from '../EventPublicQrCard';
@@ -149,7 +150,7 @@ export default function EventProfileSummaryHero({
               <Calendar size={15} className="text-navy-400 shrink-0" />
               {dateLabel}
             </span>
-            {(event.location || event.venue) && (
+            {showsEventLocation(event) && (event.location || event.venue) && (
               <span className="inline-flex items-center gap-1.5">
                 <MapPin size={15} className="text-navy-400 shrink-0" />
                 {event.location || event.venue}

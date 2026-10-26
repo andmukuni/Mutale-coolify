@@ -68,12 +68,14 @@ function draftRows(draft = {}) {
     ? 'Free'
     : (draft.is_free === false && draft.price ? `ZMW ${draft.price}` : '');
 
+  const online = draft.event_mode === 'virtual';
+
   return [
     ['Title', draft.title],
     ['Category', draft.category],
     ['Mode', draft.event_mode],
-    ['Location', draft.location],
-    ['Venue', draft.venue],
+    ['Location', online ? '' : draft.location],
+    ['Venue', online ? '' : draft.venue],
     ['Dates', [draft.start_date, draft.end_date].filter(Boolean).join(' → ')],
     ['Time', [draft.start_time, draft.end_time].filter(Boolean).join(' – ')],
     ['Deadline', [draft.registration_deadline, draft.registration_deadline_time].filter(Boolean).join(' ')],

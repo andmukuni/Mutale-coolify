@@ -307,7 +307,7 @@ export default function EventFormPage() {
         ...(name === 'end_time' ? { endTime: value } : {}),
         ...(name === 'event_mode' && value === 'in_person' ? { meeting_platform: '', meeting_link: '' } : {}),
         ...(name === 'event_mode' && value === 'virtual'
-          ? { venue: '', location_lat: '', location_lng: '', location_place: '' }
+          ? { venue: '', location: '', location_lat: '', location_lng: '', location_place: '' }
           : {}),
       };
 
@@ -529,6 +529,7 @@ export default function EventFormPage() {
     }
     if (payload.event_mode === 'virtual') {
       payload.venue = '';
+      payload.location = '';
       payload.location_lat = '';
       payload.location_lng = '';
       payload.location_place = '';

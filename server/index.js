@@ -177,7 +177,7 @@ import {
   resetChatSession,
 } from './eventChatService.js';
 import { searchPlaces } from './geoSearchService.js';
-import { normalizeEventMapFields } from '../shared/eventMaps.js';
+import { normalizeEventMapFields, normalizeEventPlaceFields } from '../shared/eventMaps.js';
 import { buildPublicEventPageUrl, generateReceiptQrDataUrl } from '../shared/receiptQr.js';
 
 // Load `.env` from the app root (parent of server/), not relying on cwd — cPanel Passenger often starts with cwd ≠ project root.
@@ -2064,8 +2064,7 @@ function normalizeEventPayload(payload = {}, fallbackId = null) {
     event_mode: payload.event_mode || 'virtual',
     meeting_platform: payload.meeting_platform || '',
     meeting_link: payload.meeting_link || '',
-    venue: payload.venue || '',
-    location: payload.location || '',
+    ...normalizeEventPlaceFields(payload),
     ...normalizeEventMapFields(payload),
     start_date: toDateOnly(payload.start_date),
     end_date: toDateOnly(payload.end_date),

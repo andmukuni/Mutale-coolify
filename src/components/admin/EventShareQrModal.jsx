@@ -4,7 +4,7 @@ import { buildPublicEventPageUrl, buildPublicEventQrDataUrl } from '../../../sha
 import { getAppOrigin } from '../../utils/apiBase.js';
 import { useToast } from '../../context/ToastContext';
 import { formatDate, formatTime } from '../../utils/helpers';
-import { formatPrice } from '../../utils/eventServices';
+import { formatPrice, showsEventLocation } from '../../utils/eventServices';
 import { sharePublicEvent } from '../../utils/shareEvent.js';
 import { RECEIPT_PALETTE } from '../../../shared/receiptTheme.js';
 
@@ -150,7 +150,7 @@ export default function EventShareQrModal({ event, onClose }) {
                       <dd className="font-medium text-navy-800 text-right">{event.category}</dd>
                     </div>
                   )}
-                  {event.location && (
+                  {showsEventLocation(event) && event.location && (
                     <div className="flex justify-between gap-3">
                       <dt className="text-navy-400 shrink-0">Location</dt>
                       <dd className="font-medium text-navy-800 text-right">{event.location}</dd>

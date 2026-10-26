@@ -1,5 +1,5 @@
 import { buildPublicEventPageUrl } from '../../shared/receiptQr.js';
-import { formatPrice } from './eventServices.js';
+import { formatPrice, showsEventLocation } from './eventServices.js';
 import { formatDate, formatTime } from './helpers.js';
 import { getAppOrigin } from './apiBase.js';
 
@@ -14,10 +14,9 @@ export function buildEventSharePayload(event = {}, publicUrl = '') {
   const timeStr = formatTime(event.start_time || event.time);
   const when = timeStr ? `${dateStr} at ${timeStr}` : dateStr;
 
-  const location = String(event.location || '').trim();
-  const mode = String(event.event_mode || '').toLowerCase();
-  const where = location
-    || (mode === 'virtual' ? 'Online event' : '');
+  const where = showsEventLocation(event)
+    ? String(event.location || '').trim()
+    : 'Online event';
 
   const priceLine = formatPrice(event);
   const category = event.category ? String(event.category) : '';

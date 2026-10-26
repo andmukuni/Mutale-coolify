@@ -77,4 +77,30 @@ describe('EventFormPage physical location', () => {
     expect(screen.queryByLabelText(/location \/ city/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/look up venue on map/i)).not.toBeInTheDocument();
   });
+
+  it('clears the venue and city when the event is switched to online', () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, data: { video: {} } }),
+    }));
+
+    render(
+      <MemoryRouter initialEntries={['/admin/events/new']}>
+        <Routes>
+          <Route path="/admin/events/new" element={<EventFormPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    goToScheduleStep();
+    fireEvent.change(screen.getByLabelText(/event mode/i), { target: { value: 'in_person' } });
+    fireEvent.change(screen.getByLabelText(/^venue$/i), { target: { value: 'Conference Hall' } });
+    fireEvent.change(screen.getByLabelText(/location \/ city/i), { target: { value: 'Lusaka, Zambia' } });
+
+    fireEvent.change(screen.getByLabelText(/event mode/i), { target: { value: 'virtual' } });
+    fireEvent.change(screen.getByLabelText(/event mode/i), { target: { value: 'in_person' } });
+
+    expect(screen.getByLabelText(/^venue$/i)).toHaveValue('');
+    expect(screen.getByLabelText(/location \/ city/i)).toHaveValue('');
+  });
 });

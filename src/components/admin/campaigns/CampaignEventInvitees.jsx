@@ -39,6 +39,7 @@ import {
   downloadCsv,
 } from "../../../utils/campaignWorkspaceApi";
 import { campaignDay } from "../../../../shared/campaignWorkspace";
+import { showsEventLocation } from "../../../utils/eventServices";
 
 // Invitee states written by the invitation service and the outbox worker.
 const INVITEE_STATES = {
@@ -720,7 +721,7 @@ export default function CampaignEventInvitees({
 
   const place =
     event &&
-    (event.event_mode === "virtual"
+    (!showsEventLocation(event)
       ? "Online"
       : [event.venue, event.location].filter(Boolean).join(", "));
 

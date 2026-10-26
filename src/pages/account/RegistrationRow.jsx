@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Calendar, MapPin, Ticket, QrCode } from 'lucide-react';
 import { formatDate } from '../../utils/helpers';
-import { isInPersonEvent } from '../../utils/eventServices';
+import { isInPersonEvent, showsEventLocation } from '../../utils/eventServices';
 
 const paymentColors = {
   paid: 'bg-green-50 text-green-700',
@@ -49,10 +49,12 @@ export default function RegistrationRow({ reg, onCancel, isPast }) {
             <Calendar size={12} />
             {formatDate(event.start_date || event.date)}
           </span>
-          <span className="flex items-center gap-1 text-xs text-navy-500">
-            <MapPin size={12} />
-            {event.location}
-          </span>
+          {showsEventLocation(event) && event.location && (
+            <span className="flex items-center gap-1 text-xs text-navy-500">
+              <MapPin size={12} />
+              {event.location}
+            </span>
+          )}
           <span className="flex items-center gap-1 text-xs text-navy-500">
             <Ticket size={12} />
             <span className="capitalize">{reg.registration_type}</span>
