@@ -33,6 +33,7 @@ import CampaignSuppressionView from "../../components/admin/campaigns/CampaignSu
 import CampaignWorkspaceNav from "../../components/admin/campaigns/CampaignWorkspaceNav";
 import CampaignEmailEditor from "../../components/admin/campaigns/CampaignEmailEditor";
 import CampaignEventInvitees from "../../components/admin/campaigns/CampaignEventInvitees";
+import CampaignDeliveryPanel from "../../components/admin/campaigns/CampaignDeliveryPanel";
 import useCampaignConfirm from "../../components/admin/campaigns/useCampaignConfirm";
 import {
   BTN_PRIMARY,
@@ -743,8 +744,8 @@ export default function CampaignManagePage() {
           </div>
           <p className="flex items-start gap-2 text-sm text-navy-500">
             <ShieldCheck size={16} className="shrink-0 mt-0.5 text-cyan-600" />
-            The sender domain must be verified with your email provider.
-            Verification is checked by the server.
+            Use an address on the same domain as your SMTP account, then
+            click Check senders to verify it.
           </p>
         </>
       )}
@@ -1361,42 +1362,54 @@ export default function CampaignManagePage() {
       )}
 
       {section === "senders" && (
-        <Card
-          title="Sender emails"
-          subtitle="Campaign delivery uses Resend. Account and ticket emails keep their SMTP configuration."
-          actions={
-            hasPermission("settings.manage") && (
-              <LoadingButton
-                className={BTN_SECONDARY}
-                loading={busy}
-                loadingLabel="Checking…"
-                icon={ShieldCheck}
-                iconSize={15}
-                onClick={() =>
-                  run(async () => {
-                    const result = await campaignRequest("/senders/verify", {
-                      method: "POST",
-                      body: {},
-                    });
-                    await load();
-                    toast.success(
-                      `${result.checked} sender identities checked.`,
-                    );
-                  })
-                }
-              >
-                Check verification
-              </LoadingButton>
-            )
-          }
-        >
-          <DataTable
-            columns={senderColumns}
-            data={directory.senders}
-            emptyTitle="No senders yet"
-            emptyDescription="Add a sender identity to use as the From address."
+        <>
+          <CampaignDeliveryPanel
+            canManage={hasPermission("settings.manage")}
+            toast={toast}
           />
-        </Card>
+          <Card
+            title="Sender emails"
+            subtitle="A sender is verified when the SMTP login works and its email uses the same domain as your SMTP account."
+            actions={
+              hasPermission("settings.manage") && (
+                <LoadingButton
+                  className={BTN_SECONDARY}
+                  loading={busy}
+                  loadingLabel="Checking…"
+                  icon={ShieldCheck}
+                  iconSize={15}
+                  onClick={() =>
+                    run(async () => {
+                      const result = await campaignRequest("/senders/verify", {
+                        method: "POST",
+                        body: {},
+                      });
+                      await load();
+                      const unverified = result.checked - result.verified;
+                      if (unverified)
+                        toast.error(
+                          `${unverified} of ${result.checked} senders aren't verified. Use an address at ${result.domains.join(" or ") || "your SMTP account's domain"}.`,
+                        );
+                      else
+                        toast.success(
+                          `SMTP sign-in worked. ${result.verified} ${result.verified === 1 ? "sender" : "senders"} verified.`,
+                        );
+                    })
+                  }
+                >
+                  Check senders
+                </LoadingButton>
+              )
+            }
+          >
+            <DataTable
+              columns={senderColumns}
+              data={directory.senders}
+              emptyTitle="No senders yet"
+              emptyDescription="Add a sender identity to use as the From address."
+            />
+          </Card>
+        </>
       )}
 
       {section === "templates" && (

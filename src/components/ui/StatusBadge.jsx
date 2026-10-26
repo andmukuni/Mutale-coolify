@@ -28,6 +28,9 @@ const colorMap = {
   sending: { bg: 'bg-cyan-50', text: 'text-cyan-700', ring: 'ring-cyan-600/20' },
   paused: { bg: 'bg-amber-50', text: 'text-amber-700', ring: 'ring-amber-600/20' },
   partially_failed: { bg: 'bg-orange-50', text: 'text-orange-700', ring: 'ring-orange-600/20' },
+  // sender verification
+  verified: { bg: 'bg-emerald-50', text: 'text-emerald-700', ring: 'ring-emerald-600/20' },
+  unverified: { bg: 'bg-amber-50', text: 'text-amber-700', ring: 'ring-amber-600/20' },
   default: { bg: 'bg-cyan-50', text: 'text-cyan-700', ring: 'ring-cyan-600/20' },
 };
 

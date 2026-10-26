@@ -4,6 +4,17 @@ Implemented locally on 14 October 2026 (Africa/Lusaka), using the privately reta
 
 The local application is available at **http://localhost:5175/admin/campaigns**. The API runs on port 4002. The original release was deployed through Coolify from GitHub `main` as commit `4d484f3`; live provider delivery has not been performed by this implementation work.
 
+### SMTP delivery — 27 October 2026
+
+Campaigns now send through the SMTP account in **Admin → Settings → Email**, the same one used for account, ticket and receipt emails. Resend is no longer used: its API key, webhook and `RESEND_*` variables are gone, and the Resend steps under "Live deployment settings" below no longer apply.
+
+- **Sender Settings → Campaign delivery** shows the SMTP server, a switch for sending to real recipients (off by default) and an hourly limit (200 by default). Both are stored in the new `campaign_delivery_settings` table, created empty at startup.
+- **Check senders** signs in to the SMTP server and marks a sender verified when its email uses the SMTP login's domain or the From domain in Admin Settings.
+- The worker spreads sends across the hour and stops at the hourly limit, counted from recipients sent in the last 60 minutes.
+- Opens come from a 1×1 tracking image (`/api/email/open`), clicks from the existing link redirects. Delivery and later bounce emails are not reported by SMTP, so the report shows Sent, Opened, Clicked and Not opened.
+- A send interrupted mid-transfer is marked unconfirmed and never retried automatically. The report lets an admin choose **It was sent** or **Send it again**. Failures the server clearly refused (4xx, connection or login errors before the message) retry on their own.
+- Verification: 37 focused tests and all 34 MySQL integration checks pass; a local SMTP test server received the test email and a five-recipient live send.
+
 ### Production collation correction — 14 October 2026
 
 Production's imported `users`, `events` and `event_registrations` tables use `utf8mb4_general_ci`, while the campaign tables use MySQL 8's `utf8mb4_0900_ai_ci`. Campaign listing joins and the attendee subscription query compared those columns implicitly, producing MySQL error 1267 throughout the shared campaign workspace. The local checks originally used one collation for all tables and missed this production difference.

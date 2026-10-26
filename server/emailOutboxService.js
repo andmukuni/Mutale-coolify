@@ -1,4 +1,3 @@
-import { replayPendingProviderEvents } from "./emailWebhookService.js";
 import {
   enqueueCampaignPush,
   runCampaignPushTick,
@@ -40,12 +39,13 @@ import {
   writeAudit,
 } from "./emailCampaignService.js";
 import {
-  getResendConfig,
-  isCampaignLiveSendAllowed,
-  sendResendEmail,
-} from "./emailResendAdapter.js";
+  campaignSendAllowance,
+  getCampaignDeliveryConfig,
+  sendSmtpEmail,
+} from "./campaignMailer.js";
 import { jsonValue, transaction } from "./campaignDirectoryService.js";
 import {
+  appendOpenPixel,
   ensureEventInvitee,
   recordCampaignLinks,
   signCampaignLink,
@@ -333,7 +333,10 @@ async function personalize(
     }),
     { document: true },
   );
-  if (track) html = await recordCampaignLinks(pool, campaign, recipient, html);
+  if (track) {
+    html = await recordCampaignLinks(pool, campaign, recipient, html);
+    html = appendOpenPixel(html, campaign, recipient);
+  }
   return {
     subject,
     html,
@@ -367,7 +370,7 @@ export async function previewCampaignEmail(
 }
 
 export async function campaignReadiness(pool, campaign, { live = false } = {}) {
-  const config = getResendConfig();
+  const config = await getCampaignDeliveryConfig(pool);
   const errors = [];
   if (!campaign.subject?.trim()) errors.push("Enter a subject line.");
   if (!campaign.revision) errors.push("Save a design before sending.");
@@ -442,13 +445,16 @@ export async function campaignReadiness(pool, campaign, { live = false } = {}) {
     "SELECT * FROM campaign_sender_identities WHERE id=? AND archived_at IS NULL",
     [campaign.sender_identity_id || "sender-mutale"],
   );
-  if (!config.apiKey) errors.push("Resend API key is not configured.");
+  if (!config.configured)
+    errors.push("Set up SMTP in Admin → Settings → Email before sending.");
   if (!sender || sender.status !== "verified")
-    errors.push("Select a verified sender email.");
+    errors.push(
+      "Select a verified sender email. Check senders in Campaigns → Sender Settings.",
+    );
   if (live && !config.live)
-    errors.push("Live campaign sends are disabled until RESEND_LIVE_SENDS=1.");
-  if (live && !config.webhookSecret)
-    errors.push("Configure the Resend webhook secret before sending.");
+    errors.push(
+      "Sending to real recipients is turned off. Turn it on in Campaigns → Sender Settings.",
+    );
   return {
     ready: errors.length === 0,
     errors,
@@ -460,9 +466,8 @@ export async function campaignReadiness(pool, campaign, { live = false } = {}) {
           status: sender.status,
         }
       : null,
-    configured: Boolean(config.apiKey),
+    configured: config.configured,
     live: config.live,
-    webhook_configured: Boolean(config.webhookSecret),
   };
 }
 
@@ -587,9 +592,10 @@ export async function startCampaignSend(
   { assertReady } = {},
 ) {
   if (!confirmed) throw new Error("Live sends require explicit confirmation.");
-  if (!isCampaignLiveSendAllowed())
+  const delivery = await getCampaignDeliveryConfig(pool);
+  if (!delivery.configured || !delivery.live)
     throw new Error(
-      "Live campaign sends are disabled until RESEND_LIVE_SENDS=1 and the sending domain is verified.",
+      "Sending to real recipients is turned off. Turn it on in Campaigns → Sender Settings.",
     );
   return transaction(pool, async (connection) => {
     await connection.query(
@@ -692,9 +698,10 @@ async function activateScheduled(pool) {
 export async function dispatchOutboxJob(
   pool,
   job,
-  { sendFn = sendResendEmail, config = getResendConfig() } = {},
+  { sendFn = sendSmtpEmail, config: suppliedConfig } = {},
 ) {
   if (!job) throw new Error("Outbox job is required.");
+  const config = suppliedConfig || (await getCampaignDeliveryConfig(pool));
   const campaign = await getCampaign(pool, job.campaign_id);
   if (
     !campaign ||
@@ -761,10 +768,10 @@ export async function dispatchOutboxJob(
     if (invitee && ["accepted", "declined"].includes(invitee.state))
       return { status: "skipped", reason: "invitation_responded" };
   }
-  if (!config.apiKey || !config.live)
+  if (!config.configured || !config.live)
     return {
       status: "failed",
-      reason: "Campaign delivery is not configured or live sends are disabled.",
+      reason: "SMTP is not set up or sending to real recipients is turned off.",
       retryable: false,
     };
   const [[sender]] = await pool.query(
@@ -776,17 +783,6 @@ export async function dispatchOutboxJob(
       status: "failed",
       reason: "Sender is not verified.",
       retryable: false,
-    };
-  if (
-    job.payload_json &&
-    job.first_attempt_at_utc &&
-    new Date(job.first_attempt_at_utc.replace(" ", "T") + "Z").getTime() <=
-      Date.now() - 86400000
-  )
-    return {
-      status: "acceptance_unknown",
-      reason:
-        "The provider idempotency window has elapsed. Review acceptance before retrying.",
     };
   const personalized = await personalize(
     pool,
@@ -837,8 +833,6 @@ export async function dispatchOutboxJob(
         replyTo: campaign.reply_to || DEFAULT_CAMPAIGN_SENDER.replyTo,
         headers,
         cc,
-        idempotencyKey: `${campaign.id}/${recipient.id}/send-1`,
-        tags: { campaign_id: campaign.id, purpose: campaign.purpose },
       };
   if (!job.payload_json)
     await pool.query(
@@ -863,11 +857,6 @@ export async function dispatchOutboxJob(
         reason:
           "Provider accepted this message but the local confirmation was interrupted.",
       };
-    }
-    try {
-      await replayPendingProviderEvents(pool, result.providerMessageId);
-    } catch (error) {
-      console.error("[campaign-webhook] Deferred replay:", error.message);
     }
     try {
       await enqueueCampaignPush(pool, campaign, recipient);
@@ -1001,18 +990,15 @@ export async function runEmailOutboxTick(pool, deps) {
     await pool.query(
       "UPDATE email_outbox_jobs SET status='acceptance_unknown',last_error='Worker interrupted; provider acceptance requires review' WHERE status='claimed' AND claimed_at<DATE_SUB(UTC_TIMESTAMP(),INTERVAL 5 MINUTE)",
     );
-    const [pendingEvents] = await pool.query(
-      "SELECT e.id,e.provider_message_id FROM email_provider_events e JOIN email_campaign_recipients r ON r.provider_message_id=e.provider_message_id WHERE e.processed_at IS NULL ORDER BY e.created_at LIMIT 25",
-    );
-    for (const event of pendingEvents)
-      await replayPendingProviderEvents(pool, event.provider_message_id);
-    const config = deps?.config || getResendConfig();
+    const config = deps?.config || (await getCampaignDeliveryConfig(pool));
     // Disabling delivery must preserve queued work, rather than consume it as failures.
-    if (!config.live || !config.apiKey) return [];
+    if (!config.live || !config.configured) return [];
     await activateScheduled(pool);
     await runCampaignPushTick(pool);
     const results = [];
-    for (let index = 0; index < 32; index++) {
+    // Pace sends so the SMTP account stays under its hourly limit.
+    const allowance = await campaignSendAllowance(pool, config);
+    for (let index = 0; index < allowance; index++) {
       const job = await claimNextOutboxJob(pool);
       if (!job) break;
       results.push(await processClaimedJob(pool, job, deps));
@@ -1136,9 +1122,10 @@ export async function sendCampaignTest(
   pool,
   id,
   recipient,
-  { sendFn = sendResendEmail, config = getResendConfig() } = {},
+  { sendFn = sendSmtpEmail, config: suppliedConfig } = {},
 ) {
   if (!validEmail(recipient)) throw new Error("Enter a valid test email.");
+  const config = suppliedConfig || (await getCampaignDeliveryConfig(pool));
   const campaign = await getCampaignWithRevision(pool, id);
   const ready = await campaignReadiness(pool, campaign);
   if (!ready.ready) throw new Error(ready.errors.join(" "));
@@ -1152,12 +1139,10 @@ export async function sendCampaignTest(
     fromName: campaign.from_name,
     fromEmail: campaign.from_email,
     replyTo: campaign.reply_to,
-    idempotencyKey: `test/${id}/${crypto.randomUUID()}`,
-    tags: { campaign_id: id, kind: "test" },
   });
   if (result.status !== "accepted")
     throw new Error(
-      result.reason || "The provider did not confirm test acceptance.",
+      result.reason || "The SMTP server did not confirm the test email.",
     );
   return result;
 }

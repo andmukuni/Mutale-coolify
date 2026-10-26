@@ -161,6 +161,27 @@ export async function recordCampaignLinks(pool, campaign, recipient, html) {
   );
 }
 
+/** Adds a 1×1 image that records the first open. Opens are estimates: mail apps may block or prefetch images. */
+export function appendOpenPixel(html, campaign, recipient) {
+  const token = signCampaignLink({
+    kind: "open",
+    recipientId: recipient.id,
+    campaignId: campaign.id,
+  });
+  const pixel = `<img src="${String(process.env.APP_URL || "https://mutalemubanga.org").replace(/\/$/, "")}/api/email/open?token=${encodeURIComponent(token)}" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0;overflow:hidden" />`;
+  return /<\/body>/i.test(html)
+    ? html.replace(/<\/body>/i, `${pixel}</body>`)
+    : `${html}${pixel}`;
+}
+
+export async function recordCampaignOpen(pool, token) {
+  const data = readCampaignLink(token, "open");
+  await pool.query(
+    "UPDATE email_campaign_recipients SET opened_at=COALESCE(opened_at,UTC_TIMESTAMP()) WHERE id=? AND campaign_id=?",
+    [data.recipientId, data.campaignId],
+  );
+}
+
 export async function recordCampaignClick(pool, token, { head = false } = {}) {
   const data = readCampaignLink(token, "click");
   const [[link]] = await pool.query(

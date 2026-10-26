@@ -18,7 +18,7 @@ import {
   saveDesignTemplate,
   writeAudit,
 } from "./emailCampaignService.js";
-import { getCampaignReport } from "./emailWebhookService.js";
+import { getCampaignReport } from "./campaignReportService.js";
 import {
   campaignReadiness,
   previewCampaignEmail,
@@ -29,12 +29,24 @@ import {
   invitationContext,
   respondToInvitation,
   recordCampaignClick,
+  recordCampaignOpen,
   ensureEventInvitee,
   saveCampaignSurvey,
   getCampaignSurvey,
   submitCampaignSurvey,
 } from "./campaignInvitationService.js";
 import { reconcileCampaignJob } from "./campaignReconciliationService.js";
+import {
+  describeDeliveryConfig,
+  getCampaignDeliveryConfig,
+  saveCampaignDeliverySettings,
+} from "./campaignMailer.js";
+
+// Transparent 1×1 GIF returned by the open-tracking pixel.
+const OPEN_PIXEL_GIF = Buffer.from(
+  "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+  "base64",
+);
 
 const safe = (handler) => async (req, res) => {
   try {
@@ -281,9 +293,29 @@ export function registerCampaignWorkspaceRoutes(
   );
   app.post(
     "/api/admin/campaigns/senders/verify",
+    safe(async (_req, res) => send(res, await refreshCampaignSenders(pool))),
+  );
+  app.get(
+    "/api/admin/campaigns/senders/delivery",
     safe(async (_req, res) =>
-      send(res, { checked: await refreshCampaignSenders(pool) }),
+      send(res, describeDeliveryConfig(await getCampaignDeliveryConfig(pool))),
     ),
+  );
+  app.put(
+    "/api/admin/campaigns/senders/delivery",
+    safe(async (req, res) => {
+      const saved = await saveCampaignDeliverySettings(
+        pool,
+        { live: req.body.live === true, hourlyLimit: req.body.hourly_limit },
+        actorId(req),
+      );
+      await writeAudit(pool, {
+        actorId: actorId(req),
+        action: "campaign.delivery_settings",
+        detail: `live=${saved.live} hourly_limit=${saved.hourlyLimit}`,
+      });
+      send(res, describeDeliveryConfig(saved));
+    }),
   );
   app.get(
     "/api/admin/campaigns/suppressions",
@@ -415,7 +447,7 @@ export function registerCampaignWorkspaceRoutes(
         await reconcileCampaignJob(pool, {
           campaignId: req.params.id,
           jobId: req.body.job_id,
-          providerMessageId: req.body.provider_message_id,
+          resolution: req.body.resolution,
           actorId: actorId(req),
         }),
       ),
@@ -622,6 +654,18 @@ export function registerCampaignWorkspaceRoutes(
       res.redirect(await recordCampaignClick(pool, req.query.token)),
     ),
   );
+  app.get("/api/email/open", async (req, res) => {
+    try {
+      await recordCampaignOpen(pool, req.query.token);
+    } catch {
+      // Invalid or expired pixels still return the image, so mail apps never show a broken image.
+    }
+    res.set({
+      "Content-Type": "image/gif",
+      "Cache-Control": "no-store, no-cache, must-revalidate, private",
+    });
+    res.end(OPEN_PIXEL_GIF);
+  });
   app.get(
     "/api/email/subscriptions",
     safe(async (req, res) => {

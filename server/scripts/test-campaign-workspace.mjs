@@ -55,11 +55,13 @@ import {
   submitCampaignSurvey,
   getCampaignSurvey,
   recordCampaignClick,
+  recordCampaignOpen,
 } from "../campaignInvitationService.js";
+import { getCampaignReport } from "../campaignReportService.js";
 import {
-  getCampaignReport,
-  ingestResendWebhook,
-} from "../emailWebhookService.js";
+  saveCampaignDeliverySettings,
+  setCampaignSmtpSettingsLoader,
+} from "../campaignMailer.js";
 const connectionOptions = {
   host: process.env.DB_HOST || "127.0.0.1",
   port: Number(process.env.DB_PORT || 3306),
@@ -78,12 +80,23 @@ const check = (name) => {
   console.log(`PASS ${name}`);
 };
 const keep = process.env.CAMPAIGN_TEST_KEEP === "1";
-process.env.RESEND_LIVE_SENDS = "1";
+// Campaigns send through SMTP; no network calls are made in this script.
+setCampaignSmtpSettingsLoader(async () => ({
+  smtpHost: "smtp.test",
+  smtpPort: 587,
+  smtpUser: "grow@mutalemubanga.org",
+  fromEmail: "grow@mutalemubanga.org",
+}));
 process.env.APP_URL = "http://localhost:5176";
 process.env.AUTH_TOKEN_SECRET = "test-only-campaign-link-key";
 const sendReady = { assertReady: async () => ({ ready: true, errors: [] }) };
 const deps = {
-  config: { apiKey: "test-only-no-network", live: true },
+  config: {
+    configured: true,
+    live: true,
+    hourlyLimit: 200,
+    smtp: { host: "smtp.test", port: 587 },
+  },
   sendFn: async () => ({
     status: "accepted",
     providerMessageId: `test-msg-${crypto.randomUUID()}`,
@@ -110,6 +123,11 @@ try {
   }
   await ensureEmailCommunicationsSchema(pool);
   await ensureEmailCommunicationsSchema(pool);
+  await saveCampaignDeliverySettings(
+    pool,
+    { live: true, hourlyLimit: 200 },
+    "campaign-test-admin",
+  );
   check("schema migration is repeatable");
   await pool.query(
     "INSERT INTO events (id,title,slug,status,start_date,start_time,event_mode,venue,location,booking_type) VALUES ('test-event','Campaign Test Event','campaign-test-event','published','2027-06-01','09:00:00','in_person','Lusaka','Lusaka','both')",
@@ -264,43 +282,23 @@ try {
   check(
     "list selection cannot clear an unsubscribe; explicit re-subscription works",
   );
-  await refreshCampaignSenders(pool, {
-    fetchImpl: async () =>
-      new Response(
-        JSON.stringify({
-          data: [
-            {
-              id: "test-domain",
-              name: "mutalemubanga.org",
-              status: "verified",
-              capabilities: { sending: "enabled" },
-            },
-          ],
-        }),
-        { status: 200 },
-      ),
-  }).catch(async (error) => {
-    if (/RESEND_API_KEY/.test(error.message)) {
-      process.env.RESEND_API_KEY = "test-only-no-network";
-      await refreshCampaignSenders(pool, {
-        fetchImpl: async () =>
-          new Response(
-            JSON.stringify({
-              data: [
-                {
-                  id: "test-domain",
-                  name: "mutalemubanga.org",
-                  status: "verified",
-                  capabilities: { sending: "enabled" },
-                },
-              ],
-            }),
-            { status: 200 },
-          ),
-      });
-    } else throw error;
+  await assert.rejects(
+    refreshCampaignSenders(pool, {
+      verifyFn: async () => {
+        throw new Error("Couldn't sign in to the SMTP server smtp.test: Invalid login");
+      },
+    }),
+    /Couldn't sign in/,
+  );
+  const senderCheck = await refreshCampaignSenders(pool, {
+    verifyFn: async () => {},
   });
-  check("verified sender state comes from provider domain API");
+  assert.deepEqual(senderCheck.domains, ["mutalemubanga.org"]);
+  const [[defaultSender]] = await pool.query(
+    "SELECT status FROM campaign_sender_identities WHERE id='sender-mutale'",
+  );
+  assert.equal(defaultSender.status, "verified");
+  check("senders are verified by SMTP sign-in and matching domain");
   const regular = await createCampaign(pool, {
     type: "regular",
     name: "Regular",
@@ -440,34 +438,18 @@ try {
   assert.equal(report.links.find((l) => l.id === link.id).clicks, 2);
   assert.equal(report.links.find((l) => l.id === link.id).unique_clicks, 1);
   check("HEAD-safe click redirects and unique per-link reporting");
-  const secret = Buffer.from("test-webhook-key").toString("base64");
-  const body = JSON.stringify({
-    type: "email.bounced",
-    data: {
-      email_id: "regular-message",
-      bounce: { type: "Permanent", message: "Test rejection" },
-    },
+  assert.ok(captured.html.includes("/api/email/open?token="));
+  const openToken = signCampaignLink({
+    kind: "open",
+    campaignId: regular.id,
+    recipientId: job.recipient_id,
   });
-  const timestamp = String(Math.floor(Date.now() / 1000));
-  const signature = crypto
-    .createHmac("sha256", Buffer.from(secret, "base64"))
-    .update(`test-webhook.${timestamp}.${body}`)
-    .digest("base64");
-  const headers = {
-    "svix-id": "test-webhook",
-    "svix-timestamp": timestamp,
-    "svix-signature": `v1,${signature}`,
-  };
-  await ingestResendWebhook(pool, { rawBody: body, headers, secret });
-  assert.equal(
-    (await ingestResendWebhook(pool, { rawBody: body, headers, secret }))
-      .duplicate,
-    true,
-  );
-  await pool.query(
-    "DELETE FROM email_suppressions WHERE email_normalized='alice@example.test'",
-  );
-  check("signed webhook ingestion and duplicate event handling");
+  await recordCampaignOpen(pool, openToken);
+  await recordCampaignOpen(pool, openToken);
+  report = await getCampaignReport(pool, regular.id);
+  assert.equal(report.totals.opened, 1);
+  await assert.rejects(recordCampaignOpen(pool, clickToken), /invalid/);
+  check("open-tracking image records one open per recipient");
   const copy = await duplicateCampaign(pool, regular.id, "campaign-test-admin");
   assert.equal(copy.campaign_type, "regular");
   assert.equal(copy.state, "draft");
@@ -728,14 +710,13 @@ try {
     "UPDATE email_outbox_jobs SET scheduled_at_utc=UTC_TIMESTAMP(),first_attempt_at_utc=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 25 HOUR) WHERE id=?",
     [retryJob.id],
   );
-  const expiredJob = await claimNextOutboxJob(pool);
+  // SMTP only retries failures the server definitely refused, so an old retry is still safe.
+  const laterJob = await claimNextOutboxJob(pool);
   assert.equal(
-    (await processClaimedJob(pool, expiredJob, deps)).status,
-    "acceptance_unknown",
+    (await processClaimedJob(pool, laterJob, deps)).status,
+    "accepted",
   );
-  check(
-    "retry payloads stay identical and expired idempotency windows require reconciliation",
-  );
+  check("retry payloads stay identical and definite failures retry later");
   const [[regularRecipient]] = await pool.query(
     "SELECT * FROM email_campaign_recipients WHERE id=?",
     [job.recipient_id],
@@ -820,93 +801,53 @@ try {
     "SELECT * FROM email_outbox_jobs WHERE id=?",
     [ambiguousJob.id],
   );
-  const unknownPayload = JSON.parse(unknownJob.payload_json);
-  const providerRecord = {
-    id: "verified-provider-message",
-    to: [unknownPayload.to],
-    subject: unknownPayload.subject,
-    html: unknownPayload.html,
-    tags: [{ name: "campaign_id", value: ambiguous.id }],
-  };
-  const reconcileConfig = { apiKey: "test-only" };
   await assert.rejects(
-    reconcileCampaignJob(
-      pool,
-      {
-        campaignId: ambiguous.id,
-        jobId: unknownJob.id,
-        providerMessageId: providerRecord.id,
-      },
-      {
-        config: reconcileConfig,
-        fetchImpl: async () =>
-          new Response(
-            JSON.stringify({ ...providerRecord, to: ["wrong@example.test"] }),
-            { status: 200 },
-          ),
-      },
-    ),
-    /does not match/,
-  );
-  await reconcileCampaignJob(
-    pool,
-    {
+    reconcileCampaignJob(pool, {
       campaignId: ambiguous.id,
       jobId: unknownJob.id,
-      providerMessageId: providerRecord.id,
-    },
-    {
-      config: reconcileConfig,
-      fetchImpl: async () =>
-        new Response(JSON.stringify(providerRecord), { status: 200 }),
-    },
+      resolution: "maybe",
+    }),
+    /Choose whether/,
   );
+  await reconcileCampaignJob(pool, {
+    campaignId: ambiguous.id,
+    jobId: unknownJob.id,
+    resolution: "resend",
+    actorId: "campaign-test-admin",
+  });
+  const [[requeued]] = await pool.query(
+    "SELECT * FROM email_outbox_jobs WHERE id=?",
+    [unknownJob.id],
+  );
+  assert.equal(requeued.status, "queued");
+  let resent;
+  await processClaimedJob(pool, requeued, {
+    ...deps,
+    sendFn: async (payload) => {
+      resent = payload;
+      return { status: "acceptance_unknown", reason: "Test disconnect again" };
+    },
+  });
+  assert.equal(resent.to, JSON.parse(unknownJob.payload_json).to);
+  await reconcileCampaignJob(pool, {
+    campaignId: ambiguous.id,
+    jobId: unknownJob.id,
+    resolution: "sent",
+    actorId: "campaign-test-admin",
+  });
   assert.equal(
     (await getCampaignReport(pool, ambiguous.id)).totals.accepted,
     1,
   );
-  check(
-    "manual provider-ID reconciliation verifies exact campaign content and recipient",
+  await assert.rejects(
+    reconcileCampaignJob(pool, {
+      campaignId: ambiguous.id,
+      jobId: unknownJob.id,
+      resolution: "sent",
+    }),
+    /unconfirmed send/,
   );
-  const raceCampaign = await duplicateCampaign(pool, regular.id);
-  await startCampaignSend(
-    pool,
-    raceCampaign.id,
-    { confirmed: true },
-    sendReady,
-  );
-  const raceJob = await claimNextOutboxJob(pool);
-  await processClaimedJob(pool, raceJob, {
-    ...deps,
-    sendFn: async () => {
-      const raceBody = JSON.stringify({
-        type: "email.delivered",
-        data: { email_id: "early-webhook-message" },
-      });
-      const raceId = "early-webhook";
-      const raceSignature = crypto
-        .createHmac("sha256", Buffer.from(secret, "base64"))
-        .update(`${raceId}.${timestamp}.${raceBody}`)
-        .digest("base64");
-      await ingestResendWebhook(pool, {
-        rawBody: raceBody,
-        secret,
-        headers: {
-          "svix-id": raceId,
-          "svix-timestamp": timestamp,
-          "svix-signature": `v1,${raceSignature}`,
-        },
-      });
-      return { status: "accepted", providerMessageId: "early-webhook-message" };
-    },
-  });
-  assert.equal(
-    (await getCampaignReport(pool, raceCampaign.id)).totals.delivered,
-    1,
-  );
-  check(
-    "webhooks arriving before provider acceptance are replayed after association",
-  );
+  check("unconfirmed SMTP sends are resent or marked sent by an admin, once");
   await pool.query(
     "UPDATE events SET event_mode='virtual',zoom_join_url='https://example.com/private-joining-link' WHERE id='test-event'",
   );

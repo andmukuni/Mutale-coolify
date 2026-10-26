@@ -1530,7 +1530,6 @@ function isAdminProtectedRoute(req) {
   if (isCatalogAdminMutation(routePath, method)) return true;
   if (routePath.startsWith('/api/partner-logos') && method !== 'GET') return true;
   if (routePath.startsWith('/api/menu-items') && method !== 'GET') return true;
-  if (routePath === '/api/webhooks/resend') return false;
   if (routePath.startsWith('/api/email/preferences')) return false;
   if (routePath.startsWith('/api/email/unsubscribe')) return false;
   if (routePath.startsWith('/api/event-resources/')) return false;
@@ -10723,6 +10722,8 @@ registerEmailCampaignRoutes(app, {
   getJwtAuth,
   sendAuthFailure,
   __appRoot,
+  // Campaigns send through the SMTP account in Admin → Settings → Email.
+  getSmtpSettings: async () => (await getSystemSettings()).email,
 });
 
 registerRegistrationAttendeeRoutes(app, { pool });

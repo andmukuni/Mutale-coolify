@@ -40,8 +40,8 @@ import {
   revokeRegistrationGrants,
   setResourcePublished,
 } from './eventResourceService.js';
-import { getCampaignReport, ingestResendWebhook } from './emailWebhookService.js';
-import { getResendConfig } from './emailResendAdapter.js';
+import { getCampaignReport } from './campaignReportService.js';
+import { setCampaignSmtpSettingsLoader } from './campaignMailer.js';
 import { registerCampaignWorkspaceRoutes } from './campaignWorkspaceRoutes.js';
 
 function actorId(req) {
@@ -56,22 +56,9 @@ function requireCampaignEvent(campaign, eventId) {
   }
 }
 
-export function registerEmailCampaignRoutes(app, { pool, getAdminAuth, getJwtAuth, sendAuthFailure, __appRoot, uploadImage }) {
+export function registerEmailCampaignRoutes(app, { pool, getAdminAuth, getJwtAuth, sendAuthFailure, __appRoot, uploadImage, getSmtpSettings }) {
+  if (getSmtpSettings) setCampaignSmtpSettingsLoader(getSmtpSettings);
   registerCampaignWorkspaceRoutes(app,{pool,actorId,getJwtAuth,uploadImage});
-  app.get('/api/admin/campaigns/provider-status', async (_req, res) => {
-    const config = getResendConfig();
-    return res.json({
-      ok: true,
-      data: {
-        configured: Boolean(config.apiKey),
-        live: Boolean(config.live),
-        webhook_configured: Boolean(config.webhookSecret),
-        notice: config.live
-          ? 'Live audience sends are enabled.'
-          : 'Sandbox mode: test sends need an API key. Audience sends stay blocked until RESEND_LIVE_SENDS=1.',
-      },
-    });
-  });
 
   app.get('/api/admin/events/:eventId/campaigns', async (req, res) => {
     try {
@@ -300,19 +287,6 @@ export function registerEmailCampaignRoutes(app, { pool, getAdminAuth, getJwtAut
         externalUrl: req.body?.external_url || '',
       });
       return res.json({ ok: true, data });
-    } catch (error) {
-      return res.status(400).json({ ok: false, message: error.message });
-    }
-  });
-
-  app.post('/api/webhooks/resend', async (req, res) => {
-    try {
-      const result = await ingestResendWebhook(pool, {
-        rawBody: req.rawBody || JSON.stringify(req.body || {}),
-        headers: req.headers,
-        secret: getResendConfig().webhookSecret,
-      });
-      return res.json(result);
     } catch (error) {
       return res.status(400).json({ ok: false, message: error.message });
     }

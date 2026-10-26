@@ -104,6 +104,8 @@ export async function ensureCampaignWorkspaceSchema(pool) {
     campaign_assets: `id VARCHAR(90) PRIMARY KEY,name VARCHAR(255) NOT NULL,url TEXT NOT NULL,created_at DATETIME DEFAULT CURRENT_TIMESTAMP`,
     campaign_push_jobs: `id VARCHAR(90) PRIMARY KEY,campaign_id VARCHAR(90) NOT NULL,recipient_id VARCHAR(90) NOT NULL,token_id VARCHAR(90) NOT NULL,status VARCHAR(40) NOT NULL DEFAULT 'queued',tries INT NOT NULL DEFAULT 0,ticket_id VARCHAR(160) NULL,last_error VARCHAR(400) NULL,accepted_at DATETIME NULL,next_attempt_at DATETIME DEFAULT CURRENT_TIMESTAMP,updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,UNIQUE KEY uq_campaign_push_recipient(campaign_id,recipient_id,token_id)`,
     campaign_push_tokens: `id VARCHAR(90) PRIMARY KEY, user_id VARCHAR(90) NOT NULL, token VARCHAR(255) NOT NULL UNIQUE, active TINYINT DEFAULT 1, created_at DATETIME DEFAULT CURRENT_TIMESTAMP`,
+    // Single row (id=1). Live sends stay off until an admin turns them on in Sender Settings.
+    campaign_delivery_settings: `id TINYINT PRIMARY KEY, live_sends TINYINT(1) NOT NULL DEFAULT 0, hourly_limit INT NOT NULL DEFAULT 200, updated_by VARCHAR(90) NULL, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`,
   };
   for (const [table, definition] of Object.entries(definitions))
     await pool.query(`CREATE TABLE IF NOT EXISTS ${table} (${definition})`);

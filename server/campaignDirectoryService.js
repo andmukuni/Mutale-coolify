@@ -9,7 +9,11 @@ import {
   recordMarketingOptIn,
   recordUnsubscribe,
 } from "./emailConsentService.js";
-import { getResendConfig } from "./emailResendAdapter.js";
+import {
+  allowedSenderDomains,
+  getCampaignDeliveryConfig,
+  verifySmtpConnection,
+} from "./campaignMailer.js";
 
 export function jsonValue(value, fallback = {}) {
   if (value && typeof value === "object") return value;
@@ -363,54 +367,35 @@ export async function saveCampaignSender(pool, input) {
   return id;
 }
 
-export async function refreshCampaignSenders(pool, { fetchImpl = fetch } = {}) {
-  const config = getResendConfig();
-  if (!config.apiKey)
+/**
+ * A sender is verified when the SMTP login works and its domain matches the
+ * SMTP account (its login or the From address in Admin → Settings → Email).
+ */
+export async function refreshCampaignSenders(
+  pool,
+  { verifyFn = verifySmtpConnection, config: suppliedConfig } = {},
+) {
+  const config = suppliedConfig || (await getCampaignDeliveryConfig(pool));
+  if (!config.configured)
     throw new Error(
-      "Configure RESEND_API_KEY on the server before checking senders.",
+      "Set up SMTP in Admin → Settings → Email before checking senders.",
     );
-  const domains = [];
-  let after = "";
-  for (let page = 0; page < 20; page++) {
-    const response = await fetchImpl(
-      `https://api.resend.com/domains?limit=100${after ? `&after=${encodeURIComponent(after)}` : ""}`,
-      {
-        headers: {
-          Authorization: `Bearer ${config.apiKey}`,
-          "User-Agent": "Mutale-Campaigns/2.0",
-        },
-        signal: AbortSignal.timeout(15000),
-      },
-    );
-    const body = await response.json();
-    if (!response.ok)
-      throw new Error(
-        "Unable to check verified domains. The Resend key needs domain-read access.",
-      );
-    domains.push(...(body.data || []));
-    if (!body.has_more) break;
-    after = body.data?.at(-1)?.id;
-    if (!after) throw new Error("Domain verification pagination failed.");
-  }
+  await verifyFn(config);
+  const domains = allowedSenderDomains(config.smtp);
   const [senders] = await pool.query(
     "SELECT * FROM campaign_sender_identities WHERE archived_at IS NULL",
   );
+  let verified = 0;
   for (const sender of senders) {
-    const domain = domains.find(
-      (item) =>
-        item.name.toLowerCase() === sender.email.split("@")[1].toLowerCase(),
-    );
-    const status =
-      domain?.status === "verified" &&
-      domain?.capabilities?.sending !== "disabled"
-        ? "verified"
-        : "unverified";
+    const domain = String(sender.email || "").split("@")[1]?.toLowerCase();
+    const status = domains.has(domain) ? "verified" : "unverified";
+    if (status === "verified") verified += 1;
     await pool.query(
-      "UPDATE campaign_sender_identities SET status=?,provider_domain_id=?,checked_at=UTC_TIMESTAMP() WHERE id=?",
-      [status, domain?.id || null, sender.id],
+      "UPDATE campaign_sender_identities SET status=?,provider_domain_id=NULL,checked_at=UTC_TIMESTAMP() WHERE id=?",
+      [status, sender.id],
     );
   }
-  return senders.length;
+  return { checked: senders.length, verified, domains: [...domains] };
 }
 
 export async function campaignSuppressions(pool) {

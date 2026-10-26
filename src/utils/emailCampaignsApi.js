@@ -38,10 +38,6 @@ export function fetchCampaignTemplates() {
   return request('/admin/campaigns/templates');
 }
 
-export function fetchCampaignProviderStatus() {
-  return request('/admin/campaigns/provider-status');
-}
-
 export function createCampaign(payload) {
   return request('/admin/campaigns', { method: 'POST', body: payload });
 }

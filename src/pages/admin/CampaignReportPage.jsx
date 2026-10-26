@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   BarChart3,
   Ban,
+  CheckCircle2,
   Download,
   ExternalLink,
   Link2,
@@ -62,7 +63,6 @@ const REPORT_COLUMNS = [
   "name",
   "status",
   "sent",
-  "delivered",
   "opened",
   "clicked",
   "clicks",
@@ -74,7 +74,6 @@ const columnLabel = (key) =>
     : key.replaceAll("_", " ").replace(/^\w/, (c) => c.toUpperCase());
 const filters = [
   ["all", "All Recipients"],
-  ["delivered", "Delivered"],
   ["opened", "Opened"],
   ["not_opened", "Not Opened"],
   ["clicked", "Clicked"],
@@ -87,13 +86,11 @@ const filters = [
 ];
 const matches = (row, filter) =>
   filter === "all" ||
-  (filter === "delivered"
-    ? row.delivered_at
-    : filter === "opened"
-      ? row.opened_at
-      : filter === "not_opened"
-        ? row.delivered_at && !row.opened_at
-        : filter === "clicked"
+  (filter === "opened"
+    ? row.opened_at
+    : filter === "not_opened"
+      ? row.sent_at && !row.opened_at
+      : filter === "clicked"
           ? row.clicked_at
           : filter === "not_clicked"
             ? row.opened_at && !row.clicked_at
@@ -119,7 +116,6 @@ export default function CampaignReportPage() {
     [report, setReport] = useState(null),
     [jobs, setJobs] = useState([]),
     [groups, setGroups] = useState([]),
-    [reconcileIds, setReconcileIds] = useState({}),
     [filter, setFilter] = useState("all"),
     [search, setSearch] = useState(""),
     [tab, setTab] = useState("summary"),
@@ -224,18 +220,19 @@ export default function CampaignReportPage() {
     clicks: row.clicks,
     reason: row.exclude_reason || row.error_reason || "",
   });
-  const reconcile = async (job) => {
+  const reconcile = async (job, resolution) => {
     setBusy(true);
     try {
       await campaignRequest(`/${id}/reconcile`, {
         method: "POST",
-        body: {
-          job_id: job.id,
-          provider_message_id: reconcileIds[job.id] || job.provider_message_id,
-        },
+        body: { job_id: job.id, resolution },
       });
       await load();
-      toast.success("Delivery reconciled.");
+      toast.success(
+        resolution === "sent"
+          ? "Marked as sent."
+          : "Queued to send again.",
+      );
     } catch (error) {
       toast.error(error.message);
     } finally {
@@ -245,13 +242,6 @@ export default function CampaignReportPage() {
   const openRate = totals.accepted ? (totals.opened / totals.accepted) * 100 : 0;
   const stats = [
     { label: "Sent", value: totals.accepted, icon: Send, color: "cyan" },
-    {
-      label: "Delivered",
-      value: totals.delivered,
-      icon: MailCheck,
-      color: "green",
-      subtitle: `${percent(totals.delivered)} of sent`,
-    },
     {
       label: "Opened",
       value: totals.opened,
@@ -265,6 +255,13 @@ export default function CampaignReportPage() {
       icon: MousePointerClick,
       color: "purple",
       subtitle: `${percent(totals.clicked)} of sent`,
+    },
+    {
+      label: "Not opened",
+      value: totals.not_opened,
+      icon: MailCheck,
+      color: "green",
+      subtitle: `${percent(totals.not_opened)} of sent`,
     },
     {
       label: "Bounced",
@@ -431,8 +428,11 @@ export default function CampaignReportPage() {
                 Delivery needs reconciliation
               </h2>
               <p className="text-sm text-amber-900/80 mt-1">
-                The provider response was interrupted for {unknown.length}{" "}
-                messages. These messages will not be sent again automatically.
+                The connection to the mail server dropped while sending{" "}
+                {unknown.length}{" "}
+                {unknown.length === 1 ? "message" : "messages"}, so delivery
+                is unconfirmed. They won't be sent again automatically. Check
+                with the recipient or your mailbox's Sent folder, then choose.
               </p>
             </div>
           </div>
@@ -442,35 +442,30 @@ export default function CampaignReportPage() {
                 key={job.id}
                 className="app-card rounded-xl border border-amber-100 bg-white p-4 text-sm"
               >
-                <p className="text-navy-800">{job.last_error}</p>
-                <p className="text-xs text-navy-500 mt-1">
-                  {job.provider_message_id ||
-                    "Provider message ID unavailable; check the provider log."}
+                <p className="font-medium text-navy-900">
+                  {report.recipients.find((row) => row.id === job.recipient_id)
+                    ?.email_normalized || "Recipient"}
                 </p>
+                <p className="text-xs text-navy-500 mt-1">{job.last_error}</p>
                 {hasPermission("campaigns.send") && (
-                  <div className="flex flex-col sm:flex-row gap-2 mt-3">
-                    <input
-                      aria-label={`Provider message ID for ${job.id}`}
-                      placeholder="Message ID from the provider log"
-                      className={INPUT_SM}
-                      value={
-                        reconcileIds[job.id] || job.provider_message_id || ""
-                      }
-                      onChange={(e) =>
-                        setReconcileIds((old) => ({
-                          ...old,
-                          [job.id]: e.target.value,
-                        }))
-                      }
-                    />
+                  <div className="flex flex-wrap gap-2 mt-3">
                     <button
                       type="button"
                       disabled={busy}
-                      className={`${BTN_SECONDARY} shrink-0`}
-                      onClick={() => reconcile(job)}
+                      className={BTN_SECONDARY}
+                      onClick={() => reconcile(job, "sent")}
+                    >
+                      <CheckCircle2 size={15} />
+                      It was sent
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      className={BTN_SECONDARY}
+                      onClick={() => reconcile(job, "resend")}
                     >
                       <RefreshCw size={15} />
-                      Check provider and reconcile
+                      Send it again
                     </button>
                   </div>
                 )}

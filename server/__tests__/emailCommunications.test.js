@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import crypto from 'crypto';
 import os from 'os';
 import path from 'path';
@@ -15,8 +15,6 @@ import {
   signPreferenceToken,
   startCampaignSend,
 } from '../emailOutboxService.js';
-import { ingestResendWebhook } from '../emailWebhookService.js';
-import { verifyResendWebhook } from '../emailResendAdapter.js';
 import {
   addResourceVersion,
   createEventResource,
@@ -286,16 +284,6 @@ function seedRegistration(pool, overrides = {}) {
   return row;
 }
 
-function signWebhook(secret, id, timestamp, body) {
-  const key = Buffer.from(String(secret).replace(/^whsec_/, ''), 'base64');
-  const expected = crypto.createHmac('sha256', key).update(`${id}.${timestamp}.${body}`).digest('base64');
-  return {
-    'svix-id': id,
-    'svix-timestamp': timestamp,
-    'svix-signature': `v1,${expected}`,
-  };
-}
-
 describe('RBAC campaign route keys', () => {
   it('separates view, manage, and send', () => {
     expect(resolveRouteAdminPermission({ path: '/api/admin/campaigns/abc', method: 'GET' })).toBe('campaigns.view');
@@ -322,18 +310,9 @@ describe('audience preview', () => {
   });
 });
 
+const LIVE_SMTP = { configured: true, live: true, hourlyLimit: 200, smtp: { host: 'mail.example.org', port: 587 } };
+
 describe('consent and dispatch', () => {
-  const prevLive = process.env.RESEND_LIVE_SENDS;
-
-  beforeEach(() => {
-    process.env.RESEND_LIVE_SENDS = '1';
-    process.env.RESEND_API_KEY = 're_test';
-  });
-
-  afterEach(() => {
-    process.env.RESEND_LIVE_SENDS = prevLive;
-  });
-
   it('blocks promotional mail after unsubscribe even if the snapshot already exists', async () => {
     const pool = createMemoryPool();
     seedEvent(pool);
@@ -347,7 +326,7 @@ describe('consent and dispatch', () => {
     await recordUnsubscribe(pool, 'ada@example.com');
     const job = await claimNextOutboxJob(pool);
     const result = await dispatchOutboxJob(pool, job, {
-      config: { apiKey: 're_test', live: true },
+      config: LIVE_SMTP,
       sendFn: vi.fn(),
     });
     expect(result.status).toBe('skipped');
@@ -375,7 +354,7 @@ describe('consent and dispatch', () => {
     await transitionCampaign(pool,created.id,'sending');
     const job = await claimNextOutboxJob(pool);
     const result = await processClaimedJob(pool, job, {
-      config: { apiKey: 're_test', live: true },
+      config: LIVE_SMTP,
       sendFn: async () => ({ status: 'acceptance_unknown', reason: 'timeout' }),
     });
     expect(result.status).toBe('acceptance_unknown');
@@ -395,49 +374,6 @@ describe('consent and dispatch', () => {
     const second = await claimNextOutboxJob(pool);
     expect(first).toBeTruthy();
     expect(second).toBeNull();
-  });
-});
-
-describe('webhooks', () => {
-  it('rejects forged signatures and ignores duplicate or out-of-order events', async () => {
-    const pool = createMemoryPool();
-    const secret = Buffer.from('webhook-secret').toString('base64');
-    const body = JSON.stringify({
-      type: 'email.delivered',
-      data: { email_id: 'msg-1' },
-    });
-    expect(() => verifyResendWebhook({
-      rawBody: body,
-      headers: { 'svix-id': 'evt_1', 'svix-timestamp': String(Math.floor(Date.now()/1000)), 'svix-signature': 'v1,forged' },
-      secret,
-    })).toThrow(/Invalid webhook/);
-
-    pool.db.email_campaign_recipients.push({
-      id: 'rcpt-1',
-      campaign_id: 'cmp-1',
-      email_normalized: 'ada@example.com',
-      provider_message_id: 'msg-1',
-      outcome: 'accepted',
-    });
-
-    const delivered = signWebhook(secret, 'svix-1', String(Math.floor(Date.now()/1000)), body);
-    const first = await ingestResendWebhook(pool, { rawBody: body, headers: delivered, secret });
-    expect(first.duplicate).toBe(false);
-    const second = await ingestResendWebhook(pool, { rawBody: body, headers: delivered, secret });
-    expect(second.duplicate).toBe(true);
-
-    const bounceBody = JSON.stringify({
-      type: 'email.bounced',
-      data: { email_id: 'msg-1', bounce: { type: 'Permanent', message: '550' } },
-    });
-    const bounceHeaders = signWebhook(secret, 'svix-2', String(Math.floor(Date.now()/1000)-10), bounceBody);
-    await ingestResendWebhook(pool, { rawBody: bounceBody, headers: bounceHeaders, secret });
-    expect(pool.db.email_campaign_recipients[0].outcome).toBe('bounced');
-    expect(pool.db.email_suppressions.some((row) => row.reason === 'hard_bounce')).toBe(true);
-
-    const lateDelivered = signWebhook(secret, 'svix-3', String(Math.floor(Date.now()/1000)+10), body);
-    await ingestResendWebhook(pool, { rawBody: body, headers: lateDelivered, secret });
-    expect(pool.db.email_campaign_recipients[0].outcome).toBe('bounced');
   });
 });
 
@@ -506,14 +442,11 @@ describe('preference tokens and live-send gate', () => {
     expect(readPreferenceToken(token).email).toBe('ada@example.com');
   });
 
-  it('refuses live audience sends until RESEND_LIVE_SENDS=1', async () => {
+  it('refuses live audience sends until live sending is turned on in Sender Settings', async () => {
     const pool = createMemoryPool();
     seedEvent(pool);
     const created = await createCampaign(pool, { eventId: 'evt-1', name: 'Update' });
-    const prev = process.env.RESEND_LIVE_SENDS;
-    process.env.RESEND_LIVE_SENDS = '';
-    await expect(startCampaignSend(pool, created.id, { confirmed: true })).rejects.toThrow(/disabled/);
-    process.env.RESEND_LIVE_SENDS = prev;
+    await expect(startCampaignSend(pool, created.id, { confirmed: true })).rejects.toThrow(/turned off/);
     await expect(startCampaignSend(pool, created.id, { confirmed: false })).rejects.toThrow(/confirmation/);
     await cancelCampaignJobs(pool, created.id, 'admin');
     const campaign = await getCampaign(pool, created.id);

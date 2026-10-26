@@ -1,84 +1,106 @@
 import { describe, it, expect } from "vitest";
-import { sendResendEmail, verifyResendWebhook } from "../emailResendAdapter";
+import {
+  allowedSenderDomains,
+  campaignSendAllowance,
+  classifySmtpError,
+  clampHourlyLimit,
+  sendSmtpEmail,
+} from "../campaignMailer";
+import { appendOpenPixel } from "../campaignInvitationService";
 import { csvDocument } from "../campaignWorkspaceRoutes";
+
+const config = {
+  configured: true,
+  live: true,
+  hourlyLimit: 200,
+  smtp: { host: "mail.example.org", port: 587, user: "grow@example.org", password: "x", fromEmail: "grow@example.org" },
+};
 const payload = {
+  config,
   to: "person@example.com",
   subject: "Subject",
   html: "<p>Hello</p>",
   text: "Hello",
-  cc: ["copy@example.com"],
-  idempotencyKey: "campaign/recipient/send-1",
-  config: { apiKey: "test", live: true },
+  fromName: "Mutale",
+  fromEmail: "grow@example.org",
+  cc: ["copy@example.com", "PERSON@example.com"],
 };
-describe("campaign provider outcomes", () => {
-  it("treats a network disconnect as ambiguous, never as safe to retry", async () => {
-    expect(
-      (
-        await sendResendEmail({
-          ...payload,
-          fetchImpl: async () => {
-            throw new Error("disconnected");
-          },
-        })
-      ).status,
-    ).toBe("acceptance_unknown");
-  });
-  it("does not count conflicting idempotency payloads as accepted", async () => {
-    const result = await sendResendEmail({
+const transportThat = (sendMail) => ({ sendMail });
+
+describe("campaign SMTP outcomes", () => {
+  it("records a message the server accepted", async () => {
+    let message;
+    const result = await sendSmtpEmail({
       ...payload,
-      fetchImpl: async () =>
-        new Response(
-          JSON.stringify({
-            name: "invalid_idempotent_request",
-            message: "Different payload",
-          }),
-          { status: 409 },
-        ),
+      transport: transportThat(async (input) => {
+        message = input;
+        return { accepted: ["person@example.com"], messageId: "<m1@example.org>" };
+      }),
+    });
+    expect(result).toEqual({ status: "accepted", providerMessageId: "<m1@example.org>" });
+    expect(message.cc).toEqual(["copy@example.com"]);
+    expect(message.from).toEqual({ name: "Mutale", address: "grow@example.org" });
+  });
+
+  it("fails without retrying when the server refuses the recipient", async () => {
+    const result = await sendSmtpEmail({
+      ...payload,
+      transport: transportThat(async () => ({ accepted: [], rejected: ["person@example.com"], response: "550 No such user" })),
     });
     expect(result.status).toBe("failed");
     expect(result.retryable).toBe(false);
   });
-  it("only retries explicit transient conflicts and provider overload", async () => {
-    for (const [status, name, retryable] of [
-      [409, "concurrent_idempotent_requests", true],
-      [429, "rate_limit", true],
-      [503, "server_error", true],
-      [422, "validation_error", false],
-    ]) {
-      const result = await sendResendEmail({
-        ...payload,
-        fetchImpl: async () =>
-          new Response(JSON.stringify({ name }), { status }),
-      });
-      expect(result.retryable).toBe(retryable);
-    }
+
+  it("retries only failures that happened before the message was handed over", () => {
+    expect(classifySmtpError({ responseCode: 421, response: "421 Try later" })).toMatchObject({ status: "failed", retryable: true });
+    expect(classifySmtpError({ responseCode: 550, response: "550 Rejected" })).toMatchObject({ status: "failed", retryable: false });
+    expect(classifySmtpError({ code: "EAUTH", message: "Invalid login" })).toMatchObject({ status: "failed", retryable: false });
+    expect(classifySmtpError({ code: "ETIMEDOUT", command: "CONN" })).toMatchObject({ status: "failed", retryable: true });
   });
-  it("passes CC, idempotency and provider credentials only to the provider request", async () => {
-    let options;
-    await sendResendEmail({
+
+  it("treats a dropped connection during sending as unconfirmed, never as safe to retry", async () => {
+    expect(classifySmtpError({ code: "ETIMEDOUT", command: "DATA" }).status).toBe("acceptance_unknown");
+    const result = await sendSmtpEmail({
       ...payload,
-      fetchImpl: async (_url, input) => {
-        options = input;
-        return new Response(JSON.stringify({ id: "message-1" }), {
-          status: 200,
-        });
-      },
-    });
-    expect(JSON.parse(options.body).cc).toEqual(["copy@example.com"]);
-    expect(options.headers["Idempotency-Key"]).toBe(payload.idempotencyKey);
-  });
-  it("rejects stale webhook timestamps and escapes spreadsheet formulas in exports", () => {
-    expect(() =>
-      verifyResendWebhook({
-        rawBody: "{}",
-        headers: {
-          "svix-id": "one",
-          "svix-timestamp": "1",
-          "svix-signature": "v1,forged",
-        },
-        secret: Buffer.from("secret").toString("base64"),
+      transport: transportThat(async () => {
+        throw Object.assign(new Error("socket closed"), { code: "ESOCKET" });
       }),
-    ).toThrow();
+    });
+    expect(result.status).toBe("acceptance_unknown");
+  });
+
+  it("verifies senders on the SMTP account's domains only", () => {
+    expect([...allowedSenderDomains({ user: "Grow@Mutalemubanga.org", fromEmail: "grow@mutalemubanga.org" })]).toEqual(["mutalemubanga.org"]);
+    expect(allowedSenderDomains({ user: "apikey", fromEmail: "" }).size).toBe(0);
+  });
+});
+
+describe("campaign send pacing", () => {
+  const poolWithSent = (sent) => ({ query: async () => [[{ sent }]] });
+
+  it("spreads the hourly limit across worker ticks and stops at the cap", async () => {
+    expect(await campaignSendAllowance(poolWithSent(0), { hourlyLimit: 200 })).toBe(2);
+    expect(await campaignSendAllowance(poolWithSent(199), { hourlyLimit: 200 })).toBe(1);
+    expect(await campaignSendAllowance(poolWithSent(200), { hourlyLimit: 200 })).toBe(0);
+    expect(await campaignSendAllowance(poolWithSent(0), { hourlyLimit: 5000 })).toBe(28);
+  });
+
+  it("keeps the hourly limit within a sensible range", () => {
+    expect(clampHourlyLimit("abc")).toBe(200);
+    expect(clampHourlyLimit(0)).toBe(200);
+    expect(clampHourlyLimit(99999)).toBe(5000);
+    expect(clampHourlyLimit(150)).toBe(150);
+  });
+});
+
+describe("campaign tracking and exports", () => {
+  it("adds one open-tracking image before the end of the email body", () => {
+    const html = appendOpenPixel("<html><body><p>Hi</p></body></html>", { id: "c1" }, { id: "r1" });
+    expect(html.match(/\/api\/email\/open\?token=/g)).toHaveLength(1);
+    expect(html.indexOf("/api/email/open")).toBeLessThan(html.indexOf("</body>"));
+  });
+
+  it("escapes spreadsheet formulas in exports", () => {
     expect(csvDocument(["Name"], [[" =cmd()"]])).toContain("' =cmd()");
   });
 });
