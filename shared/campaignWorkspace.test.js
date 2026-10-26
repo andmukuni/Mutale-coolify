@@ -6,7 +6,11 @@ import {
   sanitizeAudience,
   campaignType,
   campaignDate,
+  campaignDay,
+  CAMPAIGN_LIST_TABS,
+  campaignListTab,
 } from "./campaignWorkspace";
+import { CAMPAIGN_STATES } from "./emailCampaign";
 import {
   compileDesignToHtml,
   compileDesignToText,
@@ -15,6 +19,22 @@ import {
 import { sanitizeCampaignHtml } from "../server/emailHtmlSanitizer";
 import { contactMatchesSmartList } from "../server/emailAudienceService";
 describe("campaign workspace", () => {
+  it("places every listable campaign state on exactly one list tab", () => {
+    const listed = Object.values(CAMPAIGN_LIST_TABS).flat();
+    expect(new Set(listed).size).toBe(listed.length);
+    for (const state of CAMPAIGN_STATES.filter((s) => s !== "archived"))
+      expect(listed).toContain(state);
+    expect(campaignListTab("paused")).toBe("draft");
+    expect(campaignListTab("scheduled")).toBe("scheduled");
+    expect(campaignListTab("partially_failed")).toBe("sent");
+    expect(campaignListTab("archived")).toBe("");
+  });
+  it("formats list dates as Lusaka calendar days", () => {
+    expect(campaignDay("2026-10-26 23:30:00")).toBe("27 Oct 2026");
+    expect(campaignDay("2026-10-26T10:00:00Z")).toBe("26 Oct 2026");
+    expect(campaignDay("")).toBe("");
+    expect(campaignDay("not a date")).toBe("");
+  });
   it("converts wall times independently of the server timezone", () => {
     expect(
       utcSql(zonedDateTimeToUtc("2030-01-01T10:30", "Africa/Lusaka")),

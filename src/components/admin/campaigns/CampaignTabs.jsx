@@ -21,13 +21,13 @@ export default function CampaignTabs({
             role="tab"
             aria-selected={active}
             onClick={() => onChange(key)}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-colors ${
+            className={`inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-sm font-medium border transition-colors ${
               active
                 ? "bg-cyan-600 text-white border-cyan-600"
                 : "bg-white text-navy-700 border-navy-200 hover:bg-navy-50"
             }`}
           >
-            {Icon && <Icon size={15} />}
+            {Icon && <Icon size={15} className="hidden sm:block" />}
             {tabLabel}
             {count !== undefined && (
               <span

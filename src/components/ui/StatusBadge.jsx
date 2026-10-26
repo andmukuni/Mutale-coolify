@@ -22,6 +22,12 @@ const colorMap = {
   not_required: { bg: 'bg-teal-50', text: 'text-teal-700', ring: 'ring-teal-600/20' },
   free: { bg: 'bg-cyan-50', text: 'text-cyan-700', ring: 'ring-cyan-600/20' },
   waived: { bg: 'bg-purple-50', text: 'text-purple-700', ring: 'ring-purple-600/20' },
+  failed: { bg: 'bg-red-50', text: 'text-red-700', ring: 'ring-red-600/20' },
+  // campaign delivery states
+  scheduled: { bg: 'bg-blue-50', text: 'text-blue-700', ring: 'ring-blue-600/20' },
+  sending: { bg: 'bg-cyan-50', text: 'text-cyan-700', ring: 'ring-cyan-600/20' },
+  paused: { bg: 'bg-amber-50', text: 'text-amber-700', ring: 'ring-amber-600/20' },
+  partially_failed: { bg: 'bg-orange-50', text: 'text-orange-700', ring: 'ring-orange-600/20' },
   default: { bg: 'bg-cyan-50', text: 'text-cyan-700', ring: 'ring-cyan-600/20' },
 };
 

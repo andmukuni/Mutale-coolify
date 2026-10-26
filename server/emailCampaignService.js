@@ -19,6 +19,7 @@ import {
   defaultAudience,
   parseEmailList,
   CAMPAIGN_TYPES,
+  CAMPAIGN_LIST_TABS,
   sanitizeAudience,
 } from "../shared/campaignWorkspace.js";
 import { transaction } from "./campaignDirectoryService.js";
@@ -94,13 +95,13 @@ export async function listCampaigns(
     clauses.push("(c.name LIKE ? OR c.subject LIKE ?)");
     params.push(`%${search}%`, `%${search}%`);
   }
-  if (tab === "draft")
-    clauses.push("c.state IN ('draft','paused','cancelled')");
-  if (tab === "scheduled") clauses.push("c.state='scheduled'");
-  if (tab === "sent")
-    clauses.push(
-      "c.state IN ('sending','completed','partially_failed','failed')",
-    );
+  const tabStates = Object.hasOwn(CAMPAIGN_LIST_TABS, tab)
+    ? CAMPAIGN_LIST_TABS[tab]
+    : null;
+  if (tabStates) {
+    clauses.push(`c.state IN (${tabStates.map(() => "?").join(",")})`);
+    params.push(...tabStates);
+  }
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
   // Imported event/user identifiers can use a different collation from campaign tables.
   // Collate the campaign references explicitly without changing stored records or indexes.

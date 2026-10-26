@@ -155,7 +155,9 @@ body {
 }
 
 .dark .hover\:bg-navy-50:hover,
-.dark .hover\:bg-navy-100:hover {
+.dark .hover\:bg-navy-100:hover,
+.dark .focus\:bg-navy-50:focus,
+.dark .group:hover .group-hover\:bg-navy-50 {
   background-color: var(--app-surface-hover);
 }
 
