@@ -2,12 +2,12 @@ import {
   EMAIL_BRAND_COLORS,
   PUBLIC_WHITE_LOGO_PATH,
   accentBarHtml,
-  brandFooterHtml,
   brandHeaderHtml,
   escapeHtml,
   renderEmailDocument,
   resolveLogoSrc,
 } from './brandedEmailHtml.js';
+import { RECIPIENT_PREFERENCES_MARKER, renderEmailFooterHtml } from './emailFooter.js';
 
 const {
   navy: NAVY,
@@ -83,9 +83,6 @@ export function buildRegistrationEmailHtml({
   const brandName = escapeHtml(brand.name || 'Mutale Mubanga');
   const brandTagline = escapeHtml(brand.tagline || 'Growing People.');
   const websiteUrl = String(brand.websiteUrl || '').replace(/\/$/, '');
-  const websiteLabel = escapeHtml(
-    brand.websiteLabel || (websiteUrl ? websiteUrl.replace(/^https?:\/\//, '') : 'mutalemubanga.org'),
-  );
   const viewTicketUrl = ticketUrl || accessPassUrl || '';
 
   const safeName = escapeHtml(recipientName || 'there');
@@ -181,8 +178,8 @@ export function buildRegistrationEmailHtml({
               </td>
             </tr>
             <tr>
-              <td style="padding:0 18px 8px">
-                ${brandFooterHtml({ brandTagline, websiteUrl, websiteLabel })}
+              <td style="padding:0">
+                ${renderEmailFooterHtml({ assetBaseUrl: websiteUrl, preferencesUrl: RECIPIENT_PREFERENCES_MARKER })}
               </td>
             </tr>`,
   });

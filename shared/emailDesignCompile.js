@@ -9,6 +9,11 @@ import {
   renderMergeTemplate,
   sanitizeHttpUrl,
 } from "./emailCampaign.js";
+import {
+  EMAIL_FOOTER_MOBILE_CSS,
+  renderEmailFooterHtml,
+  renderEmailFooterText,
+} from "./emailFooter.js";
 
 const NAVY = EMAIL_BRAND_COLORS.navyText;
 const TEAL = EMAIL_BRAND_COLORS.teal;
@@ -213,7 +218,7 @@ export function compileDesignToHtml(design, vars = {}, options = {}) {
   return wrapEmailDocument(inner, opts);
 }
 
-export function compileDesignToText(design, vars = {}) {
+export function compileDesignToText(design, vars = {}, options = {}) {
   const doc = normalizeDesignDocument(design);
   if (doc.html || doc.grapes)
     return merge(
@@ -224,7 +229,7 @@ export function compileDesignToText(design, vars = {}) {
       vars,
     );
   return doc.blocks
-    .map((block) => renderBlockText(block, vars))
+    .map((block) => renderBlockText(block, vars, options))
     .filter(Boolean)
     .join("\n\n");
 }
@@ -350,27 +355,21 @@ function renderBlock(block, vars, options) {
       return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${BORDER};border-radius:12px;margin:12px 0"><tr><td style="padding:20px 22px;font-family:Arial,Helvetica,sans-serif"><div style="font-weight:800;color:${NAVY}">${merge(block.resource_title || "Event resource", vars, "html")}</div><div style="color:${GRAY};font-size:14px;margin:6px 0 10px">${merge(block.resource_description, vars, "html")}</div><div style="color:${GRAY};font-size:12px">${merge(block.resource_meta, vars, "html")}</div>${href ? `<a href="${escapeBrandHtml(href)}" style="display:inline-block;margin-top:10px;color:${TEAL};font-weight:700;text-decoration:none">Download</a>` : ""}</td></tr></table>`;
     }
     case "footer":
-    {
-      const link = (href, text) =>
-        `<a href="${escapeHtml(href)}" style="color:${TEAL};font-weight:700;text-decoration:none">${text}</a>`;
-      const links = [
-        vars.unsubscribe_url
-          ? link(vars.unsubscribe_url, "Unsubscribe from this list")
-          : "",
-        vars.preferences_url
-          ? link(vars.preferences_url, "Manage my subscriptions")
-          : "Manage preferences using your registration email",
-      ]
-        .filter(Boolean)
-        .join(`<span style="color:${MUTED}">&nbsp;&nbsp;·&nbsp;&nbsp;</span>`);
-      return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:28px"><tr><td align="center" style="padding:24px ${GUTTER}px 28px;background:#f6f8fa;border-top:1px solid ${BORDER};color:${GRAY};font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.8;text-align:center"><div style="color:${NAVY};font-weight:700;font-size:13px">Mutale Mubanga <span style="color:${TEAL}">· Growing People.</span></div><div style="margin-top:6px">${links}</div><div style="margin-top:6px;color:${MUTED}">Mutale Mubanga communications.</div></td></tr></table>`;
-    }
+      // Every campaign shares the footer edited under Templates → Email footer.
+      return `<div style="height:20px;line-height:20px;font-size:0">&nbsp;</div>${renderEmailFooterHtml(
+        {
+          footer: options.footer,
+          assetBaseUrl: vars.app_url || "https://mutalemubanga.org",
+          preferencesUrl: vars.preferences_url,
+          unsubscribeUrl: vars.unsubscribe_url,
+        },
+      )}`;
     default:
       throw new Error(`Unsupported email element: ${block.type}`);
   }
 }
 
-function renderBlockText(block, vars) {
+function renderBlockText(block, vars, options = {}) {
   switch (block.type) {
     case "header":
       return "Mutale Mubanga — Growing People.";
@@ -406,7 +405,7 @@ function renderBlockText(block, vars) {
       if (block.column_blocks.length)
         return block.column_blocks
           .flat()
-          .map((child) => renderBlockText(child, vars))
+          .map((child) => renderBlockText(child, vars, options))
           .filter(Boolean)
           .join("\n");
       return (block.columns || [])
@@ -446,13 +445,11 @@ function renderBlockText(block, vars) {
     case "social_follow":
       return block.links.map((link) => `${link.label}: ${link.url}`).join("\n");
     case "footer":
-      return [
-        "Mutale Mubanga · Growing People.",
-        vars.preferences_url,
-        vars.unsubscribe_url,
-      ]
-        .filter(Boolean)
-        .join("\n");
+      return renderEmailFooterText({
+        footer: options.footer,
+        preferencesUrl: vars.preferences_url,
+        unsubscribeUrl: vars.unsubscribe_url,
+      });
     default:
       return "";
   }
@@ -469,7 +466,7 @@ function wrapEmailDocument(inner, options = {}) {
   )
     ? options.styles.innerBackground
     : "#ffffff";
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeBrandHtml(options.title || "Mutale")}</title><style>@media(max-width:480px){.email-column{display:block!important;width:100%!important}}</style></head><body style="margin:0;padding:0;background:${outer}">
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeBrandHtml(options.title || "Mutale")}</title><style>@media(max-width:480px){.email-column{display:block!important;width:100%!important}}${EMAIL_FOOTER_MOBILE_CSS}</style></head><body style="margin:0;padding:0;background:${outer}">
 ${preview ? `<div style="display:none;max-height:0;overflow:hidden">${preview}</div>` : ""}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 12px">
 <center><table role="presentation" width="${width}" cellpadding="0" cellspacing="0" style="width:100%;max-width:${width}px;background:${innerBackground};border-radius:16px;overflow:hidden">

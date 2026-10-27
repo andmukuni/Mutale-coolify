@@ -193,6 +193,8 @@ export function resolveRouteAdminPermission(req) {
 
   if (path.startsWith('/api/admin/rbac')) return 'rbac.manage';
   if (path.startsWith('/api/admin/notification-templates')) return 'templates.manage';
+  // Campaign editors read the shared footer for previews; only template managers change it.
+  if (path === '/api/admin/email-footer') return method === 'GET' ? 'dashboard.view' : 'templates.manage';
   if (path.startsWith('/api/admin/events/') && path.includes('/attendees')) {
     return 'events.view';
   }

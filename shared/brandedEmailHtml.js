@@ -1,5 +1,11 @@
 /** Brand chrome shared by every outbound HTML email. */
 
+import {
+  EMAIL_FOOTER_MOBILE_CSS,
+  RECIPIENT_PREFERENCES_MARKER,
+  renderEmailFooterHtml,
+} from './emailFooter.js';
+
 export const EMAIL_BRAND_COLORS = {
   navy: '#0B1B3A',
   navyText: '#141D45',
@@ -79,52 +85,11 @@ function brandHeaderHtml({ logoSrc, brandName, brandTagline }) {
   </tr></table>`;
 }
 
-function cornerDots(side) {
-  const cells = side === 'left'
-    ? [
-      [0.10, 0.16, 0.10, 0, 0],
-      [0.16, 0.28, 0.22, 0.10, 0],
-      [0.10, 0.22, 0.34, 0.18, 0.08],
-      [0, 0.10, 0.18, 0.12, 0],
-      [0, 0, 0.08, 0, 0],
-    ]
-    : [
-      [0, 0, 0.10, 0.16, 0.10],
-      [0, 0.10, 0.22, 0.28, 0.16],
-      [0.08, 0.18, 0.34, 0.22, 0.10],
-      [0, 0.12, 0.18, 0.10, 0],
-      [0, 0, 0.08, 0, 0],
-    ];
-
-  const rows = cells.map((row) => `<tr>${row.map((alpha) => {
-    if (!alpha) return '<td style="width:7px;height:7px;padding:1px"></td>';
-    const color = `rgba(0,167,157,${alpha})`;
-    return `<td style="width:7px;height:7px;padding:1px"><div style="width:5px;height:5px;border-radius:50%;background:${color};font-size:0;line-height:0">&nbsp;</div></td>`;
-  }).join('')}</tr>`).join('');
-
-  return `<table role="presentation" cellpadding="0" cellspacing="0">${rows}</table>`;
-}
-
 function accentBarHtml() {
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
     <td style="background:${TEAL};height:5px;line-height:5px;font-size:0;width:74%">&nbsp;</td>
     <td style="background:${CORAL};height:5px;line-height:5px;font-size:0;width:26%">&nbsp;</td>
   </tr></table>`;
-}
-
-function brandFooterHtml({ brandTagline, websiteUrl, websiteLabel }) {
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-    <tr>
-      <td style="vertical-align:bottom;width:80px">${cornerDots('left')}</td>
-      <td style="text-align:center;padding:8px 10px 18px">
-        <div style="color:${TEAL};font-size:15px;font-weight:700;margin-bottom:8px">${brandTagline}</div>
-        <a href="${escapeHtml(websiteUrl || 'https://mutalemubanga.org')}" target="_blank" style="color:${NAVY_TEXT};font-size:14px;font-weight:600;text-decoration:none">
-          <span style="color:${TEAL};margin-right:6px">&#127760;</span>${websiteLabel}
-        </a>
-      </td>
-      <td style="vertical-align:bottom;width:80px;text-align:right">${cornerDots('right')}</td>
-    </tr>
-  </table>`;
 }
 
 function codeBoxHtml(code) {
@@ -165,6 +130,7 @@ export function renderEmailDocument({ title = 'Mutale Mubanga', previewText = ''
       html, body { margin:0 !important; padding:0 !important; width:100% !important; background:${EMAIL_BG} !important; }
       body { -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%; }
       .email-card { width:100% !important; max-width:${width}px !important; }
+      ${EMAIL_FOOTER_MOBILE_CSS}
     </style>
     <!--<![endif]-->
   </head>
@@ -202,6 +168,7 @@ export function wrapBrandedEmailHtml({
   logoDataUrl = '',
   brand = {},
   headerExtraHtml = '',
+  footer,
 } = {}) {
   const resolved = resolveBrand(brand);
   const logoSrc = resolveLogoSrc({ logoUrl, logoDataUrl, websiteUrl: resolved.websiteUrl });
@@ -229,13 +196,17 @@ export function wrapBrandedEmailHtml({
               <td style="padding:0">${accentBarHtml()}</td>
             </tr>
             <tr>
-              <td style="padding:32px 32px 12px">
+              <td style="padding:32px 32px 28px">
                 ${innerHtml}
               </td>
             </tr>
             <tr>
-              <td style="padding:0 18px 8px">
-                ${brandFooterHtml(resolved)}
+              <td style="padding:0">
+                ${renderEmailFooterHtml({
+                  footer,
+                  assetBaseUrl: resolved.websiteUrl,
+                  preferencesUrl: RECIPIENT_PREFERENCES_MARKER,
+                })}
               </td>
             </tr>`,
   });
@@ -256,6 +227,7 @@ export function buildBrandedEmailHtml({
   logoUrl = '',
   logoDataUrl = '',
   brand = {},
+  footer,
 } = {}) {
   const safeGreeting = String(greeting || '').trim();
   const greetingHtml = safeGreeting
@@ -291,6 +263,7 @@ export function buildBrandedEmailHtml({
     logoUrl,
     logoDataUrl,
     brand,
+    footer,
     innerHtml: `${greetingHtml}${titleHtml}${bodyHtml}${codeHtml}${button}${extraFooter}`,
   });
 }
@@ -323,7 +296,5 @@ export function buildBrandedEmailFromText({
 
 export {
   brandHeaderHtml,
-  brandFooterHtml,
   accentBarHtml,
-  cornerDots,
 };

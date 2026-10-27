@@ -1,4 +1,5 @@
-import { lazy, Suspense, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import DOMPurify from "dompurify";
 import {
   GripVertical,
@@ -48,6 +49,7 @@ import {
   DEFAULT_EMAIL_STYLES,
 } from "../../../../shared/emailDesignCompile";
 import { formatEventWhen } from "../../../../shared/emailCampaign";
+import { fetchEmailFooter } from "../../../utils/notificationTemplatesApi";
 import CampaignImagePicker from "./CampaignImagePicker";
 import { useToast } from "../../../context/ToastContext";
 import CampaignRichText from "./CampaignRichText";
@@ -605,11 +607,19 @@ function BlockFields({
         )}
       </div>
     );
+  if (block.type === "footer")
+    return (
+      <p className="text-xs text-navy-400">
+        Every email shares one footer; unsubscribe and subscription links are
+        added for each recipient.{" "}
+        <Link to="/admin/templates?tab=footer" className={LINK_ACTION}>
+          Edit the email footer
+        </Link>
+      </p>
+    );
   return (
     <p className="text-xs text-navy-400">
-      {block.type === "footer"
-        ? "Unsubscribe and subscription links are added for each recipient."
-        : block.type === "invitation_response"
+      {block.type === "invitation_response"
           ? "I Will Attend and No links are personalized for each invitation."
           : block.type === "divider"
             ? "Horizontal divider"
@@ -635,6 +645,17 @@ export default function CampaignEmailEditor({
   const [mode, setMode] = useState(design?.grapes ? "canvas" : "content");
   const [mobile, setMobile] = useState(false);
   const [preview, setPreview] = useState(false);
+  // Previews use the saved shared footer; the compiler's built-in copy covers a failed fetch.
+  const [footer, setFooter] = useState(undefined);
+  useEffect(() => {
+    let cancelled = false;
+    fetchEmailFooter()
+      .then((result) => !cancelled && setFooter(result.footer))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const doc = useMemo(() => normalizeDesignDocument(design), [design]);
   const vars = {
     first_name: "Preview",
@@ -642,6 +663,8 @@ export default function CampaignEmailEditor({
     event_title: "Event preview",
     preferences_url: "https://mutalemubanga.org/email/preferences",
     unsubscribe_url: "https://mutalemubanga.org/email/unsubscribe",
+    // Footer icons and the logo load from this site, so previews work before a deploy.
+    app_url: window.location.origin,
     ...previewVars,
   };
   vars.event_tracker_contexts = Object.fromEntries(
@@ -708,6 +731,7 @@ export default function CampaignEmailEditor({
   const raw = compileDesignToHtml(doc, vars, {
     title: subject,
     previewText: preheader,
+    footer,
   });
   const html = DOMPurify.sanitize(raw, {
     WHOLE_DOCUMENT: true,

@@ -104,3 +104,24 @@ export async function deleteNotificationTemplate(id) {
   if (!res.ok || !json?.ok) throw new Error(json?.message || 'Failed to delete template.');
   return true;
 }
+
+export async function fetchEmailFooter() {
+  const res = await fetch(`${API_BASE}/admin/email-footer`, {
+    headers: getAdminAuthHeaders(),
+    cache: 'no-store',
+  });
+  const json = await parseJson(res);
+  if (!res.ok || !json?.ok) throw new Error(json?.message || 'Failed to load the email footer.');
+  return { footer: json.data, defaults: json.defaults };
+}
+
+export async function saveEmailFooter(payload) {
+  const res = await fetch(`${API_BASE}/admin/email-footer`, {
+    method: 'PUT',
+    headers: getAdminAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload),
+  });
+  const json = await parseJson(res);
+  if (!res.ok || !json?.ok) throw new Error(json?.message || 'Failed to save the email footer.');
+  return json.data;
+}

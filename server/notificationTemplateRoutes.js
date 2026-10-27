@@ -3,6 +3,7 @@ import {
   SAMPLE_TEMPLATE_VARS,
   renderTemplate,
 } from '../shared/notificationTemplates.js';
+import { DEFAULT_EMAIL_FOOTER } from '../shared/emailFooter.js';
 import {
   listNotificationTemplates,
   getNotificationTemplateById,
@@ -20,7 +21,26 @@ export function registerNotificationTemplateRoutes(app, {
   sendEmailNotification,
   sendSmsNotification,
   getSystemSettings,
+  saveEmailFooterSettings,
 } = {}) {
+  app.get('/api/admin/email-footer', async (_req, res) => {
+    try {
+      const settings = await getSystemSettings();
+      return res.json({ ok: true, data: settings.emailFooter, defaults: DEFAULT_EMAIL_FOOTER });
+    } catch (error) {
+      return res.status(500).json({ ok: false, message: 'Failed to load the email footer.', error: error.message });
+    }
+  });
+
+  app.put('/api/admin/email-footer', async (req, res) => {
+    try {
+      const data = await saveEmailFooterSettings(req.body && typeof req.body === 'object' ? req.body : {});
+      return res.json({ ok: true, data });
+    } catch (error) {
+      return res.status(500).json({ ok: false, message: 'Failed to save the email footer.', error: error.message });
+    }
+  });
+
   app.get('/api/admin/notification-templates', async (req, res) => {
     try {
       const channel = String(req.query?.channel || '').trim();

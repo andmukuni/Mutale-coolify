@@ -80,7 +80,8 @@ import { ensureEmailCommunicationsSchema } from './emailCampaignSchema.js';
 import { registerEmailCampaignRoutes } from './emailCampaignRoutes.js';
 import { registerRegistrationAttendeeRoutes } from './registrationAttendeeRoutes.js';
 import { applyRegistrationSnapshots } from './registrationAttendeeService.js';
-import { runEmailOutboxTick } from './emailOutboxService.js';
+import { runEmailOutboxTick, signPreferenceToken } from './emailOutboxService.js';
+import { applyRecipientFooterLinks, normalizeEmailFooter, setActiveEmailFooter } from '../shared/emailFooter.js';
 import { recordMarketingOptIn } from './emailConsentService.js';
 import { applyNotificationTemplates, seedSystemNotificationTemplates } from './notificationTemplateService.js';
 import { buildPersonTemplateVars } from '../shared/notificationTemplates.js';
@@ -936,6 +937,7 @@ function mergeSystemSettings(stored = {}) {
       ...SYSTEM_SETTINGS_DEFAULTS.cvGenerator,
       ...(normalizedStored.cvGenerator || {}),
     }),
+    emailFooter: normalizeEmailFooter(normalizedStored.emailFooter),
   };
 }
 
@@ -1935,7 +1937,10 @@ async function lencoRequestAny({ secretKey, baseUrl, candidates = [] }) {
 
 async function getSystemSettings() {
   const [[row]] = await pool.query('SELECT data FROM system_settings WHERE id = 1');
-  return mergeSystemSettings(row?.data || {});
+  const settings = mergeSystemSettings(row?.data || {});
+  // Email builders render synchronously, so keep the shared footer current on every read.
+  setActiveEmailFooter(settings.emailFooter);
+  return settings;
 }
 
 async function saveSystemSettings(payload = {}) {
@@ -1953,7 +1958,30 @@ async function saveSystemSettings(payload = {}) {
   );
   // Clear cached Zoom access token so new credentials take effect immediately
   zoomAccessTokenCache = { token: null, expiresAt: 0 };
+  setActiveEmailFooter(merged.emailFooter);
   return merged;
+}
+
+// Footer-only save so an unrelated invalid SMS/video setting cannot block it.
+async function saveEmailFooterSettings(footer = {}) {
+  const stored = await getSystemSettings();
+  const emailFooter = normalizeEmailFooter(footer);
+  await pool.query(
+    'INSERT INTO system_settings (id, data) VALUES (1, ?) ON DUPLICATE KEY UPDATE data = VALUES(data)',
+    [JSON.stringify({ ...stored, emailFooter })],
+  );
+  return setActiveEmailFooter(emailFooter);
+}
+
+function recipientPreferencesUrl(recipient = '') {
+  const email = String(recipient || '').trim();
+  if (!email.includes('@') || /[,;\s]/.test(email)) return '';
+  try {
+    const origin = String(resolvePublicAppUrl() || 'https://mutalemubanga.org').replace(/\/$/, '');
+    return `${origin}/email/preferences?token=${encodeURIComponent(signPreferenceToken(email))}`;
+  } catch {
+    return '';
+  }
 }
 
 async function lencoRequest({ method = 'GET', path = '', secretKey, baseUrl, body = null }) {
@@ -3316,7 +3344,9 @@ async function sendEmailNotification({
       replyTo: replyTo || undefined,
       subject,
       text,
-      html: brandedHtml || undefined,
+      html: brandedHtml
+        ? applyRecipientFooterLinks(brandedHtml, { preferencesUrl: recipientPreferencesUrl(recipient) })
+        : undefined,
       attachments: Array.isArray(attachments) ? attachments : [],
     });
 
@@ -10713,6 +10743,7 @@ registerNotificationTemplateRoutes(app, {
   sendEmailNotification,
   sendSmsNotification,
   getSystemSettings,
+  saveEmailFooterSettings,
 });
 
 registerEmailCampaignRoutes(app, {
@@ -15363,6 +15394,10 @@ ensureSchema()
     // Allow a deployment or test instance to keep the durable outbox paused.
     const campaignTick = () => { void runEmailOutboxTick(pool).catch(error=>console.error('[campaign-outbox]',error.message)); };
     if(envBoolean(process.env.CAMPAIGN_OUTBOX_WORKER_ENABLED,true)){setTimeout(campaignTick,15_000);setInterval(campaignTick,20_000);}
+    // Picks up footer edits saved by another app process (cPanel Passenger can run several).
+    const footerSync = () => { void getSystemSettings().catch((error) => console.warn('[email-footer] sync failed:', error.message)); };
+    footerSync();
+    setInterval(footerSync, 60_000);
     startHttpServer();
   })
   .catch((error) => {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Mail, MessageSquare, Pencil, Plus, Power, PowerOff, RefreshCw, RotateCcw, Send, Trash2 } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { Mail, MessageSquare, PanelBottom, Pencil, Plus, Power, PowerOff, RefreshCw, RotateCcw, Send, Trash2 } from 'lucide-react';
 import {
   PageHeader,
   Card,
@@ -28,10 +29,12 @@ import {
   setNotificationTemplateEnabled,
   updateNotificationTemplate,
 } from '../../utils/notificationTemplatesApi';
+import EmailFooterEditor from '../../components/admin/EmailFooterEditor';
 
 const TABS = [
   { key: 'sms', label: 'SMS', icon: MessageSquare },
   { key: 'email', label: 'Email', icon: Mail },
+  { key: 'footer', label: 'Email footer', icon: PanelBottom },
 ];
 
 const emptyForm = {
@@ -66,7 +69,8 @@ function insertPlaceholder(body, key) {
 export default function NotificationTemplatesPage() {
   const toast = useToast();
   const { user } = useAuth();
-  const [channel, setChannel] = useState('sms');
+  const [searchParams] = useSearchParams();
+  const [channel, setChannel] = useState(() => (searchParams.get('tab') === 'footer' ? 'footer' : 'sms'));
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -93,9 +97,11 @@ export default function NotificationTemplatesPage() {
     }
   }, [channel]);
 
+  const editingFooter = channel === 'footer';
+
   useEffect(() => {
-    void loadRows();
-  }, [loadRows]);
+    if (!editingFooter) void loadRows();
+  }, [loadRows, editingFooter]);
 
   const openCreate = () => {
     setForm({ ...emptyForm, channel });
@@ -308,12 +314,12 @@ export default function NotificationTemplatesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Templates"
-        subtitle="Create and edit the SMS and email copy Mutale sends to customers."
+        subtitle="Create and edit the SMS and email copy Mutale sends to customers, and the footer every email shares."
         breadcrumbs={[
           { label: 'Admin', to: '/admin' },
           { label: 'Templates' },
         ]}
-        actions={(
+        actions={editingFooter ? null : (
           <>
             <button
               type="button"
@@ -335,7 +341,7 @@ export default function NotificationTemplatesPage() {
         )}
       />
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {TABS.map((tab) => {
           const Icon = tab.icon;
           const active = channel === tab.key;
@@ -357,23 +363,27 @@ export default function NotificationTemplatesPage() {
         })}
       </div>
 
-      <Card
-        title={channel === 'sms' ? 'SMS templates' : 'Email templates'}
-        subtitle="System templates are used automatically. Use {{placeholders}} for names, event titles, and links."
-      >
-        {loading ? (
-          <div className="py-12 flex justify-center"><Spinner /></div>
-        ) : error ? (
-          <p className="text-sm text-red-600">{error}</p>
-        ) : (
-          <DataTable
-            columns={columns}
-            data={rows}
-            emptyTitle="No templates yet"
-            emptyDescription="Create an SMS or email template to get started."
-          />
-        )}
-      </Card>
+      {editingFooter ? (
+        <EmailFooterEditor />
+      ) : (
+        <Card
+          title={channel === 'sms' ? 'SMS templates' : 'Email templates'}
+          subtitle="System templates are used automatically. Use {{placeholders}} for names, event titles, and links."
+        >
+          {loading ? (
+            <div className="py-12 flex justify-center"><Spinner /></div>
+          ) : error ? (
+            <p className="text-sm text-red-600">{error}</p>
+          ) : (
+            <DataTable
+              columns={columns}
+              data={rows}
+              emptyTitle="No templates yet"
+              emptyDescription="Create an SMS or email template to get started."
+            />
+          )}
+        </Card>
+      )}
 
       <Modal
         isOpen={modalOpen}
