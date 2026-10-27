@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
   BarChart3,
@@ -72,8 +72,10 @@ const columnLabel = (key) =>
   key === "profile"
     ? "Contact"
     : key.replaceAll("_", " ").replace(/^\w/, (c) => c.toUpperCase());
+const REPORT_TABS = ["summary", "recipients", "links"];
 const filters = [
   ["all", "All Recipients"],
+  ["sent", "Sent"],
   ["opened", "Opened"],
   ["not_opened", "Not Opened"],
   ["clicked", "Clicked"],
@@ -82,44 +84,43 @@ const filters = [
   ["ignored", "Ignored"],
   ["failed", "Failed"],
   ["acceptance_unknown", "Acceptance Unknown"],
+  ["unsubscribed", "Unsubscribed"],
   ["excluded", "Excluded"],
 ];
+const SUPPRESSION_REASONS = [
+  "hard_bounce",
+  "complaint",
+  "unsubscribed",
+  "no_marketing_consent",
+];
+const filterMatchers = {
+  sent: (row) => row.sent_at,
+  opened: (row) => row.opened_at,
+  not_opened: (row) => row.sent_at && !row.opened_at,
+  clicked: (row) => row.clicked_at,
+  not_clicked: (row) => row.opened_at && !row.clicked_at,
+  bounced: (row) => row.bounced_at,
+  ignored: (row) =>
+    row.outcome === "skipped" ||
+    (!row.included && SUPPRESSION_REASONS.includes(row.exclude_reason)),
+  unsubscribed: (row) => row.unsubscribed_at,
+  excluded: (row) => !row.included,
+};
 const matches = (row, filter) =>
   filter === "all" ||
-  (filter === "opened"
-    ? row.opened_at
-    : filter === "not_opened"
-      ? row.sent_at && !row.opened_at
-      : filter === "clicked"
-          ? row.clicked_at
-          : filter === "not_clicked"
-            ? row.opened_at && !row.clicked_at
-            : filter === "bounced"
-              ? row.bounced_at
-              : filter === "ignored"
-                ? row.outcome === "skipped" ||
-                  (!row.included &&
-                    [
-                      "hard_bounce",
-                      "complaint",
-                      "unsubscribed",
-                      "no_marketing_consent",
-                    ].includes(row.exclude_reason))
-                : filter === "excluded"
-                  ? !row.included
-                  : row.outcome === filter);
+  Boolean(
+    (filterMatchers[filter] || ((item) => item.outcome === filter))(row),
+  );
 export default function CampaignReportPage() {
   const { id } = useParams();
   const toast = useToast();
   const { hasPermission } = useAuth();
+  const [params, setParams] = useSearchParams();
   const [campaign, setCampaign] = useState(null),
     [report, setReport] = useState(null),
     [jobs, setJobs] = useState([]),
     [groups, setGroups] = useState([]),
-    [filter, setFilter] = useState("all"),
     [search, setSearch] = useState(""),
-    [tab, setTab] = useState("summary"),
-    [page, setPage] = useState(1),
     [busy, setBusy] = useState(false),
     [columnsOpen, setColumnsOpen] = useState(false),
     [columns, setColumns] = useState(() => {
@@ -153,6 +154,34 @@ export default function CampaignReportPage() {
         ];
       }
     });
+  // The tab and recipient filter live in the URL, so stat cards and the
+  // campaign dashboard can link straight to a filtered recipient list.
+  const tab = REPORT_TABS.includes(params.get("tab"))
+    ? params.get("tab")
+    : "summary";
+  const filter = filters.some(([key]) => key === params.get("filter"))
+    ? params.get("filter")
+    : "all";
+  const updateView = (changes) =>
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        for (const [key, value] of Object.entries(changes)) {
+          if (value) next.set(key, value);
+          else next.delete(key);
+        }
+        return next;
+      },
+      { replace: true },
+    );
+  const setTab = (value) =>
+    updateView({ tab: value === "summary" ? "" : value });
+  const setFilter = (value) =>
+    updateView({ filter: value === "all" ? "" : value });
+  const pageKey = `${filter}|${search}`;
+  const [paging, setPaging] = useState({ key: pageKey, page: 1 });
+  const page = paging.key === pageKey ? paging.page : 1;
+  const setPage = (value) => setPaging({ key: pageKey, page: value });
   useEffect(() => {
     try {
       localStorage.setItem(
@@ -240,14 +269,22 @@ export default function CampaignReportPage() {
     }
   };
   const openRate = totals.accepted ? (totals.opened / totals.accepted) * 100 : 0;
+  const recipientsWith = (key) => `?tab=recipients&filter=${key}`;
   const stats = [
-    { label: "Sent", value: totals.accepted, icon: Send, color: "cyan" },
+    {
+      label: "Sent",
+      value: totals.accepted,
+      icon: Send,
+      color: "cyan",
+      to: recipientsWith("sent"),
+    },
     {
       label: "Opened",
       value: totals.opened,
       icon: MailOpen,
       color: "blue",
       subtitle: `${percent(totals.opened)} of sent`,
+      to: recipientsWith("opened"),
     },
     {
       label: "Clicked",
@@ -255,6 +292,7 @@ export default function CampaignReportPage() {
       icon: MousePointerClick,
       color: "purple",
       subtitle: `${percent(totals.clicked)} of sent`,
+      to: recipientsWith("clicked"),
     },
     {
       label: "Not opened",
@@ -262,6 +300,7 @@ export default function CampaignReportPage() {
       icon: MailCheck,
       color: "green",
       subtitle: `${percent(totals.not_opened)} of sent`,
+      to: recipientsWith("not_opened"),
     },
     {
       label: "Bounced",
@@ -269,6 +308,7 @@ export default function CampaignReportPage() {
       icon: AlertTriangle,
       color: "amber",
       subtitle: `${percent(totals.bounced)} of sent`,
+      to: recipientsWith("bounced"),
     },
     {
       label: "Ignored",
@@ -276,13 +316,21 @@ export default function CampaignReportPage() {
       icon: Ban,
       color: "navy",
       subtitle: "Skipped or suppressed",
+      to: recipientsWith("ignored"),
     },
-    { label: "Failed", value: totals.failed, icon: XCircle, color: "red" },
+    {
+      label: "Failed",
+      value: totals.failed,
+      icon: XCircle,
+      color: "red",
+      to: recipientsWith("failed"),
+    },
     {
       label: "Unsubscribed",
       value: totals.unsubscribed,
       icon: UserMinus,
       color: "navy",
+      to: recipientsWith("unsubscribed"),
     },
   ];
   const recipientColumns = columns.map((key) => ({

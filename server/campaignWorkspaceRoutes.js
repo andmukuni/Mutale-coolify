@@ -463,7 +463,11 @@ export function registerCampaignWorkspaceRoutes(
         ? ` WHERE r.sent_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL ${days} DAY)`
         : " WHERE r.sent_at IS NOT NULL";
       const [[raw]] = await pool.query(
-        `SELECT COUNT(DISTINCT r.campaign_id) AS campaigns,COUNT(*) AS sent,SUM(r.delivered_at IS NOT NULL) AS delivered,SUM(r.bounced_at IS NOT NULL) AS bounced,SUM(r.opened_at IS NOT NULL) AS opened,SUM(r.clicked_at IS NOT NULL) AS clicked FROM email_campaign_recipients r${where}`,
+        `SELECT COUNT(DISTINCT r.campaign_id) AS campaigns,COUNT(*) AS sent,SUM(r.opened_at IS NULL) AS not_opened,SUM(r.bounced_at IS NOT NULL) AS bounced,SUM(r.opened_at IS NOT NULL) AS opened,SUM(r.clicked_at IS NOT NULL) AS clicked FROM email_campaign_recipients r${where}`,
+      );
+      // Campaigns that sent in the period, most recent first.
+      const [sentInPeriod] = await pool.query(
+        `SELECT r.campaign_id,MAX(r.sent_at) AS last_sent FROM email_campaign_recipients r${where} GROUP BY r.campaign_id ORDER BY last_sent DESC LIMIT 10`,
       );
       const totals = Object.fromEntries(
         Object.entries(raw).map(([key, value]) => [key, Number(value || 0)]),
@@ -474,13 +478,14 @@ export function registerCampaignWorkspaceRoutes(
       const [[unsubscribed]] = await pool.query(
         "SELECT COUNT(*) AS total FROM email_preferences WHERE unsubscribed_at IS NOT NULL",
       );
+      const campaigns = await listCampaigns(pool);
       send(res, {
         totals,
         hard_bounced: Number(suppressed.total),
         unsubscribed: Number(unsubscribed.total),
-        recent: (await listCampaigns(pool))
-          .filter((row) => row.state !== "draft")
-          .slice(0, 10),
+        recent: sentInPeriod
+          .map((row) => campaigns.find((item) => item.id === row.campaign_id))
+          .filter(Boolean),
       });
     }),
   );

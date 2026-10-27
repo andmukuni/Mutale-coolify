@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { ArrowUpRight } from 'lucide-react';
 
 export default function AdminStatCard({
   label,
@@ -61,7 +62,7 @@ export default function AdminStatCard({
 
   const content = (
     <div
-      className={`app-card h-full min-h-[220px] bg-white rounded-2xl border border-navy-100 p-5 hover:shadow-md transition-all duration-500 ${entered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}
+      className={`app-card h-full min-h-[220px] bg-white rounded-2xl border border-navy-100 p-5 hover:shadow-md transition-all duration-500 ${to ? 'group-hover:border-cyan-300' : ''} ${entered ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}
       style={{ transitionDelay: `${animationDelay}ms` }}
     >
       {loading ? (
@@ -78,6 +79,13 @@ export default function AdminStatCard({
                 <IconComponent size={20} />
               </div>
             )}
+            {to && (
+              <ArrowUpRight
+                size={18}
+                aria-hidden="true"
+                className="text-navy-300 transition-colors group-hover:text-cyan-600"
+              />
+            )}
           </div>
           <div className="text-2xl font-bold text-navy-900 tabular-nums">{displayValue}</div>
           <div className="text-sm text-navy-500 mt-0.5">{label}</div>
@@ -90,7 +98,14 @@ export default function AdminStatCard({
   );
 
   if (to) {
-    return <Link to={to} className="block h-full">{content}</Link>;
+    return (
+      <Link
+        to={to}
+        className="group block h-full rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2"
+      >
+        {content}
+      </Link>
+    );
   }
 
   return content;

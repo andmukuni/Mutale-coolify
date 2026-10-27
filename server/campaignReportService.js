@@ -26,7 +26,7 @@ export async function getCampaignReport(pool, campaignId) {
   );
   const [rows] = await pool.query(
     `SELECT id, email_normalized, display_name, included, exclude_reason, outcome,
-            sent_at, delivered_at, bounced_at, complained_at, opened_at, clicked_at, error_reason,contact_id,contact_json,COALESCE(bounced_at,complained_at,delivered_at,sent_at,created_at) AS status_date,
+            sent_at, delivered_at, bounced_at, complained_at, opened_at, clicked_at, unsubscribed_at, error_reason,contact_id,contact_json,COALESCE(bounced_at,complained_at,delivered_at,sent_at,created_at) AS status_date,
             (SELECT COUNT(*) FROM email_campaign_link_events ce WHERE ce.recipient_id=email_campaign_recipients.id) AS clicks
      FROM email_campaign_recipients
      WHERE campaign_id = ?

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Ban, Download, Search, UserMinus, UserRound } from "lucide-react";
 import { Card, DataTable } from "../../ui";
 import {
@@ -15,7 +15,11 @@ import { BTN_SECONDARY, INPUT_SM } from "./campaignStyles";
 const PAGE_SIZE = 25;
 
 export default function CampaignSuppressionView({ data }) {
-  const [tab, setTab] = useState("bounced"),
+  const [params] = useSearchParams();
+  // `?view=unsubscribed` (from the campaign dashboard) opens the unsubscribe tab.
+  const [tab, setTab] = useState(() =>
+      params.get("view") === "unsubscribed" ? "unsubscribed" : "bounced",
+    ),
     [search, setSearch] = useState(""),
     [reason, setReason] = useState(""),
     [from, setFrom] = useState(""),

@@ -55,15 +55,28 @@ export default function CampaignDashboardPage() {
   }, [period, toast]);
 
   const total = data?.totals || {};
+  const recent = data?.recent || [];
+  // With one campaign in the period, a card opens its matching recipients;
+  // with several, it opens the sent campaigns, which show the same columns.
+  const single = total.campaigns === 1 && recent.length === 1 ? recent[0] : null;
+  const recipients = (filter) =>
+    single
+      ? `/admin/campaigns/${single.id}/report?tab=recipients&filter=${filter}`
+      : "/admin/campaigns?tab=sent";
   const stats = [
-    { label: "Campaigns", value: total.campaigns, icon: Megaphone, color: "navy" },
-    { label: "Sent", value: total.sent, icon: Send, color: "cyan" },
     {
-      label: "Delivered",
-      value: total.delivered,
-      icon: MailCheck,
-      color: "green",
-      subtitle: `${rate(total.delivered, total.sent)} of sent`,
+      label: "Campaigns",
+      value: total.campaigns,
+      icon: Megaphone,
+      color: "navy",
+      to: "/admin/campaigns?tab=sent",
+    },
+    {
+      label: "Sent",
+      value: total.sent,
+      icon: Send,
+      color: "cyan",
+      to: recipients("sent"),
     },
     {
       label: "Opened",
@@ -71,6 +84,15 @@ export default function CampaignDashboardPage() {
       icon: MailOpen,
       color: "blue",
       subtitle: `${rate(total.opened, total.sent)} open rate`,
+      to: recipients("opened"),
+    },
+    {
+      label: "Not opened",
+      value: total.not_opened,
+      icon: MailCheck,
+      color: "green",
+      subtitle: `${rate(total.not_opened, total.sent)} of sent`,
+      to: recipients("not_opened"),
     },
     {
       label: "Clicked",
@@ -78,6 +100,7 @@ export default function CampaignDashboardPage() {
       icon: MousePointerClick,
       color: "purple",
       subtitle: `${rate(total.clicked, total.sent)} click rate`,
+      to: recipients("clicked"),
     },
     {
       label: "Bounced",
@@ -85,6 +108,7 @@ export default function CampaignDashboardPage() {
       icon: AlertTriangle,
       color: "amber",
       subtitle: `${rate(total.bounced, total.sent)} of sent`,
+      to: recipients("bounced"),
     },
     {
       label: "Hard bounced",
@@ -92,7 +116,7 @@ export default function CampaignDashboardPage() {
       icon: Ban,
       color: "red",
       subtitle: "Currently on the suppression list",
-      to: "/admin/campaigns/manage/suppressions",
+      to: "/admin/campaigns/manage/suppressions?view=bounced",
     },
     {
       label: "Unsubscribed",
@@ -100,7 +124,7 @@ export default function CampaignDashboardPage() {
       icon: UserMinus,
       color: "navy",
       subtitle: "Currently on the suppression list",
-      to: "/admin/campaigns/manage/suppressions",
+      to: "/admin/campaigns/manage/suppressions?view=unsubscribed",
     },
   ];
 
@@ -200,7 +224,7 @@ export default function CampaignDashboardPage() {
       >
         <DataTable
           columns={recentColumns}
-          data={data?.recent || []}
+          data={recent}
           loading={loading}
           emptyTitle="No campaign results yet"
           emptyDescription="Your campaign results will appear here after sending."
