@@ -435,6 +435,21 @@ export default function CampaignsListPage() {
   const destination = (row) =>
     `/admin/campaigns/${row.id}${editable(row) ? "" : "/report"}`;
   const sentCount = (row) => Number(row.sent || 0);
+  // The whole row opens the campaign, like its name link; controls inside keep their own action.
+  const rowClickable = !deletedView;
+  const openRow = (row) => (e) => {
+    if (!rowClickable) return;
+    if (
+      e.target.closest?.(
+        "a,button,input,select,textarea,label,[data-campaign-menu]",
+      )
+    )
+      return;
+    if (window.getSelection?.().toString()) return;
+    const to = destination(row);
+    if (e.metaKey || e.ctrlKey) window.open(to, "_blank", "noopener");
+    else navigate(to);
+  };
   const cell = (row, key) => {
     if (key === "name")
       return (
@@ -935,7 +950,10 @@ export default function CampaignsListPage() {
                   {visible.map((row) => (
                     <tr
                       key={row.id}
-                      className="group hover:bg-navy-50 transition-colors"
+                      onClick={openRow(row)}
+                      className={`group hover:bg-navy-50 transition-colors ${
+                        rowClickable ? "cursor-pointer" : ""
+                      }`}
                     >
                       {shownColumns.map(([id]) => (
                         <td
@@ -966,7 +984,13 @@ export default function CampaignsListPage() {
                 const Icon = typeIcons[row.campaign_type] || Megaphone;
                 const base = sentCount(row);
                 return (
-                  <li key={row.id} className="p-4">
+                  <li
+                    key={row.id}
+                    onClick={openRow(row)}
+                    className={`p-4 transition-colors ${
+                      rowClickable ? "cursor-pointer active:bg-navy-50" : ""
+                    }`}
+                  >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">{cell(row, "name")}</div>
                       {menuButton(row)}
