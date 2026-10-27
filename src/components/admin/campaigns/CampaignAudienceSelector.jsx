@@ -7,9 +7,34 @@ import {
   SlidersHorizontal,
   RefreshCw,
   Info,
+  ShieldCheck,
 } from "lucide-react";
 import { Spinner } from "../../ui";
 import { BTN_SECONDARY, CHECKBOX, INPUT_SM } from "./campaignStyles";
+
+const REASON_LABELS = {
+  no_marketing_consent: "No marketing consent",
+  unsubscribed: "Unsubscribed",
+  hard_bounce: "Email bounced",
+  complaint: "Marked as spam",
+  excluded_list: "In an excluded list",
+  invalid_email: "Invalid email",
+  missing_email: "No email address",
+  invitation_responded: "Already answered the invitation",
+  outside_segment: "Outside the event filters",
+  duplicate_email: "Duplicate email",
+};
+const reasonLabel = (reason) =>
+  REASON_LABELS[reason] || String(reason || "Not eligible").replaceAll("_", " ");
+
+// Why the consent rule removed people, worded for the campaign type.
+function consentHint(type) {
+  if (type === "event_notification")
+    return "Contacts added from lists need marketing consent. People registered for this event always receive event notifications.";
+  if (type === "event_invitation")
+    return "Invitations are marketing email, so they only reach contacts who agreed to receive updates.";
+  return "Regular campaigns are marketing email, so they only reach contacts who agreed to receive updates. To reach people registered for an event, send an Event Notification instead; registrants always receive those.";
+}
 
 function ruleKey(rule) {
   return `${rule.source}:${rule.id || ""}:${rule.filter || "all"}`;
@@ -39,7 +64,10 @@ function AudienceGroups({
                   (option) => ruleKey(option.rule) === ruleKey(rule),
                 ),
               ).length > 0 && (
-                <span className="ml-2 inline-flex items-center rounded-full bg-cyan-600 px-2 py-0.5 text-xs font-medium text-white tabular-nums">
+                <span
+                  title="People in the ticked lists, before consent and unsubscribe checks"
+                  className="ml-2 inline-flex items-center rounded-full bg-cyan-600 px-2 py-0.5 text-xs font-medium text-white tabular-nums"
+                >
                   {Object.keys(sourceCounts).length
                     ? value
                         .filter((rule) =>
@@ -220,6 +248,18 @@ export default function CampaignAudienceSelector({
         rule,
       })),
     });
+  const selectedCount = preview
+    ? (preview.selected_count ??
+      (preview.included_count || 0) + (preview.excluded_count || 0))
+    : 0;
+  const skipped = Object.entries(
+    (preview?.excluded || []).reduce((totals, row) => {
+      totals[row.reason] = (totals[row.reason] || 0) + 1;
+      return totals;
+    }, {}),
+  ).sort((a, b) => b[1] - a[1]);
+  const consentSkipped =
+    skipped.find(([reason]) => reason === "no_marketing_consent")?.[1] || 0;
   return (
     <div>
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-5">
@@ -246,8 +286,48 @@ export default function CampaignAudienceSelector({
             {preview?.included_count ?? "—"}
           </strong>
           <p className="text-xs text-navy-500">unique recipients</p>
+          {selectedCount > (preview?.included_count ?? 0) && (
+            <p className="mt-1 text-xs text-navy-400 tabular-nums">
+              of {selectedCount.toLocaleString()} selected
+            </p>
+          )}
         </div>
       </div>
+      {skipped.length > 0 && (
+        <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <div className="flex items-start gap-3">
+            <ShieldCheck size={18} className="mt-0.5 shrink-0 text-amber-700" />
+            <div className="min-w-0 space-y-2">
+              <p className="font-medium">
+                <span className="tabular-nums">
+                  {selectedCount.toLocaleString()}
+                </span>{" "}
+                selected ·{" "}
+                <span className="tabular-nums">
+                  {preview.excluded_count.toLocaleString()}
+                </span>{" "}
+                won&rsquo;t receive this campaign
+              </p>
+              <ul className="flex flex-wrap gap-2" aria-label="Why people were skipped">
+                {skipped.map(([reason, count]) => (
+                  <li
+                    key={reason}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-white/70 px-2.5 py-1 text-xs ring-1 ring-inset ring-amber-200"
+                  >
+                    <span className="font-semibold tabular-nums">
+                      {count.toLocaleString()}
+                    </span>
+                    {reasonLabel(reason)}
+                  </li>
+                ))}
+              </ul>
+              {consentSkipped > 0 && (
+                <p className="text-xs text-amber-800">{consentHint(type)}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       <AudienceGroups
         groups={all}
         value={audience.include || []}
@@ -463,15 +543,15 @@ export default function CampaignAudienceSelector({
         {preview && (
           <p className="inline-flex items-center gap-1.5 text-sm text-navy-500">
             <Info size={14} />
-            {preview.excluded_count} excluded · Eligibility is checked again
-            before sending.
+            Eligibility is checked again before sending.
           </p>
         )}
       </div>
       {preview?.excluded?.length > 0 && (
         <details className="mt-4 text-sm">
           <summary className="text-cyan-700 hover:text-cyan-600 font-medium cursor-pointer">
-            View exclusion reasons
+            View who is skipped and why
+            {preview.excluded.length > 100 && " (first 100)"}
           </summary>
           <div className="max-h-48 overflow-y-auto mt-2 rounded-xl border border-navy-100 divide-y divide-navy-100">
             {preview.excluded.slice(0, 100).map((row, index) => (
@@ -479,8 +559,7 @@ export default function CampaignAudienceSelector({
                 key={`${row.email}-${index}`}
                 className="px-3 py-2 text-xs text-navy-600"
               >
-                {row.email || "Missing email"} —{" "}
-                {row.reason.replaceAll("_", " ")}
+                {row.email || "Missing email"} — {reasonLabel(row.reason)}
               </p>
             ))}
           </div>
