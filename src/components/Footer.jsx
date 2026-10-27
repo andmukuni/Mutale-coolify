@@ -5,6 +5,7 @@ import { useSiteMenu } from '../context/MenuContext';
 import { useData } from '../context/DataContext';
 import { defaultWebsitePages } from '../data/websitePages';
 import SiteLogo from './SiteLogo';
+import { openCookieSettings } from '../utils/cookieConsent';
 
 function isExternalUrl(url) {
   return /^https?:\/\//i.test(String(url || ''));
@@ -78,9 +79,18 @@ export default function Footer() {
         </div>
 
         <div className="mt-10 pt-6 border-t border-navy-800 flex flex-col sm:flex-row justify-between items-center gap-4">
-          <p className="text-xs text-navy-500">
-            © {currentYear} {global.footerBrandName || defaultWebsitePages.global.footerBrandName}. All rights reserved.
-          </p>
+          <div className="flex flex-col items-center gap-2 sm:items-start">
+            <p className="text-xs text-navy-500">
+              © {currentYear} {global.footerBrandName || defaultWebsitePages.global.footerBrandName}. All rights reserved.
+            </p>
+            <nav aria-label="Legal" className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs">
+              <Link to="/terms" className="text-navy-400 hover:text-cyan-400 transition-colors">Terms and Conditions</Link>
+              <Link to="/cookie-policy" className="text-navy-400 hover:text-cyan-400 transition-colors">Cookie Policy</Link>
+              <button type="button" onClick={openCookieSettings} className="text-navy-400 hover:text-cyan-400 transition-colors">
+                Cookie settings
+              </button>
+            </nav>
+          </div>
           <p className="text-xs text-navy-600 text-center sm:text-right">
             {global.footerTagline || defaultWebsitePages.global.footerTagline}
           </p>

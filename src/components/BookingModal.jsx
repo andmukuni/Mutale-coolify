@@ -1211,6 +1211,9 @@ export default function EventRegistrationFlow({
         size: isPage ? 'xl' : 'md',
         footer: (
           <>
+            <p className="w-full text-left text-xs text-navy-500 sm:mr-auto sm:w-auto">
+              By registering, you agree to our <a href="/terms" target="_blank" rel="noopener noreferrer" className="font-medium text-cyan-700 underline hover:text-cyan-600">Terms and Conditions</a>.
+            </p>
             {onPaymentStep ? (
               <button
                 type="button"

@@ -458,6 +458,9 @@ export default function CartPage() {
               <CreditCard size={16} />
               {placing ? 'Processing...' : currentUser ? (needsPayment ? 'Continue to payment' : 'Place Order') : 'Sign In to Order'}
             </button>
+            <p className="hidden sm:block text-center text-xs text-navy-500">
+              By placing an order, you agree to our <a href="/terms" target="_blank" rel="noopener noreferrer" className="font-medium text-cyan-700 underline hover:text-cyan-600">Terms and Conditions</a>.
+            </p>
           </div>
         </div>
 
@@ -475,6 +478,9 @@ export default function CartPage() {
             <CreditCard size={16} />
             {placing ? 'Processing...' : currentUser ? (needsPayment ? 'Continue to payment' : 'Place Order') : 'Sign In to Order'}
           </button>
+          <p className="mt-1.5 text-center text-[11px] text-navy-500">
+            By placing an order, you agree to our <a href="/terms" target="_blank" rel="noopener noreferrer" className="font-medium text-cyan-700 underline hover:text-cyan-600">Terms and Conditions</a>.
+          </p>
         </div>
       </div>
     </div>

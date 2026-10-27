@@ -4,12 +4,18 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import ScrollToTop from '../components/ScrollToTop';
 import SiteAssistantFab from '../components/SiteAssistantFab';
+import CookieConsentBanner from '../components/CookieConsentBanner';
+import useCookieConsent from '../hooks/useCookieConsent';
 import { MenuProvider } from '../context/MenuContext';
 
 export default function MainLayout() {
   const location = useLocation();
+  const consent = useCookieConsent();
+  const analyticsAllowed = consent?.analytics === true;
 
+  // Page-visit counting is analytics, so it waits for the visitor's consent.
   useEffect(() => {
+    if (!analyticsAllowed) return;
     try {
       const key = 'mm_site_traffic';
       const existing = JSON.parse(localStorage.getItem(key) || '{}');
@@ -28,7 +34,7 @@ export default function MainLayout() {
     } catch {
       // no-op in case storage is unavailable
     }
-  }, [location.pathname]);
+  }, [location.pathname, analyticsAllowed]);
 
   return (
     <MenuProvider>
@@ -40,6 +46,7 @@ export default function MainLayout() {
         </main>
         <Footer />
         <SiteAssistantFab />
+        <CookieConsentBanner />
       </div>
     </MenuProvider>
   );

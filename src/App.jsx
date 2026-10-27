@@ -1,5 +1,5 @@
 import { Suspense, lazy, Component, useEffect } from 'react';
-import { Routes, Route, useLocation } from 'react-router-dom';
+import { Navigate, Routes, Route, useLocation } from 'react-router-dom';
 import ProtectedRoute from './components/ProtectedRoute';
 import RequireUserAuth from './components/RequireUserAuth';
 import TopProgressBar from './components/ui/TopProgressBar';
@@ -86,6 +86,8 @@ const CampaignManagePage = lazy(() => import('./pages/admin/CampaignManagePage')
 const CampaignInvitationPage = lazy(() => import('./pages/CampaignInvitationPage'));
 const CampaignSurveyPage = lazy(() => import('./pages/CampaignSurveyPage'));
 const CampaignsListPage = lazy(() => import('./pages/admin/CampaignsListPage'));
+const TermsPage = lazy(() => import('./pages/legal/TermsPage'));
+const CookiePolicyPage = lazy(() => import('./pages/legal/CookiePolicyPage'));
 const CampaignWizardPage = lazy(() => import('./pages/admin/CampaignWizardPage'));
 const EmailPreferencesPage = lazy(() => import('./pages/EmailPreferencesPage'));
 const EmailUnsubscribePage = lazy(() => import('./pages/EmailUnsubscribePage'));
@@ -180,6 +182,10 @@ export default function App() {
         <Route path="/shop/cart" element={<CartPage />} />
         <Route path="/shop/:slug" element={<BookDetailPage />} />
         <Route path="/pages/:slug" element={<CustomPage />} />
+        <Route path="/terms" element={<TermsPage />} />
+        <Route path="/terms-and-conditions" element={<Navigate to="/terms" replace />} />
+        <Route path="/cookie-policy" element={<CookiePolicyPage />} />
+        <Route path="/cookies" element={<Navigate to="/cookie-policy" replace />} />
         <Route path="/certificates/verify/:code" element={<CertificateVerifyPage />} />
         <Route path="/email/invitation" element={<CampaignInvitationPage />} />
         <Route path="/email/surveys/:id" element={<CampaignSurveyPage />} />

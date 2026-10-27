@@ -6,6 +6,7 @@
  */
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import useCookieConsent from '../hooks/useCookieConsent';
 
 const CurrencyContext = createContext(null);
 
@@ -49,11 +50,18 @@ function getInitialCurrencyState() {
 
 export function CurrencyProvider({ children }) {
   const [currency, setCurrency] = useState(getInitialCurrencyState);
+  const consent = useCookieConsent();
+  const lookupAllowed = consent?.preferences === true;
+  // Without the IP lookup there is nothing to wait for: keep the timezone guess.
+  const loading = currency.loading && lookupAllowed;
 
   // Detect user location via IP if not already detected
   useEffect(() => {
     // Skip if already detected as Zambia via timezone
     if (currency.country === 'ZM') return;
+    // Sending the visitor's IP to ipapi.co needs "Preferences" consent;
+    // without it, keep the timezone-based guess (USD outside Zambia).
+    if (!lookupAllowed) return;
 
     const controller = new AbortController();
 
@@ -84,11 +92,11 @@ export function CurrencyProvider({ children }) {
       });
 
     return () => controller.abort();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [lookupAllowed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch exchange rate for non-Zambian users
   useEffect(() => {
-    if (currency.isZambia || currency.loading || currency.exchangeRate) return;
+    if (currency.isZambia || loading || currency.exchangeRate) return;
 
     fetch('https://api.exchangerate-api.com/v4/latest/ZMW')
       .then(res => res.json())
@@ -113,7 +121,7 @@ export function CurrencyProvider({ children }) {
           rateLastFetched: Date.now(),
         }));
       });
-  }, [currency.isZambia, currency.loading, currency.exchangeRate]);
+  }, [currency.isZambia, loading, currency.exchangeRate]);
 
   /**
    * Format a price based on user's detected location.
@@ -205,6 +213,7 @@ export function CurrencyProvider({ children }) {
 
   const value = {
     ...currency,
+    loading,
     formatPrice,
     formatEventPrice,
     getPriceBoth,

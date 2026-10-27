@@ -344,6 +344,9 @@ export default function RegisterPage() {
                   <><UserPlus size={16} /> Create Account</>
                 )}
               </button>
+              <p className="text-center text-xs text-navy-500">
+                By creating an account, you agree to our <a href="/terms" target="_blank" rel="noopener noreferrer" className="font-medium text-cyan-700 underline hover:text-cyan-600">Terms and Conditions</a>.
+              </p>
             </form>
           </div>
         </div>
