@@ -39,3 +39,14 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local reference material — kept out of the public repo
+/Email Communications Module.docx
+/docs/campaign-reference/
+/docs/cpanel-email.html
+/docs/cpanel-email.md
+/docs/event-survey-ai-how-it-works.pdf
+/docs/glue-up-campaigns-reference.md
+
+# Machine-specific Claude Code preview config
+/.claude/launch.json

@@ -12,6 +12,7 @@ const AdminLayout = lazy(() => import('./layouts/AdminLayout'));
 const HomePage = lazy(() => import('./pages/HomePage'));
 const AboutPage = lazy(() => import('./pages/AboutPage'));
 const ExperiencePage = lazy(() => import('./pages/ExperiencePage'));
+const SpeakingPage = lazy(() => import('./pages/SpeakingPage'));
 const EventsPage = lazy(() => import('./pages/EventsPage'));
 const EventDetailPage = lazy(() => import('./pages/EventDetailPage'));
 const EventRegisterPage = lazy(() => import('./pages/EventRegisterPage'));
@@ -54,6 +55,9 @@ const BlogListPage = lazy(() => import('./pages/admin/BlogListPage'));
 const BlogFormPage = lazy(() => import('./pages/admin/BlogFormPage'));
 const PublicationsListPage = lazy(() => import('./pages/admin/PublicationsListPage'));
 const PublicationFormPage = lazy(() => import('./pages/admin/PublicationFormPage'));
+const SpeakingEngagementsListPage = lazy(() => import('./pages/admin/SpeakingEngagementsListPage'));
+const SpeakingEngagementFormPage = lazy(() => import('./pages/admin/SpeakingEngagementFormPage'));
+const SpeakingEnquiriesPage = lazy(() => import('./pages/admin/SpeakingEnquiriesPage'));
 const SettingsPage = lazy(() => import('./pages/admin/SettingsPage'));
 const UsersListPage = lazy(() => import('./pages/admin/UsersListPage'));
 const AdminUserProfilePage = lazy(() => import('./pages/admin/UserProfilePage'));
@@ -156,6 +160,7 @@ export default function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/experience" element={<ExperiencePage />} />
+        <Route path="/speaking" element={<SpeakingPage />} />
         <Route path="/events" element={<EventsPage />} />
         <Route path="/events/:slug" element={<EventDetailPage />} />
         <Route path="/events/:slug/register" element={<EventRegisterPage />} />
@@ -262,6 +267,10 @@ export default function App() {
   <Route path="publications" element={<PublicationsListPage />} />
   <Route path="publications/new" element={<PublicationFormPage />} />
   <Route path="publications/:id/edit" element={<PublicationFormPage />} />
+        <Route path="speaking" element={<SpeakingEngagementsListPage />} />
+        <Route path="speaking/new" element={<SpeakingEngagementFormPage />} />
+        <Route path="speaking/:id/edit" element={<SpeakingEngagementFormPage />} />
+        <Route path="speaking-enquiries" element={<SpeakingEnquiriesPage />} />
         <Route path="users" element={<UsersListPage />} />
         <Route path="users/:id" element={<AdminUserProfilePage />} />
   <Route path="messages" element={<ContactMessagesPage />} />

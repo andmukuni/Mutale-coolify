@@ -13,6 +13,7 @@ export const headerQuickLinks = [
 export const navLinks = [
   { to: '/', label: 'Home' },
   { to: '/about', label: 'About' },
+  { to: '/speaking', label: 'Speaking' },
   { to: '/experience', label: 'Experience' },
   {
     to: '/events',

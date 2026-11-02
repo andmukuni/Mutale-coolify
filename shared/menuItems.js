@@ -2,6 +2,7 @@
 export const DEFAULT_MENU_ITEMS = [
   { id: 'mi_main_home', location: 'main', label: 'Home', url: '/', parent_id: null, sort_order: 10, badge: false },
   { id: 'mi_main_about', location: 'main', label: 'About', url: '/about', parent_id: null, sort_order: 20, badge: false },
+  { id: 'mi_main_speaking', location: 'main', label: 'Speaking', url: '/speaking', parent_id: null, sort_order: 25, badge: false },
   { id: 'mi_main_experience', location: 'main', label: 'Experience', url: '/experience', parent_id: null, sort_order: 30, badge: false },
   { id: 'mi_main_events', location: 'main', label: 'Events', url: '/events', parent_id: null, sort_order: 40, badge: false },
   { id: 'mi_main_events_upcoming', location: 'main', label: 'Upcoming Events', url: '/events?view=upcoming', parent_id: 'mi_main_events', sort_order: 10, badge: false },

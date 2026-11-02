@@ -216,6 +216,9 @@ export function resolveRouteAdminPermission(req) {
   if (path === '/api/admin/receipts') return 'receipts.view';
   if (path === '/api/account/receipts') return null;
   if (path.startsWith('/api/receipts/')) return 'receipts.view';
+  if (path === '/api/admin/speaking/speaker-profile') return 'website.manage';
+  if (path.startsWith('/api/admin/speaking/enquiries')) return 'speaking.enquiries';
+  if (path.startsWith('/api/admin/speaking')) return method === 'GET' ? 'speaking.view' : 'speaking.manage';
   if (path.startsWith('/api/admin/cv')) return 'cv.view';
   if (path.startsWith('/api/cv/') && method !== 'GET') return 'cv.view';
   if (path.startsWith('/api/contact-messages')) return 'messages.view';

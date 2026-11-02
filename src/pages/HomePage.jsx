@@ -13,6 +13,7 @@ import { selectHomeFeaturedEvents } from '../utils/eventServices';
 import heroPortrait from '../assets/mutale-navy-suit-and-tie.png';
 import { defaultWebsitePages, expertiseIconMap } from '../data/websitePages';
 import TrustedBySection from '../components/TrustedBySection';
+import NextSpeakingEngagement from '../components/speaking/NextSpeakingEngagement';
 import { fetchPartnerLogos } from '../utils/partnerLogosApi';
 import { resolveMediaUrl } from '../utils/mediaUrl';
 
@@ -358,6 +359,16 @@ export default function HomePage() {
             )}
           </div>
         </section>
+      )}
+
+      {/* ═══════════════════ NEXT SPEAKING ENGAGEMENT ═══════════════════ */}
+      {/* Renders nothing until a confirmed engagement is published and upcoming. */}
+      {isVisible('home.next-speaking') && (
+        <NextSpeakingEngagement
+          eyebrow={page.nextSpeakingLabel || defaultWebsitePages.home.nextSpeakingLabel}
+          title={page.nextSpeakingTitle || defaultWebsitePages.home.nextSpeakingTitle}
+          linkLabel={page.nextSpeakingLinkLabel || defaultWebsitePages.home.nextSpeakingLinkLabel}
+        />
       )}
 
       {/* ═══════════════════════ FEATURED BLOG ═══════════════════════ */}

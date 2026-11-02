@@ -1,0 +1,305 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import { ArrowRight, Download, RefreshCw } from 'lucide-react';
+import defaultPortrait from '../assets/mutale-navy-suit-and-tie.png';
+import PageHeaderBackdrop from '../components/PageHeaderBackdrop';
+import EngagementFilters from '../components/speaking/EngagementFilters';
+import {
+  FILTER_THRESHOLD,
+  NO_FILTERS,
+  SECTION_KEYS,
+  applyFilters,
+  filterOptions,
+  hasActiveFilters,
+} from '../components/speaking/engagementFilterRules';
+import SpeakingEngagementCard from '../components/speaking/SpeakingEngagementCard';
+import SpeakingEnquiryForm from '../components/speaking/SpeakingEnquiryForm';
+import { parseSpeakingFormats } from '../components/speaking/speakingFormats';
+import { useData } from '../context/DataContext';
+import { defaultWebsitePages, normalizeSectionVisibility } from '../data/websitePages';
+import { resolveMediaUrl } from '../utils/mediaUrl';
+import { fetchPublicSpeakingEngagements } from '../utils/speakingApi';
+import { trackSpeaking } from '../utils/speakingMetrics';
+
+const ENQUIRY_ANCHOR = 'invite';
+const ENQUIRY_HEADING = 'speaking-enquiry';
+const UPCOMING_HEADING = 'speaking-upcoming';
+
+/** `focusable` lets the page move focus to the heading (it never joins the tab order). */
+function SectionHeading({ eyebrow, title, id, focusable = false }) {
+  return (
+    <div className="mb-6">
+      {eyebrow && <p className="text-xs font-semibold uppercase tracking-widest text-cyan-800 dark:text-cyan-300">{eyebrow}</p>}
+      <h2
+        id={id}
+        tabIndex={focusable ? -1 : undefined}
+        className={`mt-1 text-2xl sm:text-3xl font-bold text-navy-900 ${focusable ? 'focus:outline-none' : ''}`}
+      >
+        {title}
+      </h2>
+    </div>
+  );
+}
+
+function EngagementList({ engagements, headingLevel }) {
+  return (
+    <ul className="space-y-4">
+      {engagements.map((engagement) => (
+        <li key={engagement.id}>
+          <SpeakingEngagementCard engagement={engagement} headingLevel={headingLevel} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// Announced through the section's status line, which is always present.
+function LoadingCards() {
+  return (
+    <div className="space-y-4">
+      {[0, 1].map((key) => (
+        <div key={key} className="h-32 rounded-2xl border border-navy-100 bg-white animate-pulse" aria-hidden="true" />
+      ))}
+    </div>
+  );
+}
+
+export default function SpeakingPage() {
+  const { profile } = useData();
+  const defaults = defaultWebsitePages.speaking;
+  const page = { ...defaults, ...(profile?.websitePages?.speaking || {}) };
+  const text = (key) => String(page[key] || '').trim() || defaults[key];
+  const visibility = normalizeSectionVisibility(profile?.websitePages?.sectionVisibility || {});
+
+  const [result, setResult] = useState({ status: 'loading', data: null });
+  const [attempt, setAttempt] = useState(0);
+  const [filters, setFilters] = useState(NO_FILTERS);
+  const { hash } = useLocation();
+
+  // The page loads lazily, after the browser's own jump to #invite has been
+  // missed, and the listings above the form arrive later still. Jump once they
+  // have rendered, or the form ends up pushed off screen. Only once per arrival,
+  // so retrying the listings doesn't pull the visitor away. Focus moves to the
+  // form's heading too, so keyboard and screen-reader users start there.
+  const jumpedFor = useRef('');
+  useEffect(() => {
+    if (hash !== `#${ENQUIRY_ANCHOR}`) {
+      jumpedFor.current = '';
+      return undefined;
+    }
+    if (result.status === 'loading' || jumpedFor.current === hash) return undefined;
+    const frame = requestAnimationFrame(() => {
+      jumpedFor.current = hash;
+      document.getElementById(ENQUIRY_HEADING)?.focus({ preventScroll: true });
+      document.getElementById(ENQUIRY_ANCHOR)?.scrollIntoView();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [hash, result.status]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchPublicSpeakingEngagements()
+      .then((data) => { if (!cancelled) setResult({ status: 'ready', data }); })
+      .catch(() => { if (!cancelled) setResult({ status: 'error', data: null }); });
+    return () => { cancelled = true; };
+  }, [attempt]);
+
+  // "Try again" disappears while the listings reload, so focus waits on the
+  // section heading, and returns to the button if the load fails again.
+  const retrying = useRef(false);
+  const retryButton = useRef(null);
+  const retry = () => {
+    retrying.current = true;
+    document.getElementById(UPCOMING_HEADING)?.focus();
+    setResult({ status: 'loading', data: null });
+    setAttempt((n) => n + 1);
+  };
+  useEffect(() => {
+    if (result.status === 'loading' || !retrying.current) return;
+    retrying.current = false;
+    if (result.status === 'error') retryButton.current?.focus();
+  }, [result.status]);
+
+  // The download button and quote appear only once provided; the portrait
+  // falls back to the approved photo used on the homepage.
+  const profileFile = String(page.speakerProfileFile || '').trim();
+  const uploadedPortrait = String(page.heroPortraitImage || '').trim();
+  const portrait = uploadedPortrait ? resolveMediaUrl(uploadedPortrait) : defaultPortrait;
+  const portraitAlt = String(page.heroPortraitAlt || '').trim() || defaults.heroPortraitAlt;
+  const quote = String(page.heroQuote || '').trim();
+  const formats = parseSpeakingFormats(page.formats);
+  const showFormats = visibility['speaking.formats'] !== false && formats.length > 0;
+  const showCta = visibility['speaking.cta'] !== false;
+
+  const options = useMemo(() => filterOptions(result.data || {}), [result.data]);
+  const showFilters = result.status === 'ready' && options.total >= FILTER_THRESHOLD;
+  const filtering = showFilters && hasActiveFilters(filters);
+  const groups = useMemo(
+    () => (filtering ? applyFilters(result.data || {}, filters) : (result.data || {})),
+    [filtering, result.data, filters],
+  );
+  const { upcoming = [], tba = [], previous = [], cancelled = [] } = groups;
+  const shown = SECTION_KEYS.reduce((sum, key) => sum + (groups[key] || []).length, 0);
+  const nothingAhead = upcoming.length === 0 && tba.length === 0;
+
+  return (
+    <div>
+      <section className="relative overflow-hidden bg-gradient-to-br from-navy-950 via-navy-900 to-cyan-900 text-white">
+        <PageHeaderBackdrop image={page.heroBackgroundImage} />
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-12 grid gap-10 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+          <div className="max-w-4xl">
+            <p className="text-xs font-semibold uppercase tracking-widest text-cyan-400">{text('heroEyebrow')}</p>
+            <h1 className="mt-3 text-3xl sm:text-4xl lg:text-5xl font-bold leading-tight">{text('heroTitle')}</h1>
+            <p className="mt-4 max-w-2xl text-base sm:text-lg leading-relaxed text-navy-200">{text('heroText')}</p>
+            <div className="mt-7 flex flex-wrap gap-3">
+              <a
+                href={`#${ENQUIRY_ANCHOR}`}
+                className="inline-flex items-center gap-2 rounded-xl bg-cyan-700 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-cyan-800 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-navy-900"
+              >
+                {text('primaryButtonLabel')}
+                <ArrowRight size={16} aria-hidden="true" />
+              </a>
+              {profileFile && (
+                <a
+                  href={resolveMediaUrl(profileFile)}
+                  download
+                  onClick={() => trackSpeaking('profile_download')}
+                  aria-label={`${text('profileButtonLabel')} (PDF)`}
+                  className="inline-flex items-center gap-2 rounded-xl border border-white/50 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/10 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-navy-900"
+                >
+                  <Download size={16} aria-hidden="true" />
+                  {text('profileButtonLabel')}
+                </a>
+              )}
+            </div>
+          </div>
+
+          {/* Side by side on large screens only, so phones reach the listings sooner. */}
+          <figure className="hidden lg:flex items-end gap-6 justify-self-end">
+            <img
+              src={portrait}
+              alt={portraitAlt}
+              className="h-72 w-auto max-w-[18rem] rounded-2xl object-cover"
+            />
+            {quote && (
+              <figcaption className="max-w-[12rem] text-lg italic leading-snug text-cyan-100">“{quote}”</figcaption>
+            )}
+          </figure>
+        </div>
+      </section>
+
+      {showFormats && (
+        <section aria-label="Speaking formats" className="bg-white border-b border-navy-100">
+          {/* Compact on phones (titles only) so the listings stay near the top. */}
+          <ul className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 grid grid-cols-2 gap-x-4 gap-y-3 sm:gap-5 lg:grid-cols-4">
+            {formats.map(({ title, description, Icon }) => (
+              <li key={title} className="flex items-center gap-2 sm:items-start sm:gap-3">
+                <span className="flex h-8 w-8 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-cyan-50 text-cyan-800 dark:bg-cyan-500/10 dark:text-cyan-300">
+                  <Icon size={18} aria-hidden="true" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm sm:text-base font-semibold text-navy-900">{title}</span>
+                  {description && <span className="hidden sm:block text-sm text-navy-600">{description}</span>}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <div className="bg-navy-50">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-14 space-y-14">
+          {showFilters && (
+            <EngagementFilters options={options} filters={filters} onChange={setFilters} shown={shown} />
+          )}
+
+          <section aria-labelledby={UPCOMING_HEADING}>
+            <SectionHeading id={UPCOMING_HEADING} eyebrow={text('upcomingEyebrow')} title={text('upcomingTitle')} focusable />
+            <p className="sr-only" role="status">
+              {result.status === 'loading' ? 'Loading speaking engagements…' : ''}
+            </p>
+            {result.status === 'loading' && <LoadingCards />}
+            {result.status === 'error' && (
+              <div className="rounded-2xl border border-navy-100 bg-white p-6 text-center" role="alert">
+                <p className="text-navy-700">Speaking engagements couldn’t be loaded right now.</p>
+                <button
+                  ref={retryButton}
+                  type="button"
+                  onClick={retry}
+                  className="mt-3 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-cyan-800 hover:bg-cyan-50 dark:text-cyan-300 dark:hover:bg-cyan-500/10"
+                >
+                  <RefreshCw size={15} aria-hidden="true" />
+                  Try again
+                </button>
+              </div>
+            )}
+            {result.status === 'ready' && (
+              <>
+                {upcoming.length > 0 && <EngagementList engagements={upcoming} headingLevel="h3" />}
+                {nothingAhead && (
+                  <p className="rounded-2xl border border-dashed border-navy-200 bg-white px-6 py-10 text-center text-navy-600">
+                    {filtering ? 'No upcoming engagements match these filters.' : text('emptyMessage')}
+                  </p>
+                )}
+                {tba.length > 0 && (
+                  <div className={upcoming.length > 0 ? 'mt-10' : ''}>
+                    <h3 className="mb-4 text-lg font-semibold text-navy-900">{text('tbaTitle')}</h3>
+                    <EngagementList engagements={tba} headingLevel="h4" />
+                  </div>
+                )}
+              </>
+            )}
+          </section>
+
+          {result.status === 'ready' && previous.length > 0 && (
+            <section aria-labelledby="speaking-previous">
+              <SectionHeading id="speaking-previous" eyebrow={text('previousEyebrow')} title={text('previousTitle')} />
+              <EngagementList engagements={previous} headingLevel="h3" />
+            </section>
+          )}
+
+          {/* Past cancellations are kept apart, so they never read as engagements that took place. */}
+          {result.status === 'ready' && cancelled.length > 0 && (
+            <section aria-labelledby="speaking-cancelled">
+              <h2 id="speaking-cancelled" className="mb-4 text-lg font-semibold text-navy-900">{text('cancelledTitle')}</h2>
+              <EngagementList engagements={cancelled} headingLevel="h3" />
+            </section>
+          )}
+        </div>
+      </div>
+
+      {showCta && (
+        <section className="relative overflow-hidden bg-navy-950 text-white" aria-labelledby="speaking-cta">
+          <PageHeaderBackdrop image={page.ctaBackgroundImage} />
+          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-14 flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+            <div className="max-w-2xl">
+              <p className="text-xs font-semibold uppercase tracking-widest text-cyan-400">{text('ctaEyebrow')}</p>
+              <h2 id="speaking-cta" className="mt-2 text-2xl sm:text-3xl font-bold">{text('ctaTitle')}</h2>
+              <p className="mt-3 leading-relaxed text-navy-200">{text('ctaText')}</p>
+            </div>
+            <a
+              href={`#${ENQUIRY_ANCHOR}`}
+              className="inline-flex shrink-0 items-center gap-2 self-start rounded-xl bg-coral px-6 py-3 text-sm font-semibold text-navy-950 transition-colors hover:bg-[#f08a83] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-navy-950 md:self-center"
+            >
+              {text('ctaButtonLabel')}
+              <ArrowRight size={16} aria-hidden="true" />
+            </a>
+          </div>
+        </section>
+      )}
+
+      <section id={ENQUIRY_ANCHOR} className="scroll-mt-28 bg-navy-50" aria-labelledby={ENQUIRY_HEADING}>
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-14">
+          <div className="mb-6">
+            <p className="text-xs font-semibold uppercase tracking-widest text-cyan-800 dark:text-cyan-300">{text('enquiryEyebrow')}</p>
+            <h2 id={ENQUIRY_HEADING} tabIndex={-1} className="mt-1 text-2xl sm:text-3xl font-bold text-navy-900 focus:outline-none">
+              {text('enquiryTitle')}
+            </h2>
+            <p className="mt-3 text-navy-600">{text('enquiryIntro')}</p>
+          </div>
+          <SpeakingEnquiryForm successMessage={text('enquirySuccessMessage')} />
+        </div>
+      </section>
+    </div>
+  );
+}

@@ -62,8 +62,12 @@
   --app-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
+/* Keep focused controls clear of the sticky header (48-64px) and, while it is
+   shown, the cookie banner, whose height CookieConsentBanner writes to the variable. */
 html {
   scroll-behavior: smooth;
+  scroll-padding-top: 4.5rem;
+  scroll-padding-bottom: var(--consent-banner-h, 0px);
 }
 
 body {
@@ -146,12 +150,13 @@ body {
 .dark select {
   background-color: var(--app-input-bg);
   color: var(--app-text);
-  border-color: var(--app-border);
+  /* Muted text colour, not --app-border, so field edges keep 3:1 against the card */
+  border-color: var(--app-text-muted);
 }
 
 .dark input::placeholder,
 .dark textarea::placeholder {
-  color: var(--app-text-muted);
+  color: var(--color-navy-300);
 }
 
 .dark .hover\:bg-navy-50:hover,
@@ -163,6 +168,12 @@ body {
 
 .dark .hover\:bg-gray-100:hover {
   background-color: var(--app-surface-hover);
+}
+
+/* Table rows and cards: a light tint would wash out the remapped muted text */
+.dark .hover\:bg-navy-50\/50:hover,
+.dark .active\:bg-navy-50:active {
+  background-color: color-mix(in srgb, var(--color-navy-950) 40%, transparent);
 }
 
 .dark .hover\:text-navy-700:hover,
@@ -313,7 +324,7 @@ body {
 form.was-validated :is(input, select, textarea):invalid:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="file"]):not([type="submit"]):not([type="button"]),
 :is(input, select, textarea):user-invalid:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="file"]):not([type="submit"]):not([type="button"]),
 :is(input, select, textarea).field-has-error {
-  border-color: #f87171 !important;
+  border-color: #e7000b !important;
   background-color: #fef2f2;
   color: #7f1d1d;
 }
@@ -321,7 +332,7 @@ form.was-validated :is(input, select, textarea):invalid:not([type="checkbox"]):n
 form.was-validated :is(input, select, textarea):invalid:not([type="checkbox"]):not([type="radio"]):focus,
 :is(input, select, textarea):user-invalid:not([type="checkbox"]):not([type="radio"]):focus,
 :is(input, select, textarea).field-has-error:focus {
-  box-shadow: 0 0 0 2px #fca5a5;
+  box-shadow: 0 0 0 2px #c10007;
   outline: none;
 }
 
@@ -331,4 +342,10 @@ form.was-validated :is(input, select, textarea):invalid:not([type="checkbox"]):n
   border-color: #f87171 !important;
   background-color: rgba(127, 29, 29, 0.35);
   color: #fecaca;
+}
+
+.dark form.was-validated :is(input, select, textarea):invalid:not([type="checkbox"]):not([type="radio"]):focus,
+.dark :is(input, select, textarea):user-invalid:not([type="checkbox"]):not([type="radio"]):focus,
+.dark :is(input, select, textarea).field-has-error:focus {
+  box-shadow: 0 0 0 2px #fca5a5;
 }

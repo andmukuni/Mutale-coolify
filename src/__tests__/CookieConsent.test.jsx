@@ -49,7 +49,7 @@ describe('cookie consent', () => {
   it('records a rejection and stops asking', () => {
     renderBanner();
     fireEvent.click(screen.getByRole('button', { name: 'Reject all' }));
-    expect(stored()).toMatchObject({ version: 1, necessary: true, preferences: false, analytics: false });
+    expect(stored()).toMatchObject({ version: 2, necessary: true, preferences: false, analytics: false });
     expect(screen.queryByRole('region', { name: /cookie consent/i })).not.toBeInTheDocument();
   });
 

@@ -296,20 +296,34 @@ const VARIANT_STYLES = {
   },
 };
 
-function ToastViewport({ toasts, onDismiss }) {
-  if (!toasts || toasts.length === 0) return null;
+const STACK_CLASS = 'flex w-full flex-col items-center gap-2 sm:items-end sm:gap-3';
+
+function ToastViewport({ toasts = [], onDismiss }) {
+  // Both live regions stay mounted while empty: screen readers announce changes to a
+  // region that already exists, but often miss one that is created with its message.
+  const errors = toasts.filter((t) => t.variant === 'error');
+  const others = toasts.filter((t) => t.variant !== 'error');
+  const renderToasts = (list) => list.map((t) => (
+    <ToastItem key={t.id} toast={t} onDismiss={() => onDismiss(t.id)} />
+  ));
   return (
     <div
       // Top-right on desktop; full-width pinned to top on mobile.
-      className="pointer-events-none fixed inset-x-0 top-0 z-[9999] flex flex-col items-center gap-2 px-3 pt-3 sm:inset-x-auto sm:right-4 sm:top-4 sm:items-end sm:gap-3 sm:px-0 sm:pt-0"
-      aria-live="polite"
-      aria-atomic="false"
+      className="pointer-events-none fixed inset-x-0 top-0 z-[9999] flex flex-col items-center px-3 pt-3 sm:inset-x-auto sm:right-4 sm:top-4 sm:items-end sm:px-0 sm:pt-0"
       role="region"
       aria-label="Notifications"
     >
-      {toasts.map((t) => (
-        <ToastItem key={t.id} toast={t} onDismiss={() => onDismiss(t.id)} />
-      ))}
+      <div role="alert" aria-atomic="false" className={STACK_CLASS}>
+        {renderToasts(errors)}
+      </div>
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="false"
+        className={`${STACK_CLASS}${errors.length && others.length ? ' mt-2 sm:mt-3' : ''}`}
+      >
+        {renderToasts(others)}
+      </div>
     </div>
   );
 }
@@ -318,11 +332,8 @@ function ToastItem({ toast: t, onDismiss }) {
   const variant = VARIANT_STYLES[t.variant] || VARIANT_STYLES.info;
   const { Icon } = variant;
   const isLoading = t.variant === 'loading';
-  const isError = t.variant === 'error';
   return (
     <div
-      role={isError ? 'alert' : 'status'}
-      aria-live={isError ? 'assertive' : 'polite'}
       className={[
         'pointer-events-auto w-full sm:w-[360px] max-w-full overflow-hidden rounded-2xl border border-l-4 shadow-lg',
         'transition-all duration-200 ease-out',

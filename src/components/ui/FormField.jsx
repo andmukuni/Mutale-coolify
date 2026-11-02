@@ -26,7 +26,9 @@ export default function FormField({
   const uid = useId();
   const fieldId = name || `field-${uid}`;
   const errorId = `${fieldId}-error`;
+  const helpId = `${fieldId}-help`;
   const hasError = Boolean(error);
+  const showHelp = Boolean(helpText || helpLink) && !hasError;
   const baseClass = `${fieldControlClass(hasError)} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`;
 
   const handleChange = (event) => {
@@ -34,7 +36,8 @@ export default function FormField({
     onChange?.(event);
   };
 
-  const describedBy = hasError ? errorId : undefined;
+  // The error replaces the help text, so point at whichever one is shown.
+  const describedBy = hasError ? errorId : (showHelp ? helpId : undefined);
 
   const renderInput = () => {
     if (children) {
@@ -91,6 +94,7 @@ export default function FormField({
           rows={rows}
           placeholder={placeholder}
           disabled={disabled}
+          maxLength={maxLength}
           aria-invalid={hasError || undefined}
           aria-describedby={describedBy}
           className={`${baseClass} min-h-[6.5rem] resize-y overflow-auto`}
@@ -124,19 +128,19 @@ export default function FormField({
       {label && (
         <label
           htmlFor={fieldId}
-          className={`block text-sm font-medium mb-1.5 ${hasError ? 'text-red-700' : 'text-navy-700'}`}
+          className={`block text-sm font-medium mb-1.5 ${hasError ? 'text-red-700 dark:text-red-300' : 'text-navy-700'}`}
         >
-          {label} {required && <span className="text-red-400">*</span>}
+          {label} {required && <span className="text-red-700 dark:text-red-300">*</span>}
         </label>
       )}
       {renderInput()}
       {hasError && (
-        <p id={errorId} className="mt-1 text-xs text-red-600" role="alert">
+        <p id={errorId} className="mt-1 text-xs text-red-700 dark:text-red-300" role="alert">
           {error}
         </p>
       )}
-      {(helpText || helpLink) && !hasError && (
-        <p className="mt-1 text-xs text-navy-400">
+      {showHelp && (
+        <p id={helpId} className="mt-1 text-xs text-navy-600">
           {helpText}
           {helpText && helpLink ? ' ' : null}
           {helpLink?.href && helpLink?.label ? (
@@ -144,7 +148,7 @@ export default function FormField({
               href={helpLink.href}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-cyan-600 hover:text-cyan-700 hover:underline font-medium"
+              className="text-cyan-700 hover:text-cyan-800 dark:text-cyan-300 dark:hover:text-cyan-200 hover:underline font-medium"
             >
               {helpLink.label}
             </a>

@@ -13,6 +13,11 @@ const colorMap = {
   attended: { bg: 'bg-teal-50', text: 'text-teal-700', ring: 'ring-teal-600/20' },
   pending: { bg: 'bg-yellow-50', text: 'text-yellow-700', ring: 'ring-yellow-600/20' },
   waitlisted: { bg: 'bg-orange-50', text: 'text-orange-700', ring: 'ring-orange-600/20' },
+  // speaking engagement statuses
+  invited: { bg: 'bg-navy-50', text: 'text-navy-700', ring: 'ring-navy-500/20' },
+  // text-navy-700 (not slate) so the dark-mode remap keeps it readable on the remapped slate-100
+  declined: { bg: 'bg-slate-100', text: 'text-navy-700', ring: 'ring-slate-400/30' },
+  postponed: { bg: 'bg-amber-50', text: 'text-amber-800', ring: 'ring-amber-600/20' },
   // event display statuses
   past: { bg: 'bg-slate-100', text: 'text-slate-500', ring: 'ring-slate-400/20' },
   closed: { bg: 'bg-rose-50', text: 'text-rose-700', ring: 'ring-rose-600/20' },

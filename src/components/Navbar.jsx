@@ -31,6 +31,12 @@ import {
 
 const containerClass = 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8';
 
+// The current page is underlined as well as coloured, so it is not shown by colour alone.
+const DESKTOP_ACTIVE = 'text-cyan-400 underline decoration-2 underline-offset-8';
+const MOBILE_ACTIVE = 'bg-cyan-900/30 text-cyan-400 underline decoration-2 underline-offset-4';
+
+const DRAWER_FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 function isExternalUrl(url) {
   return /^https?:\/\//i.test(String(url || ''));
 }
@@ -201,7 +207,7 @@ function NavLinkItem({
             to={link.to}
             className={({ isActive }) => `inline-flex items-center gap-1 text-sm font-semibold tracking-wide transition-colors duration-200 ${
               isActive || eventsActive
-                ? 'text-cyan-400'
+                ? DESKTOP_ACTIVE
                 : 'text-white hover:text-cyan-300'
             }`}
           >
@@ -233,7 +239,7 @@ function NavLinkItem({
     const baseClass = ({ isActive }) =>
       `block px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
         isActive
-          ? 'bg-cyan-900/30 text-cyan-400'
+          ? MOBILE_ACTIVE
           : 'text-navy-200 hover:bg-navy-800 hover:text-white'
       }`;
 
@@ -263,7 +269,7 @@ function NavLinkItem({
           title="Shop — new"
           aria-label="Shop, new"
           className={({ isActive }) => `inline-flex items-end text-sm font-semibold tracking-wide transition-colors ${
-            isActive ? 'text-cyan-400' : 'text-white hover:text-cyan-300'
+            isActive ? DESKTOP_ACTIVE : 'text-white hover:text-cyan-300'
           }`}
         >
           {labelEl}
@@ -280,7 +286,7 @@ function NavLinkItem({
         className={({ isActive }) =>
           `block px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
             isActive
-              ? 'bg-cyan-900/30 text-cyan-400'
+              ? MOBILE_ACTIVE
               : 'text-navy-200 hover:bg-navy-800 hover:text-white'
           }`
         }
@@ -296,7 +302,7 @@ function NavLinkItem({
         to={link.to}
         end={link.to === '/'}
         className={({ isActive }) => `text-sm font-semibold tracking-wide transition-colors ${
-          isActive ? 'text-cyan-400' : 'text-white hover:text-cyan-300'
+          isActive ? DESKTOP_ACTIVE : 'text-white hover:text-cyan-300'
         }`}
       >
         {link.label}
@@ -312,7 +318,7 @@ function NavLinkItem({
       className={({ isActive }) =>
         `block px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
           isActive
-            ? 'bg-cyan-900/30 text-cyan-400'
+            ? MOBILE_ACTIVE
             : 'text-navy-200 hover:bg-navy-800 hover:text-white'
         }`
       }
@@ -414,6 +420,8 @@ export default function Navbar() {
   const topInnerRef = useRef(null);
   const topBlockHeightRef = useRef(0);
   const scrollRafRef = useRef(0);
+  const menuButtonRef = useRef(null);
+  const drawerRef = useRef(null);
   const { mainNavLinks: navLinks } = useSiteMenu();
   const { currentUser: user, userLogout } = useUserAuth();
   const { cartItemCount } = useBookStore();
@@ -440,6 +448,35 @@ export default function Navbar() {
     return () => {
       document.body.style.overflow = '';
     };
+  }, [open]);
+
+  // While the mobile menu is open, Escape closes it and returns focus to the button
+  // that opened it, and Tab cycles between that button and the menu, so focus never
+  // reaches page content hidden behind the drawer.
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKeyDown = (event) => {
+      const button = menuButtonRef.current;
+      if (event.key === 'Escape') {
+        setOpen(false);
+        button?.focus();
+        return;
+      }
+      if (event.key !== 'Tab' || !drawerRef.current) return;
+      const items = [button, ...drawerRef.current.querySelectorAll(DRAWER_FOCUSABLE)].filter(Boolean);
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || !items.includes(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || !items.includes(active))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
   }, [open]);
 
   useLayoutEffect(() => {
@@ -507,6 +544,10 @@ export default function Navbar() {
   };
 
   const closeMobile = () => setOpen(false);
+  const toggleMobile = (event) => {
+    menuButtonRef.current = event.currentTarget;
+    setOpen(!open);
+  };
 
   const collapseTop = isScrolled && topBlockHeight > 0;
   const topSectionStyle = topBlockHeight > 0
@@ -530,11 +571,12 @@ export default function Navbar() {
         className={`bg-navy-900 overflow-hidden${collapseTop ? ' pointer-events-none' : ''}`}
         style={topSectionStyle}
         aria-hidden={collapseTop}
+        inert={collapseTop}
       >
         <div ref={topInnerRef}>
           <HeaderUtilityBar />
           <HeaderBrandBar
-            onMenuToggle={() => setOpen(!open)}
+            onMenuToggle={toggleMobile}
             menuOpen={open}
             showMobileActions
             cartSlot={mobileCart}
@@ -546,6 +588,7 @@ export default function Navbar() {
         className={`md:hidden theme-fixed bg-navy-900 border-b border-navy-800/80 overflow-hidden${isScrolled ? '' : ' pointer-events-none'}`}
         style={{ height: isScrolled ? MOBILE_COMPACT_BAR_HEIGHT : 0 }}
         aria-hidden={!isScrolled}
+        inert={!isScrolled}
       >
         <div className={`${containerClass} flex items-center justify-between gap-3 py-2`}>
           <Link to="/" className="group flex items-center gap-2 min-w-0" aria-label="Home">
@@ -560,7 +603,7 @@ export default function Navbar() {
             {mobileCart}
             <button
               type="button"
-              onClick={() => setOpen(!open)}
+              onClick={toggleMobile}
               className="text-navy-200 hover:text-white transition-colors p-2"
               aria-label="Toggle menu"
               aria-expanded={open}
@@ -581,8 +624,8 @@ export default function Navbar() {
               className={({ isActive }) =>
                 `flex items-center justify-center w-10 h-10 rounded-sm shrink-0 transition-colors ${
                   isActive || isHome
-                    ? 'bg-navy-950 text-cyan-400'
-                    : 'bg-navy-950 text-white hover:text-cyan-300'
+                    ? 'bg-navy-950 text-cyan-400 border-b-2 border-cyan-400'
+                    : 'bg-navy-950 text-white hover:text-cyan-300 border-b-2 border-transparent'
                 }`
               }
               aria-label="Home"
@@ -590,7 +633,7 @@ export default function Navbar() {
               <Home size={18} />
             </NavLink>
 
-            <div className="flex items-center gap-5 lg:gap-6 pl-3 overflow-visible">
+            <div className="flex items-center gap-3 lg:gap-6 pl-3 overflow-visible">
               {mainNavLinks.map((link) => (
                 <NavLinkItem
                   key={link.id || link.to}
@@ -626,7 +669,7 @@ export default function Navbar() {
 
       {/* Mobile drawer */}
       {open && (
-        <div className="md:hidden bg-navy-950 border-t border-navy-800 max-h-[calc(100vh-8rem)] overflow-y-auto">
+        <div ref={drawerRef} className="md:hidden bg-navy-950 border-t border-navy-800 max-h-[calc(100vh-8rem)] overflow-y-auto">
           <div className="px-4 py-3 border-b border-navy-800">
             <p className="text-[10px] uppercase tracking-wide text-navy-500 mb-2">Quick links</p>
             <div className="flex flex-wrap gap-2">
@@ -677,7 +720,7 @@ export default function Navbar() {
                 className={({ isActive }) =>
                   `flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                     isActive
-                      ? 'bg-cyan-900/30 text-cyan-400'
+                      ? MOBILE_ACTIVE
                       : 'text-navy-200 hover:bg-navy-800 hover:text-white'
                   }`
                 }
@@ -709,7 +752,7 @@ export default function Navbar() {
                   onClick={closeMobile}
                   className={({ isActive }) =>
                     `flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                      isActive ? 'bg-cyan-900/30 text-cyan-400' : 'text-navy-200 hover:bg-navy-800 hover:text-white'
+                      isActive ? MOBILE_ACTIVE : 'text-navy-200 hover:bg-navy-800 hover:text-white'
                     }`
                   }
                 >
@@ -721,7 +764,7 @@ export default function Navbar() {
                   onClick={closeMobile}
                   className={({ isActive }) =>
                     `flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                      isActive ? 'bg-cyan-900/30 text-cyan-400' : 'text-navy-200 hover:bg-navy-800 hover:text-white'
+                      isActive ? MOBILE_ACTIVE : 'text-navy-200 hover:bg-navy-800 hover:text-white'
                     }`
                   }
                 >

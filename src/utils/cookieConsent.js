@@ -6,7 +6,8 @@
 
 export const CONSENT_STORAGE_KEY = 'mm_cookie_consent';
 // Bump when the categories or what they cover change, so visitors are asked again.
-export const CONSENT_VERSION = 1;
+// 2: analytics now also counts use of the Speaking page's links on the server.
+export const CONSENT_VERSION = 2;
 export const CONSENT_CHANGE_EVENT = 'mm:cookie-consent';
 export const OPEN_COOKIE_SETTINGS_EVENT = 'mm:open-cookie-settings';
 
@@ -28,7 +29,7 @@ export const CONSENT_CATEGORIES = [
     key: 'analytics',
     label: 'Analytics',
     description:
-      'Counts which pages are visited so we can see what is useful and improve the site.',
+      'Counts which pages are visited, and how often links on the Speaking page are used, so we can see what is useful and improve the site. Nothing that identifies you is sent.',
   },
 ];
 

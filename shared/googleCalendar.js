@@ -169,7 +169,7 @@ export function buildYahooCalendarUrl(event = {}, { detailsUrl = '' } = {}) {
   return `https://calendar.yahoo.com/?${params.toString()}`;
 }
 
-function escapeIcsText(value) {
+export function escapeIcsText(value) {
   return String(value || '')
     .replace(/\\/g, '\\\\')
     .replace(/\r\n/g, '\n')
@@ -178,7 +178,7 @@ function escapeIcsText(value) {
     .replace(/;/g, '\\;');
 }
 
-function foldIcsLine(line) {
+export function foldIcsLine(line) {
   if (line.length <= 75) return line;
   const chunks = [line.slice(0, 75)];
   let remaining = line.slice(75);

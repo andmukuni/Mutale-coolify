@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import Modal from './Modal';
 import { AlertTriangle } from 'lucide-react';
 import Spinner from './Spinner';
@@ -13,15 +14,16 @@ export default function ConfirmDialog({
   variant = 'danger',
   loading = false,
 }) {
+  const messageId = useId();
   const variantStyles = {
     danger:
       'bg-red-600 hover:bg-red-700 text-white focus:ring-red-500',
     primary:
-      'bg-cyan-600 hover:bg-cyan-500 text-white focus:ring-cyan-500',
+      'bg-cyan-600 hover:bg-cyan-500 text-white focus:ring-cyan-700',
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={title} size="sm">
+    <Modal isOpen={isOpen} onClose={onClose} title={title} size="sm" describedBy={messageId}>
       <div className="flex items-start gap-4">
         <div
           className={`p-2.5 rounded-xl flex-shrink-0 ${
@@ -32,7 +34,7 @@ export default function ConfirmDialog({
         >
           <AlertTriangle size={20} />
         </div>
-        <p className="text-sm text-navy-600 leading-relaxed pt-1">{message}</p>
+        <p id={messageId} className="text-sm text-navy-600 leading-relaxed pt-1">{message}</p>
       </div>
       <div className="flex items-center justify-end gap-3 mt-6">
         <button

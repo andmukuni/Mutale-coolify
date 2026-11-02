@@ -23,6 +23,10 @@ export const TEMPLATE_PLACEHOLDERS = [
   { key: 'calendar_url', label: 'Add to calendar page' },
   { key: 'subject', label: 'Message subject' },
   { key: 'message', label: 'Message body' },
+  { key: 'greeting', label: 'Greeting ("Hello Andrew," or "Hello,")' },
+  { key: 'organisation', label: 'Enquiring organisation' },
+  { key: 'enquiry_summary', label: 'Speaking enquiry details' },
+  { key: 'admin_url', label: 'Admin link to speaking enquiries' },
 ];
 
 export const SAMPLE_TEMPLATE_VARS = {
@@ -43,6 +47,10 @@ export const SAMPLE_TEMPLATE_VARS = {
   calendar_url: 'https://mutalemubanga.org/events/demo/calendar',
   subject: 'Registration update',
   message: 'We look forward to seeing you.',
+  greeting: 'Hello Andrew,',
+  organisation: 'Biomedical Society of Zambia',
+  enquiry_summary: 'Organiser: Andrew Mukuni\nOrganisation: Biomedical Society of Zambia\nEvent: Annual Scientific Conference\nProposed date: 2027-03-04 (Africa/Lusaka)\nRequested role: Keynote speaker',
+  admin_url: 'https://mutalemubanga.org/admin/speaking-enquiries',
 };
 
 export const SYSTEM_NOTIFICATION_TEMPLATES = [
@@ -237,6 +245,24 @@ export const SYSTEM_NOTIFICATION_TEMPLATES = [
     description: 'Admin reply to a public contact message.',
     subject: '{{subject}}',
     body: '{{message}}',
+  },
+  {
+    slug: 'speaking_enquiry_admin',
+    channel: 'email',
+    name: 'Speaking enquiry (to admin)',
+    description: 'Sent to the Alert Email in Settings → Notifications when someone sends a speaking enquiry.',
+    subject: 'New speaking enquiry: {{event_title}}',
+    body: 'A new speaking enquiry was submitted on the website. It has not been accepted, scheduled, or published.\n\n{{enquiry_summary}}\n\nReview it in the admin area: {{admin_url}}',
+  },
+  {
+    slug: 'speaking_enquiry_ack',
+    channel: 'email',
+    name: 'Speaking enquiry acknowledgement',
+    // Fixed wording on purpose: the form is public, so anything the visitor
+    // typed (event title, topic, message) is never echoed to the address they gave.
+    description: 'Sent to the organiser after a speaking enquiry. Must not promise availability or repeat what the visitor typed.',
+    subject: 'We received your speaking enquiry',
+    body: '{{greeting}}\n\nThank you for inviting Mutale Mubanga to speak. Your enquiry has been received.\n\nAvailability will be confirmed separately. This email is an acknowledgement only and does not confirm participation.',
   },
 ];
 

@@ -9,12 +9,13 @@
  *
  * Field shape:
  *   { key, label, type, path, placeholder?, helpText? }
- *     - type: 'text' | 'textarea' | 'image' | 'lines' | 'link'
+ *     - type: 'text' | 'textarea' | 'image' | 'lines' | 'link' | 'file'
  *     - path: dot-path into `profile` (e.g. 'heroIntro' for a root field, or
  *             'websitePages.home.heroEyebrow' for a website-page field).
  *     - 'lines' fields store an array; the editor shows one item per line.
  *     - image fields may set `fallbackPreview` (a ready-to-use URL/asset) so the
  *       editor previews the current live default when no override is set.
+ *     - file fields set `accept` and `upload(file) → url` for the uploader.
  *
  * Section shape:
  *   { id, page, name, type: 'static' | 'dynamic', toggleable, visibilityKey,
@@ -26,6 +27,7 @@
 
 import heroPortrait from '../assets/mutale-navy-suit-and-tie.png';
 import { normalizeSectionVisibility } from '../data/websitePages';
+import { uploadSpeakerProfilePdf } from '../utils/speakingAdminApi';
 
 // Current hardcoded defaults shown on the public site (used for live previews).
 const HOME_HERO_BG_DEFAULT = 'https://images.unsplash.com/photo-1579154204601-01588f351e67?auto=format&fit=crop&w=1920&q=80';
@@ -99,6 +101,19 @@ export const SECTION_REGISTRY = [
       { key: 'featuredEventsDescription', label: 'Description', type: 'textarea', path: 'websitePages.home.featuredEventsDescription' },
     ],
     manageLink: { to: '/admin/events', label: 'Manage events' },
+  },
+  {
+    id: 'home.next-speaking',
+    page: 'Home',
+    name: 'Next speaking engagement',
+    type: 'dynamic',
+    toggleable: true,
+    fields: [
+      { key: 'nextSpeakingLabel', label: 'Eyebrow', type: 'text', path: 'websitePages.home.nextSpeakingLabel' },
+      { key: 'nextSpeakingTitle', label: 'Title', type: 'text', path: 'websitePages.home.nextSpeakingTitle' },
+      { key: 'nextSpeakingLinkLabel', label: 'Link to the Speaking page', type: 'text', path: 'websitePages.home.nextSpeakingLinkLabel' },
+    ],
+    manageLink: { to: '/admin/speaking', label: 'Manage speaking engagements' },
   },
   {
     id: 'home.featured-blog',
@@ -295,6 +310,90 @@ export const SECTION_REGISTRY = [
     manageLink: { to: '/admin/events', label: 'Manage events' },
   },
 
+  // ─────────────────────────── SPEAKING ───────────────────────────
+  {
+    id: 'speaking.hero',
+    page: 'Speaking',
+    name: 'Introduction banner',
+    type: 'static',
+    toggleable: false,
+    fields: [
+      { key: 'heroEyebrow', label: 'Eyebrow', type: 'text', path: 'websitePages.speaking.heroEyebrow' },
+      { key: 'heroTitle', label: 'Heading', type: 'text', path: 'websitePages.speaking.heroTitle' },
+      { key: 'heroText', label: 'Supporting text', type: 'textarea', path: 'websitePages.speaking.heroText' },
+      { key: 'primaryButtonLabel', label: 'Primary button', type: 'text', path: 'websitePages.speaking.primaryButtonLabel', helpText: 'Takes visitors to the enquiry form at the bottom of the page.' },
+      { key: 'profileButtonLabel', label: 'Download button', type: 'text', path: 'websitePages.speaking.profileButtonLabel' },
+      {
+        key: 'speakerProfileFile',
+        label: 'Speaker profile (PDF)',
+        type: 'file',
+        accept: 'application/pdf',
+        upload: uploadSpeakerProfilePdf,
+        path: 'websitePages.speaking.speakerProfileFile',
+        helpText: 'Upload only an approved profile. The download button is hidden until a file is uploaded.',
+      },
+      { key: 'heroPortraitImage', label: 'Portrait', type: 'image', path: 'websitePages.speaking.heroPortraitImage', fallbackPreview: heroPortrait, helpText: 'Use only an approved photograph. Leave empty to use the homepage portrait. Shown on large screens.' },
+      { key: 'heroPortraitAlt', label: 'Portrait description (alt text)', type: 'text', path: 'websitePages.speaking.heroPortraitAlt' },
+      { key: 'heroQuote', label: 'Quote beside the portrait', type: 'text', path: 'websitePages.speaking.heroQuote', helpText: 'Optional. Leave empty unless the wording is approved.' },
+      { key: 'heroBackgroundImage', label: 'Background image', type: 'image', path: 'websitePages.speaking.heroBackgroundImage', helpText: 'Optional. Leave empty for the default navy gradient.' },
+    ],
+  },
+  {
+    id: 'speaking.formats',
+    page: 'Speaking',
+    name: 'Speaking formats',
+    type: 'static',
+    toggleable: true,
+    fields: [
+      { key: 'formats', label: 'Formats', type: 'lines', path: 'websitePages.speaking.formats', helpText: 'One per line as “Title | short description”. These describe how you contribute; they are not links.' },
+    ],
+  },
+  {
+    id: 'speaking.engagements',
+    page: 'Speaking',
+    name: 'Engagement listings',
+    type: 'dynamic',
+    toggleable: false,
+    fields: [
+      { key: 'upcomingEyebrow', label: 'Upcoming — eyebrow', type: 'text', path: 'websitePages.speaking.upcomingEyebrow' },
+      { key: 'upcomingTitle', label: 'Upcoming — heading', type: 'text', path: 'websitePages.speaking.upcomingTitle' },
+      { key: 'tbaTitle', label: 'Undated — heading', type: 'text', path: 'websitePages.speaking.tbaTitle' },
+      { key: 'previousEyebrow', label: 'Previous — eyebrow', type: 'text', path: 'websitePages.speaking.previousEyebrow' },
+      { key: 'previousTitle', label: 'Previous — heading', type: 'text', path: 'websitePages.speaking.previousTitle' },
+      { key: 'cancelledTitle', label: 'Past cancellations — heading', type: 'text', path: 'websitePages.speaking.cancelledTitle', helpText: 'Cancelled engagements whose date has passed are listed here, apart from the ones that took place.' },
+      { key: 'emptyMessage', label: 'Message when nothing is published', type: 'text', path: 'websitePages.speaking.emptyMessage' },
+    ],
+    manageLink: { to: '/admin/speaking', label: 'Manage speaking engagements' },
+  },
+  {
+    id: 'speaking.cta',
+    page: 'Speaking',
+    name: 'Closing invitation',
+    type: 'static',
+    toggleable: true,
+    fields: [
+      { key: 'ctaEyebrow', label: 'Eyebrow', type: 'text', path: 'websitePages.speaking.ctaEyebrow' },
+      { key: 'ctaTitle', label: 'Heading', type: 'text', path: 'websitePages.speaking.ctaTitle' },
+      { key: 'ctaText', label: 'Text', type: 'textarea', path: 'websitePages.speaking.ctaText' },
+      { key: 'ctaButtonLabel', label: 'Button', type: 'text', path: 'websitePages.speaking.ctaButtonLabel' },
+      { key: 'ctaBackgroundImage', label: 'Background image', type: 'image', path: 'websitePages.speaking.ctaBackgroundImage', helpText: 'Optional. Leave empty for the default navy background.' },
+    ],
+  },
+  {
+    id: 'speaking.enquiry',
+    page: 'Speaking',
+    name: 'Enquiry form',
+    type: 'dynamic',
+    toggleable: false,
+    fields: [
+      { key: 'enquiryEyebrow', label: 'Eyebrow', type: 'text', path: 'websitePages.speaking.enquiryEyebrow' },
+      { key: 'enquiryTitle', label: 'Heading', type: 'text', path: 'websitePages.speaking.enquiryTitle' },
+      { key: 'enquiryIntro', label: 'Intro', type: 'textarea', path: 'websitePages.speaking.enquiryIntro' },
+      { key: 'enquirySuccessMessage', label: 'Message after sending', type: 'text', path: 'websitePages.speaking.enquirySuccessMessage', helpText: 'Do not promise availability here.' },
+    ],
+    manageLink: { to: '/admin/speaking-enquiries', label: 'View enquiries' },
+  },
+
   // ─────────────────────────── SHOP ───────────────────────────
   {
     id: 'shop.hero',
@@ -363,7 +462,7 @@ export const SECTION_REGISTRY = [
 ];
 
 /** Stable page ordering for the grouped table. */
-export const SECTION_PAGE_ORDER = ['Home', 'About', 'Experience', 'Blog', 'Events', 'Shop', 'Contact', 'Global'];
+export const SECTION_PAGE_ORDER = ['Home', 'About', 'Speaking', 'Experience', 'Blog', 'Events', 'Shop', 'Contact', 'Global'];
 
 /** Visibility key used inside profile.websitePages.sectionVisibility. */
 export function sectionVisibilityKey(section) {

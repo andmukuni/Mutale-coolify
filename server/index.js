@@ -78,6 +78,8 @@ import {
 import { registerNotificationTemplateRoutes } from './notificationTemplateRoutes.js';
 import { ensureEmailCommunicationsSchema } from './emailCampaignSchema.js';
 import { registerEmailCampaignRoutes } from './emailCampaignRoutes.js';
+import { ensureSpeakingSchema } from './speakingSchema.js';
+import { pruneSpeakerProfiles, registerSpeakingRoutes } from './speakingRoutes.js';
 import { registerRegistrationAttendeeRoutes } from './registrationAttendeeRoutes.js';
 import { applyRegistrationSnapshots } from './registrationAttendeeService.js';
 import { runEmailOutboxTick, signPreferenceToken } from './emailOutboxService.js';
@@ -1045,6 +1047,7 @@ function mergeWebsitePagesProfile(existingPages = {}, nextPages = {}) {
     experience: { ...(existing.experience || {}), ...(nextPages.experience || {}) },
     blog: { ...(existing.blog || {}), ...(nextPages.blog || {}) },
     events: { ...(existing.events || {}), ...(nextPages.events || {}) },
+    speaking: { ...(existing.speaking || {}), ...(nextPages.speaking || {}) },
     shop: { ...(existing.shop || {}), ...(nextPages.shop || {}) },
     contact: { ...(existing.contact || {}), ...(nextPages.contact || {}) },
     global: { ...(existing.global || {}), ...(nextPages.global || {}) },
@@ -1568,14 +1571,29 @@ const rateLimitSiteChat = rateLimitByKey({
   getKey: (req) => req.ip || req.connection?.remoteAddress || 'unknown',
 });
 
-app.use((req, res, next) => {
+/** The permissions a user holds now, from their roles in the database. */
+async function currentAdminPermissions(userId) {
+  const [[user]] = await pool.query('SELECT role FROM users WHERE id = ? LIMIT 1', [String(userId || '')]);
+  if (!user) return [];
+  return loadUserAdminPermissions(pool, userId, { legacyRole: user.role });
+}
+
+app.use(async (req, res, next) => {
   if (!isAdminProtectedRoute(req)) return next();
 
   const auth = getAdminAuth(req);
   if (!auth.ok) return sendAuthFailure(res, auth);
 
-  const permissions = Array.isArray(auth.claims.permissions) ? auth.claims.permissions : [];
+  let permissions = Array.isArray(auth.claims.permissions) ? auth.claims.permissions : [];
   const required = resolveRouteAdminPermission(req);
+  // A sign-in token lists the permissions the user had at sign-in. When it
+  // falls short (a permission added by a later release, which a Super Admin
+  // holds automatically), check the user's current roles before refusing, so
+  // nobody has to sign out and back in after an update. If the lookup fails,
+  // the token alone decides, as before.
+  if (required && !permissionMatches(permissions, required) && auth.source === 'jwt') {
+    permissions = await currentAdminPermissions(auth.claims.sub).catch(() => permissions);
+  }
   if (required && !permissionMatches(permissions, required)) {
     return res.status(403).json({
       ok: false,
@@ -3299,6 +3317,7 @@ async function sendEmailNotification({
   skipSms = false,
   templateSlug,
   templateVars,
+  footer,
 }) {
   const slug = String(templateSlug || kind || '').trim();
   if (slug && templateVars && typeof templateVars === 'object') {
@@ -3330,13 +3349,26 @@ async function sendEmailNotification({
   let emailResult;
   try {
     const transport = buildSmtpTransport(emailCfg);
-    const brandedHtml = html || (text
-      ? buildBrandedEmailFromText({
-        title: subject,
-        text,
-        ...emailBrandForOrigin(),
-      })
-      : undefined);
+    let brandedHtml = html;
+    if (!brandedHtml && text) {
+      // Opt-in `footer` replaces the shared email footer for this message only,
+      // e.g. no subscription wording for someone who never subscribed. Either
+      // way the HTML is built from the (templated) text.
+      brandedHtml = footer
+        ? buildBrandedEmailHtml({
+          title: subject,
+          previewText: String(text).replace(/\s+/g, ' ').trim().slice(0, 140),
+          greeting: '',
+          bodyLines: String(text).split(/\n/),
+          ...emailBrandForOrigin(),
+          footer,
+        })
+        : buildBrandedEmailFromText({
+          title: subject,
+          text,
+          ...emailBrandForOrigin(),
+        });
+    }
 
     await transport.sendMail({
       from: fromName ? `"${fromName}" <${fromEmail}>` : fromEmail,
@@ -4968,6 +5000,7 @@ async function ensureSchema() {
 
   await ensureEventSurveySchema(pool);
   await ensureEmailCommunicationsSchema(pool);
+  await ensureSpeakingSchema(pool);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS event_chat_sessions (
@@ -10759,6 +10792,19 @@ registerEmailCampaignRoutes(app, {
 
 registerRegistrationAttendeeRoutes(app, { pool });
 
+registerSpeakingRoutes(app, {
+  pool,
+  generateEntityId,
+  uploadImage: (image, req) => persistImageIfNeeded(image, req, { folder: 'speaking', prefix: 'speaking' }),
+  uploadsRoot: path.join(__appRoot, 'uploads'),
+  tokenSecret: AUTH_TOKEN_SECRET,
+  getSystemSettings,
+  sendEmailNotification,
+  resolvePublicAppUrl,
+  // Read at request time: the constant is declared further down this file.
+  fallbackAdminEmail: () => PUBLIC_CONTACT_EMAIL,
+});
+
 app.post('/api/registrations/check-in', async (req, res) => {
   try {
     const adminAuth = getAdminAuth(req);
@@ -11259,6 +11305,12 @@ app.put('/api/profile', async (req, res) => {
       values: [json],
       timeout: 15000,
     });
+    // A replaced or removed speaker profile PDF shouldn't linger in /uploads.
+    void pruneSpeakerProfiles({
+      uploadsRoot: path.join(__appRoot, 'uploads'),
+      previousUrl: existing?.websitePages?.speaking?.speakerProfileFile,
+      currentUrl: nextProfile?.websitePages?.speaking?.speakerProfileFile,
+    }).catch((error) => console.warn(`[speaking] speaker profile cleanup failed: ${error.message}`));
     return res.json({ ok: true, data: nextProfile });
   } catch (error) {
     return res.status(500).json({ ok: false, message: 'Failed to save profile', error: error.message });

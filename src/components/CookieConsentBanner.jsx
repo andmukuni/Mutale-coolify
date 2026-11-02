@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Cookie, Lock } from 'lucide-react';
 import { Modal } from './ui';
@@ -40,6 +40,8 @@ export default function CookieConsentBanner() {
   const consent = useCookieConsent();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [draft, setDraft] = useState({ preferences: false, analytics: false });
+  const bannerRef = useRef(null);
+  const showBanner = !consent && !settingsOpen;
 
   const openSettings = () => {
     setDraft({
@@ -61,6 +63,22 @@ export default function CookieConsentBanner() {
     return () => window.removeEventListener(OPEN_COOKIE_SETTINGS_EVENT, onOpen);
   }, [consent]);
 
+  // Publish the banner's height so index.css can pad the bottom of the scroll area by
+  // it, which keeps a focused control from scrolling in underneath the fixed banner.
+  useEffect(() => {
+    const node = bannerRef.current;
+    if (!showBanner || !node) return undefined;
+    const root = document.documentElement;
+    const measure = () => root.style.setProperty('--consent-banner-h', `${node.offsetHeight}px`);
+    measure();
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null;
+    observer?.observe(node);
+    return () => {
+      observer?.disconnect();
+      root.style.removeProperty('--consent-banner-h');
+    };
+  }, [showBanner]);
+
   const decide = (choice) => {
     saveConsent(choice);
     setSettingsOpen(false);
@@ -68,8 +86,9 @@ export default function CookieConsentBanner() {
 
   return (
     <>
-      {!consent && !settingsOpen && (
+      {showBanner && (
         <section
+          ref={bannerRef}
           role="region"
           aria-label="Cookie consent"
           className="fixed inset-x-0 bottom-0 z-40 p-3 sm:p-4"

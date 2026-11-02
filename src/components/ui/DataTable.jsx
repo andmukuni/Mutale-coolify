@@ -115,7 +115,7 @@ export default function DataTable({
                 return (
                   <div key={col.key || colIdx} className="flex items-start justify-between gap-3">
                     <span className="text-xs font-medium text-navy-500 uppercase tracking-wide">{col.label}</span>
-                    <div className={`text-sm text-navy-800 text-right ${colIdx === 0 ? 'font-semibold' : ''}`}>
+                    <div className={`min-w-0 text-sm text-navy-800 text-right ${colIdx === 0 ? 'font-semibold' : ''}`}>
                       {value ?? '—'}
                     </div>
                   </div>

@@ -1,4 +1,4 @@
-import { useEffect, useState, Suspense, useRef, useCallback } from 'react';
+import { useEffect, useId, useState, Suspense, useRef, useCallback } from 'react';
 import { NavLink, Outlet, Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -33,6 +33,8 @@ import {
   Navigation,
   Mail,
   Megaphone,
+  Mic,
+  Inbox,
 } from 'lucide-react';
 import SiteLogo from '../components/SiteLogo';
 import ThemeToggle from '../components/ThemeToggle';
@@ -40,6 +42,7 @@ import AdminUserMenu from '../components/admin/AdminUserMenu';
 import { useAuth } from '../context/AuthContext';
 import { NAV_PERMISSION_MAP } from '../../shared/rbacPermissions.js';
 import { getApiBase } from '../utils/apiBase';
+import { ENQUIRIES_CHANGED_EVENT, fetchNewEnquiryCount } from '../utils/speakingAdminApi';
 
 const CONTENT_NAVIGATION = [
   { key: 'dashboard', name: 'Dashboard', to: '/admin', icon: LayoutDashboard, end: true },
@@ -78,6 +81,16 @@ const CONTENT_NAVIGATION = [
     children: [
       { key: 'all-publications', name: 'All Publications', to: '/admin/publications', icon: FileText },
       { key: 'create-publication', name: 'Create Publication', to: '/admin/publications/new', icon: FilePlus2, end: true },
+    ],
+  },
+  {
+    key: 'speaking-group',
+    name: 'Speaking',
+    icon: Mic,
+    children: [
+      { key: 'speaking', name: 'Speaking Engagements', to: '/admin/speaking', icon: Mic },
+      { key: 'speaking-create', name: 'Add Engagement', to: '/admin/speaking/new', icon: PlusCircle, end: true },
+      { key: 'speaking-enquiries', name: 'Enquiries', to: '/admin/speaking-enquiries', icon: Inbox },
     ],
   },
   {
@@ -146,17 +159,30 @@ function AdminOutletLoader() {
 const SIDEBAR_WIDTH_PX = 288;
 const FLYOUT_CLOSE_DELAY_MS = 120;
 
+/** Small count beside a nav item, e.g. new enquiries. */
+function NavBadge({ count, label }) {
+  if (!count) return null;
+  return (
+    <span className="ml-auto inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-coral px-1.5 text-[11px] font-semibold leading-5 text-navy-950">
+      {count > 99 ? '99+' : count}
+      <span className="sr-only"> {label}</span>
+    </span>
+  );
+}
+
 function SidebarNavGroup({
   item,
   groupActive,
   isChildActive,
   onNavigate,
   sidebarOpen = true,
+  badges = {},
 }) {
   const [open, setOpen] = useState(false);
   const [panelTop, setPanelTop] = useState(0);
   const triggerRef = useRef(null);
   const closeTimerRef = useRef(null);
+  const panelId = useId();
   const location = useLocation();
 
   const updatePanelPosition = useCallback(() => {
@@ -184,12 +210,29 @@ function SidebarNavGroup({
     closeTimerRef.current = setTimeout(() => setOpen(false), FLYOUT_CLOSE_DELAY_MS);
   }, [clearCloseTimer]);
 
+  // Mouse users get the flyout on hover. Touch, and keyboard activation (a click with
+  // detail 0 from Enter or Space), toggle it instead.
   const handleTriggerClick = (event) => {
-    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+    if (event.detail === 0 || !window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
       event.preventDefault();
+      clearCloseTimer();
       updatePanelPosition();
       setOpen((prev) => !prev);
     }
+  };
+
+  const handleKeyDown = (event) => {
+    if (event.key === 'Escape' && open) {
+      event.stopPropagation();
+      setOpen(false);
+      triggerRef.current?.focus();
+    }
+  };
+
+  // Close once keyboard focus moves past the group's links. A blur with no new focus
+  // target (e.g. Safari pressing on a link) is left to the hover logic, so the click lands.
+  const handleBlur = (event) => {
+    if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) setOpen(false);
   };
 
   useEffect(() => () => clearCloseTimer(), [clearCloseTimer]);
@@ -203,7 +246,7 @@ function SidebarNavGroup({
   }, [sidebarOpen]);
 
   return (
-    <>
+    <div onKeyDown={handleKeyDown} onBlur={handleBlur}>
       <button
         ref={triggerRef}
         type="button"
@@ -211,7 +254,7 @@ function SidebarNavGroup({
         onMouseEnter={showPanel}
         onMouseLeave={hidePanel}
         aria-expanded={open}
-        aria-haspopup="true"
+        aria-controls={open ? panelId : undefined}
         className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
           groupActive
             ? 'bg-cyan-600/10 text-cyan-400'
@@ -220,16 +263,22 @@ function SidebarNavGroup({
       >
         <item.icon size={18} />
         <span className="flex-1 text-left">{item.name}</span>
+        <NavBadge
+          count={item.children.reduce((sum, child) => sum + (badges[child.key] || 0), 0)}
+          label="new"
+        />
         <ChevronRight size={16} className={`text-navy-500 transition-transform ${open ? 'translate-x-0.5' : ''}`} />
       </button>
 
+      {/* Plain links that follow the trigger in tab order (a disclosure, not an ARIA menu). */}
       {open && (
         <div
+          id={panelId}
           className="fixed z-[60] w-60 rounded-xl border border-navy-700 bg-navy-900 py-2 shadow-2xl shadow-black/40 animate-[fadeIn_0.15s_ease-out]"
           style={{ top: panelTop, left: SIDEBAR_WIDTH_PX + 8 }}
           onMouseEnter={showPanel}
           onMouseLeave={hidePanel}
-          role="menu"
+          role="group"
           aria-label={`${item.name} submenu`}
         >
           <p className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-navy-500">
@@ -241,7 +290,6 @@ function SidebarNavGroup({
                 key={subItem.to}
                 to={subItem.to}
                 end={subItem.end}
-                role="menuitem"
                 onClick={() => {
                   setOpen(false);
                   onNavigate?.();
@@ -257,12 +305,13 @@ function SidebarNavGroup({
               >
                 <subItem.icon size={16} />
                 {subItem.name}
+                <NavBadge count={badges[subItem.key]} label="new" />
               </NavLink>
             ))}
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
 
@@ -292,6 +341,7 @@ const GROUP_ACTIVE_CHECKS = {
   'events-group': (pathname) => pathname.startsWith('/admin/events') || pathname.startsWith('/admin/certificates'),
   'blog-group': (pathname) => pathname.startsWith('/admin/blog'),
   'publications-group': (pathname) => pathname.startsWith('/admin/publications'),
+  'speaking-group': (pathname) => pathname.startsWith('/admin/speaking'),
   'books-group': (pathname) => pathname.startsWith('/admin/books')
     || pathname.startsWith('/admin/shipping')
     || pathname.startsWith('/admin/shop'),
@@ -309,6 +359,25 @@ export default function AdminLayout() {
   const canManageSettings = navItemAllowed('settings', hasPermission);
   const canManageTemplates = navItemAllowed('templates', hasPermission);
   const canViewCampaigns = navItemAllowed('campaigns', hasPermission);
+  const canHandleEnquiries = navItemAllowed('speaking-enquiries', hasPermission);
+  const [newEnquiries, setNewEnquiries] = useState(0);
+
+  // New speaking enquiries are easy to miss, so the sidebar counts them.
+  useEffect(() => {
+    if (!canHandleEnquiries) return undefined;
+    let cancelled = false;
+    const refresh = () => {
+      fetchNewEnquiryCount()
+        .then((count) => { if (!cancelled) setNewEnquiries(count); })
+        .catch(() => {});
+    };
+    refresh();
+    window.addEventListener(ENQUIRIES_CHANGED_EVENT, refresh);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(ENQUIRIES_CHANGED_EVENT, refresh);
+    };
+  }, [canHandleEnquiries, location.pathname]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -462,6 +531,7 @@ export default function AdminLayout() {
                     isChildActive={isContentItemActive}
                     onNavigate={closeSidebar}
                     sidebarOpen={sidebarOpen}
+                    badges={{ 'speaking-enquiries': newEnquiries }}
                   />
                 </div>
               );

@@ -4,11 +4,14 @@ export const FIELD_HAS_ERROR_CLASS = 'field-has-error';
 export const FIELD_BASE_CLASS =
   'w-full px-4 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:border-transparent';
 
+// Border, placeholder and focus ring keep 3:1 (4.5:1 for placeholder text) against
+// the white card and the navy-50 fill. Dark-mode borders and placeholders come from index.css.
 export const FIELD_OK_CLASS =
-  'border-navy-200 bg-navy-50 text-navy-900 placeholder-navy-400 focus:ring-cyan-500';
+  'border-navy-500 bg-navy-50 text-navy-900 placeholder-navy-600 focus:ring-cyan-700 dark:focus:ring-cyan-400';
 
+// Native inputs take their error border and focus ring from the .field-has-error rules in index.css.
 export const FIELD_ERROR_CLASS =
-  'border-red-400 bg-red-50 text-red-900 placeholder-red-300 focus:ring-red-400 ring-1 ring-red-200 field-has-error';
+  'border-red-600 bg-red-50 text-red-900 placeholder-red-700 focus:ring-red-700 dark:focus:ring-red-300 ring-1 ring-red-200 field-has-error';
 
 const SKIP_TYPES = new Set([
   'checkbox',
