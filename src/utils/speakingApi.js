@@ -39,9 +39,10 @@ export async function fetchEnquiryToken() {
 /**
  * Errors carry `fieldErrors` when the server rejected specific fields, and
  * `tokenRejected` when it turned the spam-protection token away (too new or
- * expired). Every validation failure lists its fields, so a 400 without them
- * is a token rejection.
+ * expired), which the server marks with a `token_…` code.
  */
+const TOKEN_CODES = new Set(['token_expired', 'token_too_fast']);
+
 export async function submitSpeakingEnquiry(payload) {
   const res = await request(`${API_BASE}/speaking/enquiries`, {
     method: 'POST',
@@ -56,7 +57,8 @@ export async function submitSpeakingEnquiry(payload) {
         : json?.message || 'Your enquiry could not be sent. Please try again.',
     );
     error.fieldErrors = json?.errors || null;
-    error.tokenRejected = res.status === 400 && !json?.errors;
+    // Older servers sent no code; a 400 without field errors was a token rejection.
+    error.tokenRejected = TOKEN_CODES.has(json?.code) || (res.status === 400 && !json?.code && !json?.errors);
     throw error;
   }
   return json.data || {};

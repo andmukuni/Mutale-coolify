@@ -19,7 +19,7 @@ Open **Speaking → Add Engagement**. Only the **Event title** is required, so a
 - **Your role**: tick every role you have at the event, for example Speaker and Panellist. The event type (conference, forum, workshop, and so on) is a separate field.
 - **Dates**: enter the event's start date and, for events over several days, its end date. If the dates aren't known yet, tick **Dates to be confirmed**. The card then shows "Date to be announced", and any dates you entered are kept for later.
 - **Event time zone**: choose the zone where the event happens (Africa/Lusaka is the default). It decides the day the event moves to Previous Engagements.
-- **Your speaking session**: fill this in only if you know when you speak. Leave it empty rather than guessing; the page never invents a time.
+- **Your speaking session**: fill this in only if you know when you speak. Leave it empty rather than guessing; the page never invents a time. The session date must fall within the event's dates.
 - **Event website**: add the full address, starting with `https://`. With a website, the whole card becomes a link that opens in a new tab. Without one, the card is plain text and can't be clicked. The hint under the field tells you which it will be.
 - **Event image or organiser logo**: use only images you are approved to publish, and describe the image in the alt-text field that appears.
 - **Topics**: a few topics separated by commas, such as `Leadership, Laboratory systems`. They appear on the card and power the topic filter.

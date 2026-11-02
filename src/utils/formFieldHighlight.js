@@ -2,7 +2,7 @@ export const FORM_VALIDATED_CLASS = 'was-validated';
 export const FIELD_HAS_ERROR_CLASS = 'field-has-error';
 
 export const FIELD_BASE_CLASS =
-  'w-full px-4 py-2.5 rounded-xl border text-sm transition-colors focus:outline-none focus:ring-2 focus:border-transparent';
+  'w-full px-4 py-2.5 rounded-xl border text-sm transition-colors focus:outline-hidden focus:ring-2 focus:border-transparent';
 
 // Border, placeholder and focus ring keep 3:1 (4.5:1 for placeholder text) against
 // the white card and the navy-50 fill. Dark-mode borders and placeholders come from index.css.

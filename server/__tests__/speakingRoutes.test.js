@@ -564,9 +564,18 @@ async function storedEnquiry(body) {
 }
 
 const emailTo = (address) => sendEmail.mock.calls.map(([options]) => options).find((options) => options.to === address);
+const emailsWith = (slug) => sendEmail.mock.calls.map(([options]) => options).filter((options) => options.templateSlug === slug);
+// What the recipient actually gets: sendEmailNotification swaps the fallback text for the template.
+const rendered = (options) => applyNotificationTemplates(null, {
+  slug: options.templateSlug, vars: options.templateVars, subject: options.subject, text: options.text,
+});
 
 describe('speaking enquiries — public form', () => {
   it('stores the enquiry, notifies the admin, acknowledges the organiser, and publishes nothing', async () => {
+    const existing = await createEngagement({ ...FULL, event_title: 'Already public' });
+    await publish(existing.id);
+    const before = (await api('GET', '/api/speaking/engagements', { perms: null })).json;
+
     const { status, json } = await sendEnquiry();
     expect(status).toBe(201);
     expect(json).toEqual({ ok: true, data: { acknowledgementSent: true } });
@@ -588,17 +597,80 @@ describe('speaking enquiries — public form', () => {
     const admin = emailTo('alerts@site.test');
     expect(admin).toMatchObject({ templateSlug: 'speaking_enquiry_admin', skipSms: true });
     expect(admin.templateVars.admin_url).toBe('https://site.test/admin/speaking-enquiries');
-    expect(admin.templateVars.enquiry_summary).toContain('Event: Annual Scientific Conference');
-    expect(admin.text).toContain('has not been accepted, scheduled, or published');
+    const adminOut = await rendered(admin);
+    expect(adminOut.subject).toBe('New speaking enquiry: Annual Scientific Conference');
+    expect(adminOut.text).toContain('has not been accepted, scheduled, or published');
+    expect(adminOut.text).toContain('Event: Annual Scientific Conference');
+    expect(adminOut.text).toContain('Proposed topic: Quality systems that last');
+    expect(adminOut.text).toContain('Review it in the admin area: https://site.test/admin/speaking-enquiries');
+    expect(adminOut.text).not.toContain('{{');
 
     const ack = emailTo('andrew@example.org');
     expect(ack).toMatchObject({ templateSlug: 'speaking_enquiry_ack', skipSms: true });
-    expect(ack.templateVars.first_name).toBe('Andrew');
-    expect(ack.text).toContain('does not confirm participation');
+    expect(ack.templateVars).toEqual({ greeting: 'Hello Andrew,', first_name: 'Andrew' });
+    const ackOut = await rendered(ack);
+    expect(ackOut.subject).toBe('We received your speaking enquiry');
+    expect(ackOut.text).toMatch(/^Hello Andrew,\n/);
+    expect(ackOut.text).toContain('Your enquiry has been received.');
+    expect(ackOut.text).toContain('Availability will be confirmed separately.');
+    expect(ackOut.text).toContain('does not confirm participation');
+    expect(ackOut.text).not.toContain('{{');
 
-    expect(pool.table).toHaveLength(0);
-    const publicList = await api('GET', '/api/speaking/engagements', { perms: null });
-    expect(publicList.json.data).toEqual({ upcoming: [], previous: [], cancelled: [], tba: [] });
+    // Nothing became an engagement, and the public list is exactly as it was.
+    expect(pool.table.map((row) => row.id)).toEqual([existing.id]);
+    expect((await api('GET', '/api/speaking/engagements', { perms: null })).json).toEqual(before);
+  });
+
+  it('sends the organiser fixed wording that repeats nothing else from the form', async () => {
+    await sendEnquiry({
+      ...ENQUIRY,
+      organiser_name: 'Prof Nkandu Luo',
+      event_title: 'Conference\nStatus: payment overdue',
+      topic: 'Your account is locked - verify at https://evil.example/login',
+      message: 'Your parcel is held, pay at https://evil.example',
+    });
+    const ack = emailTo('andrew@example.org');
+    const out = await rendered(ack);
+    // The fallback is the template itself, so switching the template off changes nothing.
+    expect(ack.text).toBe(out.text);
+    expect(out.text).toMatch(/^Hello Nkandu,\n/);
+    const sent = JSON.stringify({ ack, out });
+    for (const typed of ['evil.example', 'payment overdue', 'Conference', 'Biomedical', 'Laboratory managers', 'Luo', 'Prof']) {
+      expect(sent, typed).not.toContain(typed);
+    }
+
+    // No subscription wording or "Manage my subscriptions" link in its footer.
+    expect(ack.footer).toMatchObject({ manageLabel: '', notice: ORGANISER_EMAIL_NOTICE });
+    const html = applyRecipientFooterLinks(
+      buildBrandedEmailHtml({ title: out.subject, bodyLines: out.text.split('\n'), footer: ack.footer }),
+      { preferencesUrl: 'https://site.test/email-preferences?token=abc' },
+    );
+    expect(html).toContain('You have not been added to any mailing list.');
+    expect(html).not.toMatch(/subscri/i);
+
+    // The admin alert keeps the full enquiry, as one line per single-line field.
+    expect(emailTo('alerts@site.test').templateVars.enquiry_summary).toContain('Event: Conference Status: payment overdue');
+  });
+
+  it('greets the organiser plainly when the name field holds no usable first name', async () => {
+    await sendEnquiry({ ...ENQUIRY, organiser_name: 'https://evil.example/x' });
+    expect(emailTo('andrew@example.org').templateVars).toEqual({ greeting: 'Hello,', first_name: '' });
+  });
+
+  it('stops acknowledging past the site-wide hourly limit, still storing and alerting', async () => {
+    ackCap = createHourlyCap(2);
+    const replies = [];
+    for (let i = 0; i < 3; i += 1) replies.push(await sendEnquiry({ ...ENQUIRY, email: `organiser${i}@example.org` }));
+    expect(replies.map((r) => r.status)).toEqual([201, 201, 201]);
+    expect(replies[2].json.data.acknowledgementSent).toBe(false);
+
+    expect(pool.enquiries).toHaveLength(3);
+    expect(emailsWith('speaking_enquiry_ack').map((o) => o.to)).toEqual(['organiser0@example.org', 'organiser1@example.org']);
+    const alerts = emailsWith('speaking_enquiry_admin');
+    expect(alerts).toHaveLength(3);
+    expect(alerts[2].templateVars.enquiry_summary).toContain('hourly limit on acknowledgements was reached');
+    expect(alerts[0].templateVars.enquiry_summary).not.toContain('hourly limit');
+    expect(pool.enquiries[2]).toMatchObject({ admin_email_status: 'sent', ack_email_status: 'limited' });
   });
 
   it('falls back to the Reply-To address, then the site contact address, for the admin alert', async () => {
@@ -635,6 +707,7 @@ describe('speaking enquiries — public form', () => {
   it('rejects missing or invalid fields, storing and sending nothing', async () => {
     const { status, json } = await sendEnquiry({ email: 'not-an-email', attendance_format: 'in_person' });
     expect(status).toBe(400);
+    expect(json).not.toHaveProperty('code');
     expect(Object.keys(json.errors)).toEqual(expect.arrayContaining([
       'organiser_name', 'organisation', 'email', 'event_title', 'proposed_start_date', 'location',
       'audience', 'topic', 'requested_role',
@@ -651,16 +724,20 @@ describe('speaking enquiries — public form', () => {
     expect(sendEmail).not.toHaveBeenCalled();
   });
 
-  it('turns away missing, forged, and instant form tokens', async () => {
+  it('turns away missing, forged, stale, and instant form tokens', async () => {
     const forged = `${Date.now() - 10_000}.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`;
-    for (const token of ['', forged, issueEnquiryToken('other-secret', Date.now() - 10_000)]) {
+    const stale = issueEnquiryToken(TOKEN_SECRET, Date.now() - ENQUIRY_TOKEN_MAX_AGE_MS - 60_000);
+    for (const token of ['', forged, issueEnquiryToken('other-secret', Date.now() - 10_000), stale]) {
       const { status, json } = await sendEnquiry(ENQUIRY, { token });
       expect(status).toBe(400);
-      expect(json.message).toMatch(/expired/);
+      // The form keeps what was typed and fetches a new token, so no reload is needed.
+      expect(json).toEqual({ ok: false, code: 'token_expired', message: 'This form has expired. Please press Send again.' });
     }
     const instant = await sendEnquiry(ENQUIRY, { token: issueEnquiryToken(TOKEN_SECRET) });
     expect(instant.status).toBe(400);
-    expect(instant.json.message).toMatch(/very quickly/);
+    expect(instant.json.code).toBe('token_too_fast');
+    expect(instant.json.message).toMatch(/very quickly.*press Send again/);
+    expect(instant.json).not.toHaveProperty('errors');
     expect(pool.enquiries).toHaveLength(0);
   });
 
@@ -674,6 +751,63 @@ describe('speaking enquiries — public form', () => {
     for (let i = 0; i < 5; i += 1) expect((await sendEnquiry()).status).toBe(201);
     expect((await sendEnquiry()).status).toBe(429);
     expect(pool.enquiries).toHaveLength(5);
+  });
+
+  it('never shows anonymous visitors the internal cause of a failure', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    pool.failWith = new Error("connect ECONNREFUSED 10.0.1.5:3306 Access denied for user 'mutale'");
+    for (const [method, url, body] of [
+      ['GET', '/api/speaking/engagements'],
+      ['GET', '/api/speaking/engagements/spk-1'],
+      ['POST', '/api/speaking/metrics', { metric: 'profile_download' }],
+      ['POST', '/api/speaking/enquiries', { ...ENQUIRY, form_token: freshToken() }],
+    ]) {
+      const res = await api(method, url, { body, perms: null });
+      expect(res.status, url).toBe(500);
+      expect(res.json, url).not.toHaveProperty('error');
+      expect(JSON.stringify(res.json), url).not.toMatch(/ECONNREFUSED|mutale/);
+    }
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('ECONNREFUSED'));
+    log.mockRestore();
+  });
+});
+
+describe('enquiry rate-limit key', () => {
+  const key = (ip) => clientRateKey({ ip });
+
+  it('groups an IPv6 /64 together and keeps IPv4 clients apart', () => {
+    expect(key('2001:db8:1:2:aaaa::1')).toBe('2001:db8:1:2::/64');
+    expect(key('2001:0db8:0001:0002:ffff:ffff:ffff:ffff')).toBe('2001:db8:1:2::/64');
+    expect(key('2001:db8::1')).toBe('2001:db8:0:0::/64');
+    expect(key('64:ff9b::192.0.2.1')).toBe('64:ff9b:0:0::/64');
+    expect(key('2001:db8:1:3::1')).not.toBe(key('2001:db8:1:2::1'));
+    expect(key('::ffff:198.51.100.7')).toBe('198.51.100.7');
+    expect(key('203.0.113.9')).toBe('203.0.113.9');
+    expect(clientRateKey({ socket: { remoteAddress: 'fe80::1%en0' } })).toBe('fe80:0:0:0::/64');
+    expect(clientRateKey({})).toBe('unknown');
+  });
+
+  it('turns away a sixth enquiry from the same /64, but not from IPv4-mapped neighbours', () => {
+    const limiter = rateLimitByKey({ routeKey: `test-v6-${++limiterRound}`, windowMs: 60 * 60_000, max: 5, getKey: clientRateKey });
+    const attempt = (ip) => {
+      let status = 200;
+      limiter({ ip }, { status: (code) => { status = code; return { json: () => {} }; } }, () => {});
+      return status;
+    };
+    for (let i = 1; i <= 5; i += 1) expect(attempt(`2001:db8:1:2::${i}`)).toBe(200);
+    expect(attempt('2001:db8:1:2:ffff:ffff:ffff:6')).toBe(429);
+    expect(attempt('2001:db8:1:3::1')).toBe(200);
+    for (let i = 1; i <= 6; i += 1) expect(attempt(`::ffff:198.51.100.${i}`)).toBe(200);
+  });
+});
+
+describe('acknowledgement hourly cap', () => {
+  it('allows the set number in any rolling hour', () => {
+    const allow = createHourlyCap(2);
+    const t = Date.parse('2026-11-02T10:00:00Z');
+    expect([allow(t), allow(t + 1_000), allow(t + 2_000)]).toEqual([true, true, false]);
+    expect(allow(t + 60 * 60_000)).toBe(true);
+    expect(allow(t + 60 * 60_000 + 500)).toBe(false);
   });
 });
 
@@ -719,6 +853,7 @@ describe('speaking enquiries — admin', () => {
       subject: 'Re: Annual Scientific Conference',
       text: 'Thank you — could we talk next week?',
       skipSms: true,
+      footer: { manageLabel: '', notice: ORGANISER_EMAIL_NOTICE },
     });
     expect(json.data.status).toBe('reviewing');
     expect(json.data.replied_at).toBeTruthy();
@@ -775,6 +910,49 @@ describe('speaking enquiries — admin', () => {
     expect((await api('POST', path, { perms: `${ENQUIRY_ADMIN},speaking.manage` })).status).toBe(409);
     const publicList = await api('GET', '/api/speaking/engagements', { perms: null });
     expect(publicList.json.data).toEqual({ upcoming: [], previous: [], cancelled: [], tba: [] });
+  });
+
+  it('frees the enquiry for a new draft when its draft engagement is deleted', async () => {
+    const enquiry = await storedEnquiry();
+    const path = `/api/admin/speaking/enquiries/${enquiry.id}/create-draft`;
+    const perms = `${ENQUIRY_ADMIN},speaking.manage`;
+    const first = await api('POST', path, { perms });
+    expect(first.status).toBe(201);
+
+    expect((await api('DELETE', `/api/admin/speaking/engagements/${first.json.data.engagement.id}`)).status).toBe(200);
+    expect((await api('GET', `/api/admin/speaking/enquiries/${enquiry.id}`, { perms: ENQUIRY_ADMIN })).json.data.engagement_id)
+      .toBeNull();
+
+    const second = await api('POST', path, { perms });
+    expect(second.status).toBe(201);
+    expect(second.json.data.enquiry.engagement_id).toBe(second.json.data.engagement.id);
+  });
+
+  it('treats a link to an engagement that no longer exists as no link', async () => {
+    const enquiry = await storedEnquiry();
+    pool.enquiries[0].engagement_id = 'spk-deleted-earlier';
+    const { status, json } = await api('POST', `/api/admin/speaking/enquiries/${enquiry.id}/create-draft`, {
+      perms: `${ENQUIRY_ADMIN},speaking.manage`,
+    });
+    expect(status).toBe(201);
+    expect(json.data.enquiry.engagement_id).toBe(json.data.engagement.id);
+  });
+
+  it('makes only one draft when two requests for the same enquiry arrive together', async () => {
+    const enquiry = await storedEnquiry();
+    const create = () => api('POST', `/api/admin/speaking/enquiries/${enquiry.id}/create-draft`, {
+      perms: `${ENQUIRY_ADMIN},speaking.manage`,
+    });
+    pool.log.length = 0;
+    pool.delayMs = 20;
+    const results = await Promise.all([create(), create()]);
+    pool.delayMs = 0;
+
+    expect(results.map((r) => r.status).sort()).toEqual([201, 409]);
+    // Both got as far as inserting a draft; the one that lost the race removed its copy.
+    expect(pool.log.filter((sql) => sql.startsWith('INSERT INTO speaking_engagements'))).toHaveLength(2);
+    expect(pool.table).toHaveLength(1);
+    expect(pool.enquiries[0].engagement_id).toBe(pool.table[0].id);
   });
 
   it('deletes an enquiry', async () => {
@@ -887,6 +1065,24 @@ describe('topics, media links and cancellations', () => {
     expect(json.data.cancelled.map((e) => e.event_title)).toEqual(['Called off']);
     // An upcoming cancellation stays in place, with its label.
     expect(json.data.upcoming.map((e) => [e.event_title, e.event_status])).toEqual([['Called off ahead', 'cancelled']]);
+  });
+
+  it('keeps the cancelled and postponed status on every published record, whatever its section', async () => {
+    for (const body of [
+      { event_title: 'Cancelled last year', start_date: '2020-06-01', end_date: '2020-06-02', event_status: 'cancelled' },
+      { event_title: 'Postponed, new date unknown', start_date: '2099-03-01', dates_tbc: true, event_status: 'postponed' },
+    ]) {
+      const { id } = await createEngagement(body);
+      await publish(id);
+    }
+    const { json } = await api('GET', '/api/speaking/engagements', { perms: null });
+    const placed = Object.entries(json.data).flatMap(([section, list]) => list.map((e) => [e.event_title, section, e.section, e.event_status]));
+    expect(placed.sort()).toEqual([
+      ['Cancelled last year', 'cancelled', 'cancelled', 'cancelled'],
+      ['Postponed, new date unknown', 'tba', 'tba', 'postponed'],
+    ]);
+    const postponed = json.data.tba[0];
+    expect(postponed).toMatchObject({ dates_tbc: true, start_date: null, in_progress: false });
   });
 });
 

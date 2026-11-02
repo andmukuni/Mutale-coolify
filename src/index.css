@@ -333,7 +333,9 @@ form.was-validated :is(input, select, textarea):invalid:not([type="checkbox"]):n
 :is(input, select, textarea):user-invalid:not([type="checkbox"]):not([type="radio"]):focus,
 :is(input, select, textarea).field-has-error:focus {
   box-shadow: 0 0 0 2px #c10007;
-  outline: none;
+  /* Transparent, not none: forced-colours mode drops the shadow but paints this outline */
+  outline: 2px solid transparent;
+  outline-offset: 2px;
 }
 
 .dark form.was-validated :is(input, select, textarea):invalid:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="file"]):not([type="submit"]):not([type="button"]),

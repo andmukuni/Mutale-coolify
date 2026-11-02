@@ -75,10 +75,32 @@ describe('normalizeEngagementInput', () => {
     expect(value.session_start_time).toBeNull();
 
     const timed = normalizeEngagementInput({
-      event_title: 'A', session_date: '2026-12-01', session_start_time: '9:30', session_end_time: '10:15',
+      event_title: 'A', start_date: '2026-12-01', session_date: '2026-12-01', session_start_time: '9:30', session_end_time: '10:15',
     });
+    expect(timed.errors).toEqual({});
     expect(timed.value.session_start_time).toBe('09:30:00');
     expect(normalizeEngagementInput({ event_title: 'A', session_start_time: '09:30' }).errors.session_date).toBeTruthy();
+  });
+
+  it('ties a session date to the event dates, so the card lands in the right section', () => {
+    const save = (input) => normalizeEngagementInput({ event_title: 'A', ...input });
+    expect(save({ session_date: '2026-11-07' }).errors.start_date)
+      .toBe('Add the event start date. For a one-day event, use the session date.');
+    // Dates still to be confirmed may be incomplete.
+    expect(save({ session_date: '2026-11-07', dates_tbc: true }).errors).toEqual({});
+
+    const range = { start_date: '2026-11-06', end_date: '2026-11-11' };
+    expect(save({ ...range, session_date: '2026-11-06' }).errors).toEqual({});
+    expect(save({ ...range, session_date: '2026-11-11' }).errors).toEqual({});
+    for (const outside of ['2026-11-05', '2026-11-12']) {
+      expect(save({ ...range, session_date: outside }).errors.session_date, outside)
+        .toBe('The session date must fall between the event start and end dates.');
+    }
+    expect(save({ start_date: '2026-11-06', session_date: '2026-11-06' }).errors).toEqual({});
+    expect(save({ start_date: '2026-11-06', session_date: '2026-11-07' }).errors.session_date).toMatch(/must match the event date/);
+    // A bad end date is reported on its own field, not as a session problem.
+    expect(save({ ...range, end_date: '2026-11-01', session_date: '2026-11-07' }).errors)
+      .toEqual({ end_date: 'End date must be on or after the start date.' });
   });
 
   it('rejects unknown time zones and enum values', () => {
@@ -99,6 +121,13 @@ describe('normalizeEngagementInput', () => {
     expect(value.image_url).toBe('/uploads/site/logo.png');
     expect(normalizeEngagementInput({ event_title: 'A', image_url: '/uploads/../.env', image_alt: 'x' }).errors.image_url)
       .toBeTruthy();
+  });
+
+  it('rejects an image address longer than the column holds, instead of failing to save', () => {
+    const { errors } = normalizeEngagementInput({
+      event_title: 'A', image_url: `https://cdn.example.org/${'a'.repeat(1100)}.png`, image_alt: 'Logo',
+    });
+    expect(errors.image_url).toBe('This web address is too long.');
   });
 });
 
@@ -159,6 +188,14 @@ describe('groupEngagements', () => {
     expect(groups.upcoming[0].inProgress).toBe(true);
     expect(groups.previous.map((g) => g.row.id)).toEqual(['recent', 'old']);
     expect(groups.tba.map((g) => g.row.id)).toEqual(['tbc']);
+  });
+
+  it('orders previous engagements by the day they ended, not the day they began', () => {
+    const groups = groupEngagements([
+      { id: 'single', start_date: '2026-10-05', timezone: 'Africa/Lusaka' },
+      { id: 'long', start_date: '2026-09-01', end_date: '2026-10-20', timezone: 'Africa/Lusaka' },
+    ], NOW);
+    expect(groups.previous.map((g) => g.row.id)).toEqual(['long', 'single']);
   });
 });
 

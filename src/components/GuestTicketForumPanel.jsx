@@ -72,7 +72,7 @@ export default function GuestTicketForumPanel({ referenceCode, enabled }) {
   if (!enabled) return null;
 
   return (
-    <div id="forum" className="rounded-xl border border-navy-100 bg-white p-4 max-w-md mx-auto space-y-4 scroll-mt-20">
+    <div id="forum" className="rounded-xl border border-navy-100 bg-white p-4 max-w-md mx-auto space-y-4 scroll-mt-2">
       <h3 className="text-sm font-semibold text-navy-900 flex items-center gap-2">
         <MessageSquare size={16} />
         Event forum

@@ -125,13 +125,13 @@ export async function deleteEnquiry(pool, id) {
   return result.affectedRows > 0;
 }
 
+const DRAFT_EXISTS = 'A draft engagement was already created from this enquiry.';
+
 /**
  * Explicit admin action: copy an enquiry into a new draft engagement marked
  * "Invited". Nothing is confirmed or published; the organiser's contact details
  * go into the engagement's private notes only.
  */
-const DRAFT_EXISTS = 'A draft engagement was already created from this enquiry.';
-
 export async function createDraftFromEnquiry(pool, id, { newId, actor = null } = {}) {
   const enquiry = await findRow(pool, id);
   if (!enquiry) return { notFound: true };

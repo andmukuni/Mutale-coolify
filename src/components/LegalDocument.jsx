@@ -45,7 +45,7 @@ export default function LegalDocument({ eyebrow = 'Legal', title, summary, secti
           <article className="legal-doc min-w-0 max-w-3xl text-navy-600 leading-7 space-y-10">
             {intro && <div className="space-y-4">{intro}</div>}
             {sections.map((section, index) => (
-              <section key={section.id} id={section.id} className="scroll-mt-24 space-y-4">
+              <section key={section.id} id={section.id} className="scroll-mt-6 space-y-4">
                 <h2 className="text-xl font-semibold text-navy-900">
                   <span className="text-navy-400 mr-2 tabular-nums">{index + 1}.</span>
                   {section.title}

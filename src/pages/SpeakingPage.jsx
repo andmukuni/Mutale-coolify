@@ -288,7 +288,7 @@ export default function SpeakingPage() {
         </section>
       )}
 
-      <section id={ENQUIRY_ANCHOR} className="scroll-mt-28 bg-navy-50" aria-labelledby={ENQUIRY_HEADING}>
+      <section id={ENQUIRY_ANCHOR} className="scroll-mt-10 bg-navy-50" aria-labelledby={ENQUIRY_HEADING}>
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-14">
           <div className="mb-6">
             <p className="text-xs font-semibold uppercase tracking-widest text-cyan-800 dark:text-cyan-300">{text('enquiryEyebrow')}</p>

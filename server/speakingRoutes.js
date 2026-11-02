@@ -304,11 +304,14 @@ export function registerSpeakingRoutes(app, {
       }
       // The form keeps what was typed and fetches a fresh token after a
       // rejection, so pressing Send again is all the visitor needs to do.
+      // A missing or forged token is reported as expired, like a stale one.
       const tokenState = checkEnquiryToken(body.form_token, tokenSecret);
       if (tokenState !== 'ok') {
+        const tooFast = tokenState === 'too_fast';
         return res.status(400).json({
           ok: false,
-          message: tokenState === 'too_fast'
+          code: tooFast ? 'token_too_fast' : 'token_expired',
+          message: tooFast
             ? 'That was sent very quickly. Please wait a moment, then press Send again.'
             : 'This form has expired. Please press Send again.',
         });

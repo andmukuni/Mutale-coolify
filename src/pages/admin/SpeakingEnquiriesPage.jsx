@@ -26,7 +26,7 @@ const STATUS_STYLES = {
   new: 'bg-cyan-50 text-cyan-800 ring-cyan-600/20 dark:bg-cyan-500/10 dark:text-cyan-300',
   reviewing: 'bg-amber-50 text-amber-900 ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-200',
   accepted: 'bg-green-50 text-green-800 ring-green-600/20 dark:bg-green-500/10 dark:text-green-200',
-  declined: 'bg-slate-100 text-slate-700 ring-slate-400/30 dark:text-slate-200',
+  declined: 'bg-slate-100 text-navy-700 ring-slate-400/30',
   archived: 'bg-navy-50 text-navy-600 ring-navy-500/20',
 };
 
@@ -134,12 +134,15 @@ function EnquiryModal({ enquiry, onClose, onSaved, onDelete, canManage }) {
   const [saving, setSaving] = useState(false);
   const [creating, setCreating] = useState(false);
   const [replying, setReplying] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState({});
   const replyButtonRef = useRef(null);
   const dirty = status !== enquiry.status || notes !== (enquiry.admin_notes || '');
   const hasDraftAction = Boolean(enquiry.engagement_id) || canManage;
+  // "limited": the site-wide hourly cap on acknowledgements was reached, so none was sent.
+  const ackLimited = enquiry.ack_email_status === 'limited';
   const emailProblem = [
     enquiry.admin_email_status && enquiry.admin_email_status !== 'sent' ? 'the admin notification' : '',
-    enquiry.ack_email_status && enquiry.ack_email_status !== 'sent' ? 'the acknowledgement to the organiser' : '',
+    enquiry.ack_email_status && enquiry.ack_email_status !== 'sent' && !ackLimited ? 'the acknowledgement to the organiser' : '',
   ].filter(Boolean);
 
   // The server's copy (e.g. notes without trailing spaces) becomes the new baseline.
@@ -147,7 +150,13 @@ function EnquiryModal({ enquiry, onClose, onSaved, onDelete, canManage }) {
     const updated = await updateSpeakingEnquiry(enquiry.id, { status, admin_notes: notes });
     setStatus(updated.status);
     setNotes(updated.admin_notes || '');
+    setFieldErrors({});
     onSaved(updated);
+  };
+
+  const showError = (err) => {
+    if (err.fieldErrors) setFieldErrors(err.fieldErrors);
+    toast.error(err.message);
   };
 
   const save = async () => {
@@ -156,7 +165,7 @@ function EnquiryModal({ enquiry, onClose, onSaved, onDelete, canManage }) {
       await persist();
       toast.success('Enquiry updated.');
     } catch (err) {
-      toast.error(err.message);
+      showError(err);
     } finally {
       setSaving(false);
     }
@@ -174,7 +183,7 @@ function EnquiryModal({ enquiry, onClose, onSaved, onDelete, canManage }) {
         : 'Draft engagement created. It is not published.');
       navigate(`/admin/speaking/${engagement.id}/edit`);
     } catch (err) {
-      toast.error(err.message);
+      showError(err);
     } finally {
       setCreating(false);
     }
@@ -187,7 +196,7 @@ function EnquiryModal({ enquiry, onClose, onSaved, onDelete, canManage }) {
       toast.success('Enquiry updated.');
       navigate(`/admin/speaking/${enquiry.engagement_id}/edit`);
     } catch (err) {
-      toast.error(err.message);
+      showError(err);
     } finally {
       setSaving(false);
     }
@@ -246,6 +255,13 @@ function EnquiryModal({ enquiry, onClose, onSaved, onDelete, canManage }) {
           From {enquiry.organiser_name}, {enquiry.organisation} · received {receivedAt(enquiry.created_at)}
         </p>
 
+        {ackLimited && (
+          <p className="flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
+            <TriangleAlert size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+            The organiser was not sent an acknowledgement: the website’s hourly limit on acknowledgement emails was
+            reached. Reply to them directly to let them know their enquiry arrived.
+          </p>
+        )}
         {emailProblem.length > 0 && (
           <p className="flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
             <TriangleAlert size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
@@ -329,8 +345,9 @@ function EnquiryModal({ enquiry, onClose, onSaved, onDelete, canManage }) {
             name="status"
             type="select"
             value={status}
-            onChange={(e) => setStatus(e.target.value)}
+            onChange={(e) => { setStatus(e.target.value); setFieldErrors((prev) => ({ ...prev, status: '' })); }}
             options={ENQUIRY_STATUSES}
+            error={fieldErrors.status}
           />
           <FormField
             label="Private notes"
@@ -338,9 +355,10 @@ function EnquiryModal({ enquiry, onClose, onSaved, onDelete, canManage }) {
             textarea
             rows={3}
             value={notes}
-            onChange={(e) => setNotes(e.target.value)}
+            onChange={(e) => { setNotes(e.target.value); setFieldErrors((prev) => ({ ...prev, admin_notes: '' })); }}
             maxLength={ENQUIRY_LIMITS.admin_notes}
             helpText="Only visible to admins."
+            error={fieldErrors.admin_notes}
           />
         </div>
       </div>
