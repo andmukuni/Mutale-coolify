@@ -146,7 +146,7 @@ export default function SpeakingPage() {
     <div>
       <section className="relative overflow-hidden bg-gradient-to-br from-navy-950 via-navy-900 to-cyan-900 text-white">
         <PageHeaderBackdrop image={page.heroBackgroundImage} />
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-12 grid gap-10 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-12 grid gap-10 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
           <div className="max-w-4xl">
             <p className="text-xs font-semibold uppercase tracking-widest text-cyan-400">{text('heroEyebrow')}</p>
             <h1 className="mt-3 text-3xl sm:text-4xl lg:text-5xl font-bold leading-tight">{text('heroTitle')}</h1>
@@ -174,12 +174,12 @@ export default function SpeakingPage() {
             </div>
           </div>
 
-          {/* Side by side on large screens only, so phones reach the listings sooner. */}
-          <figure className="hidden lg:flex items-end gap-6 justify-self-end">
+          {/* Only on wide screens, where the heading still fits on one line beside it; smaller screens reach the listings sooner. */}
+          <figure className="hidden xl:flex items-end gap-6 justify-self-end">
             <img
               src={portrait}
               alt={portraitAlt}
-              className="h-72 w-auto max-w-[18rem] rounded-2xl object-cover"
+              className="h-60 w-auto max-w-[16rem] rounded-2xl object-cover"
             />
             {quote && (
               <figcaption className="max-w-[12rem] text-lg italic leading-snug text-cyan-100">“{quote}”</figcaption>
@@ -213,7 +213,8 @@ export default function SpeakingPage() {
             <EngagementFilters options={options} filters={filters} onChange={setFilters} shown={shown} />
           )}
 
-          <section aria-labelledby={UPCOMING_HEADING}>
+          {/* The filter bar sits closer to the listings it narrows. */}
+          <section aria-labelledby={UPCOMING_HEADING} className={showFilters ? 'mt-8!' : undefined}>
             <SectionHeading id={UPCOMING_HEADING} eyebrow={text('upcomingEyebrow')} title={text('upcomingTitle')} focusable />
             <p className="sr-only" role="status">
               {result.status === 'loading' ? 'Loading speaking engagements…' : ''}

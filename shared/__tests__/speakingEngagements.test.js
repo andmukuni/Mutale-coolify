@@ -339,3 +339,20 @@ describe('past cancellations', () => {
     expect(groups.previous).toEqual([]);
   });
 });
+
+describe('topics and media edge cases', () => {
+  const save = (input) => normalizeEngagementInput({ event_title: 'Talk', ...input });
+
+  it('keeps typed topics that happen to start with "["', () => {
+    expect(JSON.parse(save({ topics: '[Draft] Leadership, Systems' }).value.topics_json)).toEqual(['[Draft] Leadership', 'Systems']);
+    expect(JSON.parse(save({ topics: '["Stored", "List"]' }).value.topics_json)).toEqual(['Stored', 'List']);
+  });
+
+  it('names the row the admin sees, counting empty rows, and marks its field', () => {
+    const { errors } = save({ media: [{ type: 'recording', url: '', label: '' }, { type: 'slides', url: 'ftp://x' }] });
+    expect(errors.media).toBe('Link 2: use a full web address starting with http:// or https://.');
+    expect(errors.media_url_1).toBe('Use a full web address starting with http:// or https://.');
+    // The row's own field comes first, so the form focuses it.
+    expect(Object.keys(errors)[0]).toBe('media_url_1');
+  });
+});

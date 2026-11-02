@@ -79,7 +79,7 @@ import { registerNotificationTemplateRoutes } from './notificationTemplateRoutes
 import { ensureEmailCommunicationsSchema } from './emailCampaignSchema.js';
 import { registerEmailCampaignRoutes } from './emailCampaignRoutes.js';
 import { ensureSpeakingSchema } from './speakingSchema.js';
-import { pruneSpeakerProfiles, registerSpeakingRoutes } from './speakingRoutes.js';
+import { pruneSpeakerProfiles, registerSpeakingRoutes, speakerProfileExists } from './speakingRoutes.js';
 import { registerRegistrationAttendeeRoutes } from './registrationAttendeeRoutes.js';
 import { applyRegistrationSnapshots } from './registrationAttendeeService.js';
 import { runEmailOutboxTick, signPreferenceToken } from './emailOutboxService.js';
@@ -11299,6 +11299,15 @@ app.put('/api/profile', async (req, res) => {
         ? { websitePages: mergeWebsitePagesProfile(existing.websitePages, payload.websitePages) }
         : {}),
     };
+    // A save from an out-of-date copy of the page must not point the speaker
+    // profile back at a PDF that has since been replaced and deleted.
+    const uploadsRoot = path.join(__appRoot, 'uploads');
+    const savedProfileFile = existing?.websitePages?.speaking?.speakerProfileFile || '';
+    const nextSpeaking = nextProfile?.websitePages?.speaking;
+    if (nextSpeaking?.speakerProfileFile && nextSpeaking.speakerProfileFile !== savedProfileFile
+      && !(await speakerProfileExists(uploadsRoot, nextSpeaking.speakerProfileFile))) {
+      nextSpeaking.speakerProfileFile = savedProfileFile;
+    }
     const json = JSON.stringify(nextProfile);
     await pool.query({
       sql: 'INSERT INTO site_profile (id, data) VALUES (1, ?) ON DUPLICATE KEY UPDATE data = VALUES(data)',
@@ -11307,8 +11316,8 @@ app.put('/api/profile', async (req, res) => {
     });
     // A replaced or removed speaker profile PDF shouldn't linger in /uploads.
     void pruneSpeakerProfiles({
-      uploadsRoot: path.join(__appRoot, 'uploads'),
-      previousUrl: existing?.websitePages?.speaking?.speakerProfileFile,
+      uploadsRoot,
+      previousUrl: savedProfileFile,
       currentUrl: nextProfile?.websitePages?.speaking?.speakerProfileFile,
     }).catch((error) => console.warn(`[speaking] speaker profile cleanup failed: ${error.message}`));
     return res.json({ ok: true, data: nextProfile });

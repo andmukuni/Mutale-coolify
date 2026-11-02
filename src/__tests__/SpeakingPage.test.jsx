@@ -82,11 +82,11 @@ describe('SpeakingPage — introduction', () => {
     await screen.findByText('New speaking engagements will be announced here.');
   });
 
-  it('uses the approved homepage portrait until another is uploaded, on large screens only', async () => {
+  it('uses the approved homepage portrait until another is uploaded, on wide screens only', async () => {
     const { container } = renderPage();
     const portrait = screen.getByRole('img', { name: 'Mutale Mubanga' });
     expect(portrait.getAttribute('src')).toMatch(/mutale-navy-suit-and-tie/);
-    expect(container.querySelector('figure')).toHaveClass('hidden', 'lg:flex');
+    expect(container.querySelector('figure')).toHaveClass('hidden', 'xl:flex');
     await screen.findByText('New speaking engagements will be announced here.');
   });
 

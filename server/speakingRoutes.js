@@ -37,7 +37,13 @@ import {
   setPublicationState,
   updateEngagement,
 } from './speakingService.js';
-import { isEngagementMetric, normalizeMetric, recordMetric, summarizeMetrics } from './speakingMetricsService.js';
+import {
+  ENQUIRY_METRIC,
+  isEngagementMetric,
+  normalizeMetric,
+  recordMetric,
+  summarizeMetrics,
+} from './speakingMetricsService.js';
 
 const VALIDATION_MESSAGE = 'Please fix the highlighted fields.';
 
@@ -60,6 +66,16 @@ const profileFileName = (url) => {
   const match = String(url || '').match(/\/uploads\/speaking\/(speaker-profile-\d+-[0-9a-f]{8}\.pdf)(?:[?#].*)?$/);
   return match ? match[1] : '';
 };
+
+/**
+ * Whether a speaker-profile URL still points at a file on disk. URLs that aren't
+ * one of our uploads (for example an external link) are left to the caller.
+ */
+export async function speakerProfileExists(uploadsRoot, url) {
+  const name = profileFileName(url);
+  if (!name) return true;
+  return fs.access(path.join(uploadsRoot, 'speaking', name)).then(() => true, () => false);
+}
 
 /**
  * Remove speaker-profile PDFs the page no longer uses: the previously saved file
@@ -322,6 +338,8 @@ export function registerSpeakingRoutes(app, {
         ipHash: hashIp(req.ip || req.socket?.remoteAddress, tokenSecret),
       });
       if (result.errors) return res.status(400).json({ ok: false, message: VALIDATION_MESSAGE, errors: result.errors });
+      await recordMetric(pool, { metric: ENQUIRY_METRIC, engagementId: '' })
+        .catch((error) => console.warn(`[speaking-enquiry] count failed: ${error.message}`));
 
       const emails = await sendEnquiryEmails(req, result.enquiry).catch((error) => {
         console.warn(`[speaking-enquiry] email failed: ${error.message}`);

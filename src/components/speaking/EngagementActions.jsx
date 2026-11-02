@@ -10,7 +10,7 @@ import { publicMediaItems } from './engagementMedia';
 
 const MEDIA_ICONS = { recording: PlayCircle, slides: FileText, photos: Images, article: Newspaper };
 
-const actionClass = 'inline-flex items-center gap-1.5 rounded-lg border border-navy-200 bg-white px-3 py-1.5 text-sm font-semibold text-navy-800 transition-colors hover:border-cyan-700 hover:text-cyan-800 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-cyan-700 focus-visible:ring-offset-2 dark:text-navy-100 dark:hover:text-cyan-300';
+const actionClass = 'pointer-events-auto inline-flex items-center gap-1.5 rounded-lg border border-navy-200 bg-white px-3 py-1.5 text-sm font-semibold text-navy-800 transition-colors hover:border-cyan-700 hover:text-cyan-800 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-cyan-700 focus-visible:ring-offset-2 dark:text-navy-100 dark:hover:text-cyan-300';
 
 function downloadIcs(engagement) {
   const pageUrl = typeof window === 'undefined' ? '' : `${window.location.origin}/speaking`;
@@ -38,7 +38,9 @@ export default function EngagementActions({ engagement, track = true }) {
   if (!calendar && media.length === 0) return null;
 
   return (
-    <div className="relative z-10 mt-3 flex flex-wrap gap-2">
+    // Above the stretched link, but only the buttons take clicks: the gaps
+    // around them still open the event website.
+    <div className="pointer-events-none relative z-10 mt-3 flex flex-wrap gap-2">
       {media.map((item, index) => {
         const Icon = MEDIA_ICONS[item.type];
         const label = mediaActionLabel(item);
@@ -64,7 +66,8 @@ export default function EngagementActions({ engagement, track = true }) {
             downloadIcs(engagement);
             if (track) trackSpeaking('calendar_add', engagement.id);
           }}
-          aria-label={`Add ${engagement.event_title} to your calendar`}
+          // The visible label comes first, so voice users can say what they see (SC 2.5.3).
+          aria-label={`Add to calendar: ${engagement.event_title}`}
           className={actionClass}
         >
           <CalendarPlus size={15} className="text-cyan-700 dark:text-cyan-400" aria-hidden="true" />

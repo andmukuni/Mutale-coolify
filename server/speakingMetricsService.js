@@ -2,11 +2,14 @@
  * Counts for the Speaking page (brief §9): daily totals only. Nothing that
  * identifies a visitor is stored (no IP address, cookie or user id), and the
  * browser sends a count only after the visitor has accepted analytics cookies.
- * Enquiry submissions are counted from speaking_enquiries itself.
+ * Enquiry submissions are counted by the server as each one is stored.
  */
 const TABLE = 'speaking_metrics';
 
 export const SPEAKING_METRICS = ['event_website_click', 'calendar_add', 'media_click', 'profile_download'];
+// Recorded by the server itself when an enquiry is stored, never by the browser,
+// so the count survives deleting enquiries and can't be inflated through the public endpoint.
+export const ENQUIRY_METRIC = 'enquiry_submitted';
 const PER_ENGAGEMENT = new Set(['event_website_click', 'calendar_add', 'media_click']);
 export const METRICS_RECENT_DAYS = 30;
 
@@ -42,7 +45,7 @@ export async function summarizeMetrics(pool) {
   const days = METRICS_RECENT_DAYS;
   const [rows] = await pool.query(
     `SELECT metric, engagement_id, SUM(total) AS total,
-       SUM(CASE WHEN day >= DATE_SUB(CURDATE(), INTERVAL ? DAY) THEN total ELSE 0 END) AS recent
+       SUM(CASE WHEN day > DATE_SUB(CURDATE(), INTERVAL ? DAY) THEN total ELSE 0 END) AS recent
      FROM ${TABLE} GROUP BY metric, engagement_id`,
     [days],
   );
@@ -61,6 +64,14 @@ export async function summarizeMetrics(pool) {
   summary.page.enquiries = { total: Number(enquiries?.total || 0), recent: Number(enquiries?.recent || 0) };
   for (const row of rows) {
     const count = { total: Number(row.total || 0), recent: Number(row.recent || 0) };
+    if (row.metric === ENQUIRY_METRIC) {
+      // Enquiries stored before submissions were counted still show through the table count.
+      summary.page.enquiries = {
+        total: Math.max(count.total, summary.page.enquiries.total),
+        recent: Math.max(count.recent, summary.page.enquiries.recent),
+      };
+      continue;
+    }
     if (!PER_ENGAGEMENT.has(row.metric)) {
       if (row.metric in summary.page) summary.page[row.metric] = count;
       continue;

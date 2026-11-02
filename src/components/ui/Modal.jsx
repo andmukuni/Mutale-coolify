@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useId, useRef } from 'react';
 import { X } from 'lucide-react';
 
-const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), iframe, [tabindex]:not([tabindex="-1"])';
+
+// Hidden controls can't take focus, so they mustn't count as the trap's first or last stop.
+// (checkVisibility is missing in older browsers and jsdom; treat those as visible.)
+const isTabbable = (el) => !el.closest('[inert]')
+  && (typeof el.checkVisibility !== 'function' || el.checkVisibility({ visibilityProperty: true }));
 
 // Open dialogs, innermost last. Only the topmost one answers Escape and traps Tab,
 // so a confirmation opened over another dialog closes on its own.
@@ -36,7 +41,7 @@ export default function Modal({
       }
       // Keep keyboard focus inside the dialog while it is open.
       if (e.key !== 'Tab' || !panelRef.current) return;
-      const items = [...panelRef.current.querySelectorAll(FOCUSABLE)];
+      const items = [...panelRef.current.querySelectorAll(FOCUSABLE)].filter(isTabbable);
       if (items.length === 0) {
         e.preventDefault();
         return;

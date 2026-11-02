@@ -28,7 +28,7 @@ const STORAGE = [
     category: 'Analytics (only with your consent)',
     rows: [
       ['mm_site_traffic', 'Counts the pages viewed on this device so we can understand which content is useful.', 'Local storage, until you clear it or withdraw consent'],
-      ['Speaking page counts', 'Adds one to a daily total on our server when you open an event’s website, download the speaker profile, add an engagement to your calendar, or open a recording or slides from the Speaking page. Nothing that identifies you (such as your IP address) is stored with it.', 'Daily totals on our server; nothing is stored on your device'],
+      ['Speaking engagement counts', 'Adds one to a daily total on our server when you open an event’s website, download the speaker profile, add an engagement to your calendar, or open a recording or slides, on the Speaking page or the homepage. The request says only what was used and for which engagement; we don’t store your IP address or anything else that identifies you with it.', 'Daily totals on our server; nothing is stored on your device'],
     ],
   },
 ];

@@ -13,6 +13,7 @@ import {
   parsePdfDataUrl,
   pruneSpeakerProfiles,
   registerSpeakingRoutes,
+  speakerProfileExists,
 } from '../speakingRoutes.js';
 import { ENQUIRY_TOKEN_MAX_AGE_MS, checkEnquiryToken, issueEnquiryToken } from '../speakingEnquiryService.js';
 import { ENGAGEMENT_WRITABLE_FIELDS } from '../speakingService.js';
@@ -1135,5 +1136,30 @@ describe('speaker profile clean-up', () => {
       .toEqual([name(5)]);
     expect(await list()).toEqual([]);
     expect(await pruneSpeakerProfiles({ uploadsRoot, previousUrl: '/uploads/speaking/../../server/index.js', now: NOW })).toEqual([]);
+  });
+});
+
+describe('enquiry submission count', () => {
+  it('counts every stored enquiry, even after it is deleted, and only on the server', async () => {
+    const enquiry = await storedEnquiry();
+    await sendEnquiry();
+    await api('DELETE', `/api/admin/speaking/enquiries/${enquiry.id}`, { perms: ENQUIRY_ADMIN });
+    const { json } = await api('GET', '/api/admin/speaking/metrics', { perms: 'speaking.view' });
+    expect(json.data.page.enquiries).toEqual({ total: 2, recent: 2 });
+    // Visitors can't add to it through the public counter.
+    const forged = await api('POST', '/api/speaking/metrics', { body: { metric: 'enquiry_submitted' }, perms: null });
+    expect(forged.status).toBe(400);
+  });
+});
+
+describe('speaker profile existence check', () => {
+  it('knows when an uploaded profile is gone, and leaves other links alone', async () => {
+    const folder = path.join(uploadsRoot, 'speaking');
+    await fs.mkdir(folder, { recursive: true });
+    const live = 'speaker-profile-7-0123abcd.pdf';
+    await fs.writeFile(path.join(folder, live), '%PDF-1.7');
+    expect(await speakerProfileExists(uploadsRoot, `/uploads/speaking/${live}`)).toBe(true);
+    expect(await speakerProfileExists(uploadsRoot, '/uploads/speaking/speaker-profile-8-0123abcd.pdf')).toBe(false);
+    expect(await speakerProfileExists(uploadsRoot, 'https://example.org/profile.pdf')).toBe(true);
   });
 });

@@ -69,8 +69,9 @@ describe('buildSpeakingIcs', () => {
       session_start_time: '09:30:00',
       session_end_time: '10:15:00',
     }, { now: NOW }));
-    expect(line(ics, 'DTSTART')).toBe('DTSTART;TZID=Africa/Lusaka:20261203T093000');
-    expect(line(ics, 'DTEND')).toBe('DTEND;TZID=Africa/Lusaka:20261203T101500');
+    // Lusaka is UTC+2; times are written in UTC so every calendar reads them alike.
+    expect(line(ics, 'DTSTART')).toBe('DTSTART:20261203T073000Z');
+    expect(line(ics, 'DTEND')).toBe('DTEND:20261203T081500Z');
     expect(line(ics, 'SUMMARY')).toBe('SUMMARY:Mutale Mubanga: Quality systems that last (Annual Scientific Conference)');
     const description = line(ics, 'DESCRIPTION');
     expect(description).toContain('Mutale Mubanga\'s role: Keynote speaker · Panellist.');
@@ -81,7 +82,7 @@ describe('buildSpeakingIcs', () => {
 
   it('does not invent a session end time or a single-day end date', () => {
     const timed = buildSpeakingIcs({ ...BASE, session_date: '2026-12-02', session_start_time: '14:00' }, { now: NOW });
-    expect(line(timed, 'DTSTART')).toBe('DTSTART;TZID=Africa/Lusaka:20261202T140000');
+    expect(line(timed, 'DTSTART')).toBe('DTSTART:20261202T120000Z');
     expect(line(timed, 'DTEND')).toBeUndefined();
     expect(line(timed, 'SUMMARY')).toBe('SUMMARY:Mutale Mubanga speaking at Annual Scientific Conference');
 
@@ -104,6 +105,39 @@ describe('buildSpeakingIcs', () => {
     expect(line(ics, 'LOCATION')).toBeUndefined();
     expect(line(ics, 'URL')).toBeUndefined();
     expect(line(ics, 'DESCRIPTION')).toContain('contact the organiser');
+  });
+});
+
+describe('session timing', () => {
+  it('uses only the session day when its time is unknown', () => {
+    const ics = buildSpeakingIcs({ ...BASE, session_date: '2026-12-03' }, { now: NOW });
+    expect(line(ics, 'DTSTART')).toBe('DTSTART;VALUE=DATE:20261203');
+    expect(line(ics, 'DTEND')).toBe('DTEND;VALUE=DATE:20261204');
+    expect(line(ics, 'SUMMARY')).toBe('SUMMARY:Mutale Mubanga speaking at Annual Scientific Conference');
+    expect(unfold(ics)).toContain('the day of Mutale Mubanga\'s session');
+  });
+
+  it('follows daylight saving in the event\'s own zone', () => {
+    const summer = { ...BASE, start_date: '2027-07-01', end_date: '2027-07-03', session_date: '2027-07-02', session_start_time: '09:30', timezone: 'Europe/London' };
+    expect(line(buildSpeakingIcs(summer, { now: NOW }), 'DTSTART')).toBe('DTSTART:20270702T083000Z');
+    const winter = { ...summer, start_date: '2027-01-11', end_date: '2027-01-13', session_date: '2027-01-12' };
+    expect(line(buildSpeakingIcs(winter, { now: NOW }), 'DTSTART')).toBe('DTSTART:20270112T093000Z');
+  });
+
+  it('stops offering the session once its day has passed, even while the event runs on', () => {
+    const running = { ...BASE, start_date: '2026-11-01', end_date: '2026-11-05', session_date: '2026-11-01' };
+    expect(canAddToCalendar(running, NOW)).toBe(false);
+    expect(canAddToCalendar({ ...running, session_date: '2026-11-02' }, NOW)).toBe(true);
+    expect(canAddToCalendar({ ...running, session_date: null }, NOW)).toBe(true);
+  });
+
+  it('folds by bytes without splitting emoji or accented letters', () => {
+    const ics = buildSpeakingIcs({ ...BASE, event_title: `Conférence ${'🎤'.repeat(40)} été` }, { now: NOW });
+    for (const raw of ics.split('\r\n')) {
+      expect(new TextEncoder().encode(raw).length).toBeLessThanOrEqual(75);
+      expect(raw).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/);
+    }
+    expect(line(ics, 'SUMMARY')).toBe(`SUMMARY:Mutale Mubanga at Conférence ${'🎤'.repeat(40)} été`);
   });
 });
 

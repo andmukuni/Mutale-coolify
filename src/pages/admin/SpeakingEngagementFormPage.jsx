@@ -205,16 +205,25 @@ export default function SpeakingEngagementFormPage() {
 
   const updateMedia = (index, key, value) => {
     clearField('media');
+    clearField(`media_${key}_${index}`);
     setForm((prev) => ({
       ...prev,
       media: prev.media.map((item, i) => (i === index ? { ...item, [key]: value } : item)),
     }));
   };
-  const addMedia = () => setForm((prev) => ({ ...prev, media: [...prev.media, { ...EMPTY_MEDIA }] }));
+  // Focus follows the change: into a new row, or back to "Add link" after a removal.
+  const addMedia = () => {
+    const index = form.media.length;
+    setForm((prev) => ({ ...prev, media: [...prev.media, { ...EMPTY_MEDIA }] }));
+    requestAnimationFrame(() => document.getElementsByName(`media_type_${index}`)[0]?.focus());
+  };
   const removeMedia = (index) => {
     clearField('media');
+    ['type', 'url', 'label'].forEach((key) => clearField(`media_${key}_${index}`));
     setForm((prev) => ({ ...prev, media: prev.media.filter((_, i) => i !== index) }));
+    requestAnimationFrame(() => document.getElementById('add-media-link')?.focus());
   };
+  const mediaRowError = Object.keys(fieldErrors).some((key) => /^media_(type|url|label)_\d+$/.test(key) && fieldErrors[key]);
 
   const handleImageUpload = async (event) => {
     const file = event.target.files?.[0];
@@ -604,6 +613,7 @@ export default function SpeakingEngagementFormPage() {
                   <FormField
                     label="Type"
                     name={`media_type_${index}`}
+                    error={fieldErrors[`media_type_${index}`]}
                     type="select"
                     value={item.type}
                     onChange={(e) => updateMedia(index, 'type', e.target.value)}
@@ -612,6 +622,7 @@ export default function SpeakingEngagementFormPage() {
                   <FormField
                     label="Web address"
                     name={`media_url_${index}`}
+                    error={fieldErrors[`media_url_${index}`]}
                     type="url"
                     value={item.url}
                     onChange={(e) => updateMedia(index, 'url', e.target.value)}
@@ -620,6 +631,7 @@ export default function SpeakingEngagementFormPage() {
                   <FormField
                     label="Button label (optional)"
                     name={`media_label_${index}`}
+                    error={fieldErrors[`media_label_${index}`]}
                     value={item.label}
                     onChange={(e) => updateMedia(index, 'label', e.target.value)}
                     maxLength={ENGAGEMENT_LIMITS.media_label}
@@ -635,8 +647,9 @@ export default function SpeakingEngagementFormPage() {
                   </button>
                 </div>
               ))}
-              {fieldErrors.media && <p className="text-xs text-red-600 dark:text-red-300" role="alert">{fieldErrors.media}</p>}
+              {fieldErrors.media && !mediaRowError && <p className="text-xs text-red-600 dark:text-red-300" role="alert">{fieldErrors.media}</p>}
               <button
+                id="add-media-link"
                 type="button"
                 onClick={addMedia}
                 disabled={form.media.length >= ENGAGEMENT_LIMITS.media}

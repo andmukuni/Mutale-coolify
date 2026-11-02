@@ -130,14 +130,14 @@ describe('SpeakingEngagementCard — separate actions', () => {
     const focusable = [...container.querySelectorAll('a, button, [tabindex]')];
     expect(focusable.map((el) => el.getAttribute('aria-label'))).toEqual([
       'Watch recording: BMSZ2026 Scientific Conference (opens in a new tab)',
-      'Add BMSZ2026 Scientific Conference to your calendar',
+      'Add to calendar: BMSZ2026 Scientific Conference',
     ]);
     expect(article.className).not.toMatch(/hover:|cursor-pointer/);
   });
 
   it('offers Add to calendar only for confirmed, scheduled, upcoming engagements', () => {
     const { rerender } = render(<SpeakingEngagementCard engagement={BASE} />);
-    expect(screen.getByRole('button', { name: /to your calendar/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Add to calendar:/ })).toBeInTheDocument();
     for (const change of [
       { participation_status: 'invited' },
       { event_status: 'postponed' },
@@ -146,7 +146,7 @@ describe('SpeakingEngagementCard — separate actions', () => {
       { dates_tbc: true, start_date: null, end_date: null, section: 'tba' },
     ]) {
       rerender(<SpeakingEngagementCard engagement={{ ...BASE, ...change }} />);
-      expect(screen.queryByRole('button', { name: /to your calendar/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Add to calendar:/ })).not.toBeInTheDocument();
     }
   });
 

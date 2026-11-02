@@ -178,15 +178,32 @@ export function escapeIcsText(value) {
     .replace(/;/g, '\\;');
 }
 
+const utf8 = new TextEncoder();
+
+/**
+ * RFC 5545 folds at 75 octets. Count UTF-8 bytes and break only between
+ * characters, so accented letters and emoji are never split in two.
+ */
 export function foldIcsLine(line) {
-  if (line.length <= 75) return line;
-  const chunks = [line.slice(0, 75)];
-  let remaining = line.slice(75);
-  while (remaining.length) {
-    chunks.push(` ${remaining.slice(0, 74)}`);
-    remaining = remaining.slice(74);
+  if (utf8.encode(line).length <= 75) return line;
+  const chunks = [];
+  let current = '';
+  let size = 0;
+  let limit = 75;
+  for (const char of line) {
+    const bytes = utf8.encode(char).length;
+    if (size + bytes > limit) {
+      chunks.push(current);
+      current = '';
+      size = 0;
+      // Continuation lines start with a space, which counts towards the 75.
+      limit = 74;
+    }
+    current += char;
+    size += bytes;
   }
-  return chunks.join('\r\n');
+  chunks.push(current);
+  return chunks.join('\r\n ');
 }
 
 export function buildIcsFilename(event = {}) {

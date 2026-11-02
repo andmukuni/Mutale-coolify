@@ -332,7 +332,7 @@ export const SECTION_REGISTRY = [
         path: 'websitePages.speaking.speakerProfileFile',
         helpText: 'Upload only an approved profile. The download button is hidden until a file is uploaded.',
       },
-      { key: 'heroPortraitImage', label: 'Portrait', type: 'image', path: 'websitePages.speaking.heroPortraitImage', fallbackPreview: heroPortrait, helpText: 'Use only an approved photograph. Leave empty to use the homepage portrait. Shown on large screens.' },
+      { key: 'heroPortraitImage', label: 'Portrait', type: 'image', path: 'websitePages.speaking.heroPortraitImage', fallbackPreview: heroPortrait, helpText: 'Use only an approved photograph. Leave empty to use the homepage portrait. Shown on wide screens only.' },
       { key: 'heroPortraitAlt', label: 'Portrait description (alt text)', type: 'text', path: 'websitePages.speaking.heroPortraitAlt' },
       { key: 'heroQuote', label: 'Quote beside the portrait', type: 'text', path: 'websitePages.speaking.heroQuote', helpText: 'Optional. Leave empty unless the wording is approved.' },
       { key: 'heroBackgroundImage', label: 'Background image', type: 'image', path: 'websitePages.speaking.heroBackgroundImage', helpText: 'Optional. Leave empty for the default navy gradient.' },

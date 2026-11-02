@@ -4,7 +4,7 @@ A short guide to the Speaking page at `/speaking` and its admin screens.
 
 Everything lives in the admin sidebar under **Speaking**:
 
-- **Speaking Engagements**: every engagement, with tabs for All, Published, Drafts and Hidden.
+- **Speaking Engagements**: every engagement, with tabs for All, Published, Drafts and Hidden, a search box (title, organiser, place or topic) and a year filter.
 - **Add Engagement**: a new record.
 - **Enquiries**: invitations sent from the "Invite Me to Speak" form.
 
@@ -32,7 +32,7 @@ Click **Save as draft**. New engagements always start as drafts.
 
 ## Publish, hide and republish
 
-Whether an engagement is on the website is decided only by the buttons in the **Website** panel on the right of the edit screen, or the globe and eye icons in the list:
+Whether an engagement is on the website is decided only by the buttons in the **Website** panel on the right of the edit screen, or the icons on each row of the list: the eye previews it, the globe publishes or republishes it, the crossed-out eye hides it, and the pencil, copy and bin icons edit, duplicate and delete it.
 
 | State | On the website? | How to change it |
 |---|---|---|
@@ -88,7 +88,7 @@ In **Sections**, open the **Speaking** group:
 
 - **Introduction banner**: eyebrow, heading, supporting text and button labels.
   - **Speaker profile (PDF)**: the "Download Speaker Profile" button appears only once a PDF has been uploaded here (7 MB at most). When you replace or remove it and save, the old file is deleted from the server.
-  - **Portrait**: the homepage's approved photo is used until you upload another. It shows beside the banner text on large screens, and is left out on phones so the listings stay near the top.
+  - **Portrait**: the homepage's approved photo is used until you upload another. It shows beside the banner text on wide screens (1280px and up) and is left out on smaller ones, so the listings stay near the top.
   - **Quote beside the portrait**: stays hidden until you add it. Use only approved wording.
 - **Speaking formats**: one line per format, written as `Title | short description`. These describe how you contribute and are not links. The strip can be switched off.
 - **Engagement listings**: the section headings (including the heading for past cancellations) and the empty-page message.
@@ -99,7 +99,7 @@ In **Sections**, open the **Speaking** group:
 
 The top of **Speaking Engagements** shows, for the last 30 days and in total:
 
-- enquiries received;
+- enquiries received (every submission, including ones you later delete);
 - speaker profile downloads;
 - event-website clicks (also shown per engagement in the list).
 

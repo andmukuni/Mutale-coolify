@@ -152,7 +152,12 @@ function parseJsonList(value) {
 
 /** Topics arrive as a list or comma-separated text; duplicates are dropped regardless of case. */
 function parseTopics(value) {
-  const list = typeof value === 'string' && !value.trim().startsWith('[') ? value.split(',') : parseJsonList(value);
+  let list = parseJsonList(value);
+  if (typeof value === 'string') {
+    const text = value.trim();
+    // Stored lists are JSON; anything else (even typed text starting with "[") is comma-separated.
+    if (!text.startsWith('[') || (list.length === 0 && text !== '[]')) list = text.split(',');
+  }
   const seen = new Set();
   const topics = [];
   for (const item of list) {
@@ -283,22 +288,30 @@ export function normalizeEngagementInput(input = {}) {
   }
 
   // Rows left completely empty in the form are ignored rather than rejected.
+  // Rows keep their position, so messages name the row the admin sees.
   const mediaRows = parseJsonList(input.media)
-    .map((item) => ({
+    .map((item, position) => ({
+      position,
       type: String(item?.type || '').trim(),
       url: String(item?.url || '').trim(),
       label: String(item?.label || '').trim(),
     }))
     .filter((item) => item.url || item.label);
   const media = [];
-  mediaRows.forEach((item, index) => {
-    const row = `Link ${index + 1}`;
+  // The first problem is reported twice: on the row's own field (media_url_2,
+  // which the form highlights and focuses) and as a sentence for the list.
+  const mediaProblem = (item, field, message) => {
+    if (errors.media) return;
+    errors[`media_${field}_${item.position}`] = message;
+    errors.media = `Link ${item.position + 1}: ${message.charAt(0).toLowerCase()}${message.slice(1)}`;
+  };
+  mediaRows.forEach((item) => {
     const url = safeExternalUrl(item.url);
-    if (!MEDIA_TYPE_VALUES.has(item.type)) errors.media ||= `${row}: choose what it is.`;
-    else if (!url) errors.media ||= `${row}: use a full web address starting with http:// or https://.`;
-    else if (url.length > ENGAGEMENT_LIMITS.event_url) errors.media ||= `${row}: this web address is too long.`;
+    if (!MEDIA_TYPE_VALUES.has(item.type)) mediaProblem(item, 'type', 'Choose what it is.');
+    else if (!url) mediaProblem(item, 'url', 'Use a full web address starting with http:// or https://.');
+    else if (url.length > ENGAGEMENT_LIMITS.event_url) mediaProblem(item, 'url', 'This web address is too long.');
     else if (item.label.length > ENGAGEMENT_LIMITS.media_label) {
-      errors.media ||= `${row}: keep the label to ${ENGAGEMENT_LIMITS.media_label} characters.`;
+      mediaProblem(item, 'label', `Keep the label to ${ENGAGEMENT_LIMITS.media_label} characters.`);
     } else media.push({ type: item.type, url, label: item.label || null });
   });
   if (mediaRows.length > ENGAGEMENT_LIMITS.media) errors.media = `Add up to ${ENGAGEMENT_LIMITS.media} links.`;

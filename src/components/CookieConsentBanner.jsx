@@ -105,7 +105,8 @@ export default function CookieConsentBanner() {
                   </h2>
                   <p className="mt-1 text-sm leading-relaxed text-navy-600">
                     We use essential browser storage to run the site. With your permission we also
-                    detect your country to show local prices and count page visits. Change this any
+                    detect your country to show local prices, count page visits, and count how often
+                    speaking engagement links are used (as totals, without your details). Change this any
                     time under <strong className="font-medium">Cookie settings</strong> in the
                     footer.{' '}
                     <Link

@@ -18,7 +18,7 @@ export const LEGAL = {
   phone: profileData.phone || '',
 
   // Shown as "Last updated" on both documents. Change it whenever you edit them.
-  lastUpdated: '27 October 2026',
+  lastUpdated: '3 November 2026',
 
   // Refund rules for paid event tickets.
   eventRefundCutoffDays: 7,

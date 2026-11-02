@@ -29,7 +29,7 @@ export const CONSENT_CATEGORIES = [
     key: 'analytics',
     label: 'Analytics',
     description:
-      'Counts which pages are visited, and how often links on the Speaking page are used, so we can see what is useful and improve the site. Nothing that identifies you is sent.',
+      'Counts which pages are visited, and adds to daily totals on our server when speaking engagement links are used (on the Speaking page and the homepage), so we can see what is useful and improve the site. Only the action and the engagement are sent, and nothing that identifies you is stored.',
   },
 ];
 
