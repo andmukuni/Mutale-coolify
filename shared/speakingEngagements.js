@@ -471,27 +471,23 @@ function dateParts(value) {
 }
 
 /**
- * Compact date block for a card, e.g. { primary: '06–11', secondary: 'Nov 2026' }.
+ * A calendar leaf for a card: the month band, the day or days, and the year,
+ * e.g. { month: 'Nov', days: '06–11', year: '2026' }, or across months
+ * { month: 'Nov – Dec', days: '28–02', year: '2026' }.
  * Returns null when the dates are to be announced.
  */
-export function formatEngagementDateTile(engagement) {
+export function formatEngagementDateLeaf(engagement) {
   if (engagement?.dates_tbc) return null;
   const start = dateParts(engagement?.start_date);
   if (!start) return null;
   const end = dateParts(engagement?.end_date) || start;
   const pad = (n) => String(n).padStart(2, '0');
-  const sameDay = engagement.end_date === engagement.start_date || !engagement.end_date;
-
-  if (sameDay) return { primary: pad(start.day), secondary: `${start.short} ${start.year}` };
-  if (start.year === end.year && start.month === end.month) {
-    return { primary: `${pad(start.day)}–${pad(end.day)}`, secondary: `${start.short} ${start.year}` };
-  }
-  if (start.year === end.year) {
-    return { primary: `${pad(start.day)} ${start.short} – ${pad(end.day)} ${end.short}`, secondary: String(start.year) };
-  }
+  const sameMonth = start.year === end.year && start.month === end.month;
+  const sameDay = sameMonth && start.day === end.day;
   return {
-    primary: `${pad(start.day)} ${start.short} – ${pad(end.day)} ${end.short}`,
-    secondary: `${start.year}–${String(end.year).slice(-2)}`,
+    month: sameMonth ? start.short : `${start.short} – ${end.short}`,
+    days: sameDay ? pad(start.day) : `${pad(start.day)}–${pad(end.day)}`,
+    year: start.year === end.year ? String(start.year) : `${start.year}–${String(end.year).slice(-2)}`,
   };
 }
 

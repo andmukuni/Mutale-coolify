@@ -212,14 +212,19 @@ describe('SpeakingEngagementCard — content', () => {
   it('shows date, title, location, roles, session, organiser, and description', () => {
     render(<SpeakingEngagementCard engagement={BASE} />);
     const card = within(screen.getByRole('article'));
+    // The calendar leaf, for sighted visitors…
+    expect(card.getByText('Dec')).toBeInTheDocument();
     expect(card.getByText('02–03')).toBeInTheDocument();
-    expect(card.getByText('Dec 2099')).toBeInTheDocument();
-    expect(card.getByText('2–3 December 2099')).toBeInTheDocument();
+    expect(card.getByText('2099')).toBeInTheDocument();
+    // …and the dates in full, under their label, for everyone.
+    expect(card.getByText('Dates', VISIBLE)).toBeInTheDocument();
+    expect(card.getByText('2–3 December 2099', VISIBLE)).toBeInTheDocument();
     expect(card.getByRole('heading', { name: 'BMSZ2026 Scientific Conference' })).toBeInTheDocument();
     expect(card.getByText('Livingstone, Zambia')).toBeInTheDocument();
     expect(card.getByText('Speaker · Facilitator')).toBeInTheDocument();
     expect(card.getByText('Laboratory systems and health security')).toBeInTheDocument();
-    expect(card.getByText('Organised by Biomedical Society of Zambia')).toBeInTheDocument();
+    expect(card.getByText('Organiser')).toBeInTheDocument();
+    expect(card.getByText('Biomedical Society of Zambia')).toBeInTheDocument();
   });
 
   it('omits empty optional fields cleanly — no blank rows, placeholders, or "null"', () => {
@@ -235,7 +240,8 @@ describe('SpeakingEngagementCard — content', () => {
     // No empty list for screen readers to announce as "list, 0 items".
     expect(container.querySelector('ul')).toBeNull();
     expect(container.querySelectorAll('img')).toHaveLength(0);
-    expect(screen.getByText('Date to be announced')).toBeInTheDocument();
+    expect(screen.getByText('TBA')).toBeInTheDocument();
+    expect(screen.getByText('To be announced', VISIBLE)).toBeInTheDocument();
   });
 
   it('shows "Online" for online events', () => {

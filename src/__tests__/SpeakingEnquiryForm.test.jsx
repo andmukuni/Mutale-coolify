@@ -102,7 +102,7 @@ describe('SpeakingEnquiryForm — steps', () => {
       expect(screen.getByLabelText(label)).toHaveAttribute('aria-invalid', 'true');
     }
     expect(screen.getByLabelText(/Phone/)).not.toHaveAttribute('aria-invalid');
-    expect(screen.getByLabelText(/Your name/)).toHaveFocus();
+    await waitFor(() => expect(screen.getByLabelText(/Your name/)).toHaveFocus());
     expect(stepHeading(/About you/)).toBeInTheDocument();
 
     fillYou();
@@ -282,7 +282,7 @@ describe('SpeakingEnquiryForm — sending', () => {
     expect(stepHeading(/About you/)).toBeInTheDocument();
     const email = screen.getByLabelText(/Email address/);
     expect(email).toHaveAttribute('aria-invalid', 'true');
-    expect(email).toHaveFocus();
+    await waitFor(() => expect(email).toHaveFocus());
 
     // Sending again straight away is fine: the token is still valid and old enough.
     fireEvent.click(screen.getByRole('button', { name: /Back to review/ }));

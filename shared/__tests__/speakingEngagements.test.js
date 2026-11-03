@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   classifyEngagement,
   formatEngagementDateRange,
-  formatEngagementDateTile,
+  formatEngagementDateLeaf,
   formatEngagementLocation,
   formatRoles,
   formatSessionTime,
@@ -244,14 +244,15 @@ describe('toPublicEngagement', () => {
 
 describe('display helpers', () => {
   it('formats single days, ranges within a month, across months, and across years', () => {
-    expect(formatEngagementDateTile({ start_date: '2027-01-15' })).toEqual({ primary: '15', secondary: 'Jan 2027' });
-    expect(formatEngagementDateTile({ start_date: '2026-11-06', end_date: '2026-11-11' }))
-      .toEqual({ primary: '06–11', secondary: 'Nov 2026' });
-    expect(formatEngagementDateTile({ start_date: '2026-11-28', end_date: '2026-12-02' }))
-      .toEqual({ primary: '28 Nov – 02 Dec', secondary: '2026' });
-    expect(formatEngagementDateTile({ start_date: '2026-12-30', end_date: '2027-01-02' }))
-      .toEqual({ primary: '30 Dec – 02 Jan', secondary: '2026–27' });
-    expect(formatEngagementDateTile({ start_date: '2026-12-01', dates_tbc: true })).toBeNull();
+    expect(formatEngagementDateLeaf({ start_date: '2027-01-15' })).toEqual({ month: 'Jan', days: '15', year: '2027' });
+    expect(formatEngagementDateLeaf({ start_date: '2027-01-15', end_date: '2027-01-15' })).toEqual({ month: 'Jan', days: '15', year: '2027' });
+    expect(formatEngagementDateLeaf({ start_date: '2026-11-06', end_date: '2026-11-11' }))
+      .toEqual({ month: 'Nov', days: '06–11', year: '2026' });
+    expect(formatEngagementDateLeaf({ start_date: '2026-11-28', end_date: '2026-12-02' }))
+      .toEqual({ month: 'Nov – Dec', days: '28–02', year: '2026' });
+    expect(formatEngagementDateLeaf({ start_date: '2026-12-30', end_date: '2027-01-02' }))
+      .toEqual({ month: 'Dec – Jan', days: '30–02', year: '2026–27' });
+    expect(formatEngagementDateLeaf({ start_date: '2026-12-01', dates_tbc: true })).toBeNull();
 
     expect(formatEngagementDateRange({ start_date: '2026-11-06', end_date: '2026-11-11' })).toBe('6–11 November 2026');
     expect(formatEngagementDateRange({ start_date: '2026-12-30', end_date: '2027-01-02' }))
