@@ -43,7 +43,7 @@ function SectionHeading({ eyebrow, title, id, focusable = false }) {
 
 function EngagementList({ engagements, headingLevel }) {
   return (
-    <ul className="space-y-4">
+    <ul className="space-y-3">
       {engagements.map((engagement) => (
         <li key={engagement.id}>
           <SpeakingEngagementCard engagement={engagement} headingLevel={headingLevel} />
@@ -58,7 +58,7 @@ function LoadingCards() {
   return (
     <div className="space-y-4">
       {[0, 1].map((key) => (
-        <div key={key} className="h-32 rounded-2xl border border-navy-100 bg-white animate-pulse" aria-hidden="true" />
+        <div key={key} className="h-28 rounded-2xl border border-navy-100 bg-white animate-pulse" aria-hidden="true" />
       ))}
     </div>
   );
@@ -193,7 +193,7 @@ function SpeakingListings() {
       )}
 
       <div className="bg-navy-50">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-14 space-y-14">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10 space-y-10">
           {showFilters && (
             <EngagementFilters options={options} filters={filters} onChange={setFilters} shown={shown} />
           )}

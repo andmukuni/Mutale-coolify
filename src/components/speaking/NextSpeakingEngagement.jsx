@@ -22,7 +22,7 @@ export default function NextSpeakingEngagement({ eyebrow, title, linkLabel }) {
 
   return (
     <section aria-labelledby="home-next-speaking" className="border-t border-navy-100 bg-white py-12 sm:py-16">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
           <div>
             {eyebrow && <p className="text-xs font-semibold uppercase tracking-widest text-cyan-800 dark:text-cyan-300">{eyebrow}</p>}

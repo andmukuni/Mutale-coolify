@@ -41,23 +41,23 @@ function Badge({ tone, children }) {
  * and past or cancelled engagements get a quieter band. Screen readers get the
  * dates from the card's details instead.
  */
-function DateLeaf({ leaf, cancelledUndated, muted, rowSpan }) {
+function DateLeaf({ leaf, cancelledUndated, muted }) {
   return (
     <div
-      className={`w-16 shrink-0 self-start overflow-hidden rounded-xl border border-navy-100 bg-white text-center shadow-sm md:w-24 ${rowSpan}`}
+      className="w-14 shrink-0 self-start overflow-hidden rounded-xl border border-navy-100 bg-white text-center shadow-sm sm:w-16"
       aria-hidden="true"
     >
-      <div className={`px-1 py-1 text-[10px] font-bold uppercase tracking-widest text-white md:py-1.5 md:text-[11px] ${muted ? 'bg-navy-600' : 'bg-cyan-700'}`}>
+      <div className={`px-1 py-1 text-[10px] font-bold uppercase tracking-widest text-white ${muted ? 'bg-navy-600' : 'bg-cyan-700'}`}>
         {leaf ? leaf.month : 'Date'}
       </div>
-      <div className="px-1 py-2 md:py-3">
+      <div className="px-1 py-1.5">
         {leaf ? (
           <>
-            {/* A range ("03–05") needs the smaller size to stay on one line in the phone leaf. */}
-            <div className={`whitespace-nowrap font-bold leading-none text-navy-900 md:text-2xl ${leaf.days.length > 2 ? 'text-base' : 'text-lg'}`}>
+            {/* A range ("03–05") needs the smaller size to stay on one line. */}
+            <div className={`whitespace-nowrap font-bold leading-none text-navy-900 ${leaf.days.length > 2 ? 'text-sm' : 'text-base'}`}>
               {leaf.days}
             </div>
-            <div className="mt-1 text-[11px] font-semibold text-navy-600 md:text-xs">{leaf.year}</div>
+            <div className="mt-0.5 text-[11px] font-semibold text-navy-600">{leaf.year}</div>
           </>
         ) : (
           <div className="text-xs font-semibold leading-tight text-navy-700">{cancelledUndated ? 'Cancelled' : 'TBA'}</div>
@@ -67,15 +67,13 @@ function DateLeaf({ leaf, cancelledUndated, muted, rowSpan }) {
   );
 }
 
-/** One labelled detail, such as "Location". */
+/** One labelled detail on the same line as the others, the way an event card lists date, time, and place. */
 function Detail({ icon: Icon, label, children }) {
   return (
-    <div className="min-w-0">
-      <dt className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-navy-600">
-        <Icon size={13} className="shrink-0 text-cyan-700 dark:text-cyan-400" aria-hidden="true" />
-        {label}
-      </dt>
-      <dd className="mt-1 text-sm font-medium text-navy-800">{children}</dd>
+    <div className="flex min-w-0 items-center gap-1.5">
+      <Icon size={14} className="shrink-0 text-cyan-700 dark:text-cyan-400" aria-hidden="true" />
+      <dt className="sr-only">{label}</dt>
+      <dd className="text-sm font-medium text-navy-800">{children}</dd>
     </div>
   );
 }
@@ -141,141 +139,136 @@ export default function SpeakingEngagementCard({ engagement, headingLevel = 'h3'
   const linkedClasses = url
     ? 'group hover:border-cyan-300 hover:shadow-md has-[a.card-link:focus-visible]:ring-2 has-[a.card-link:focus-visible]:ring-cyan-700 has-[a.card-link:focus-visible]:ring-offset-2'
     : '';
-  // A third column holds the image, beside the title and badges, from 640 px.
-  // From tablet width the leaf spans every row: title, badges (when there are any) and details.
-  const columns = image ? 'sm:grid-cols-[auto_minmax(0,1fr)_auto]' : '';
 
   return (
-    // Phones: the date leaf sits beside the title, and the badges and details
-    // run the full width below. From tablet width the leaf has a column of its
-    // own and the badges move up beside the image.
     <article
-      className={`relative grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-3 overflow-hidden rounded-2xl border border-navy-100 bg-white p-4 sm:p-5 md:gap-x-5 transition-shadow ${columns} ${linkedClasses}`}
+      className={`relative flex overflow-hidden rounded-2xl border border-navy-100 bg-white transition-shadow ${linkedClasses}`}
       data-linked={url ? 'true' : 'false'}
     >
       {engagement.in_progress && (
-        <span className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-cyan-700 via-cyan-500 to-cyan-300" aria-hidden="true" />
+        <span className="absolute inset-x-0 top-0 z-20 h-1 bg-gradient-to-r from-cyan-700 via-cyan-500 to-cyan-300" aria-hidden="true" />
       )}
 
-      <DateLeaf leaf={leaf} cancelledUndated={cancelledUndated} muted={muted} rowSpan={hasBadges ? 'md:row-span-3' : 'md:row-span-2'} />
+      <div className="flex min-w-0 flex-1 items-start gap-3 p-3 sm:gap-4 sm:p-4">
+        <DateLeaf leaf={leaf} cancelledUndated={cancelledUndated} muted={muted} />
 
-      {/* Long unbroken text (pasted links, email addresses) wraps instead of widening the card. */}
-      <div className="min-w-0 wrap-anywhere">
-        {eventType && (
-          <p className="text-xs font-semibold uppercase tracking-wider text-cyan-800 dark:text-cyan-300">{eventType}</p>
-        )}
-        <Heading className="mt-0.5 text-lg font-bold leading-snug text-navy-900 sm:text-xl">
-          {url ? (
-            <a
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={`${engagement.event_title} — event website (opens in a new tab)`}
-              onClick={() => { if (track) trackSpeaking('event_website_click', engagement.id); }}
-              className="card-link rounded-sm after:absolute after:inset-0 after:rounded-2xl after:content-[''] focus:outline-hidden group-hover:text-cyan-800 dark:group-hover:text-cyan-300"
-            >
-              {engagement.event_title}
-            </a>
-          ) : (
-            engagement.event_title
+        {/* Long unbroken text (pasted links, email addresses) wraps instead of widening the card. */}
+        <div className="min-w-0 flex-1 wrap-anywhere">
+          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+            {eventType && (
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-cyan-800 dark:text-cyan-300">{eventType}</p>
+            )}
+            {hasBadges && badges.map((badge) => <Badge key={badge.label} tone={badge.tone}>{badge.label}</Badge>)}
+          </div>
+
+          <Heading className="mt-1 text-base font-bold leading-snug text-navy-900 sm:text-lg">
+            {url ? (
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`${engagement.event_title} — event website (opens in a new tab)`}
+                onClick={() => { if (track) trackSpeaking('event_website_click', engagement.id); }}
+                className="card-link rounded-sm after:absolute after:inset-0 after:rounded-2xl after:content-[''] focus:outline-hidden group-hover:text-cyan-800 dark:group-hover:text-cyan-300"
+              >
+                {engagement.event_title}
+              </a>
+            ) : (
+              engagement.event_title
+            )}
+          </Heading>
+
+          {/* The leaf shows the dates, but only to sighted visitors. */}
+          {dateText && <p className="sr-only">{dateText}</p>}
+
+          {(engagement.session_title || roles) && (
+            <p className="mt-0.5 text-sm leading-snug text-navy-700">
+              {roles && <span className="font-semibold text-navy-800">{roles}</span>}
+              {/* The spaces stay outside the hidden dot so screen readers don't run the two together. */}
+              {roles && engagement.session_title && <>{' '}<span aria-hidden="true">·</span>{' '}</>}
+              {engagement.session_title && <span>{engagement.session_title}</span>}
+            </p>
           )}
-        </Heading>
 
-        {/* The leaf shows the dates, but only to sighted visitors. */}
-        {dateText && <p className="sr-only">{dateText}</p>}
+          {hasDetails && (
+            <dl className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+              {session && <Detail icon={Clock} label="Session">{session}</Detail>}
+              {location && <Detail icon={MapPin} label="Location">{location}</Detail>}
+              {engagement.organiser && <Detail icon={Users} label="Organiser">{engagement.organiser}</Detail>}
+            </dl>
+          )}
 
-        {(engagement.session_title || roles) && (
-          <p className="mt-0.5 text-sm text-navy-700">
-            {roles && <span className="font-semibold text-navy-800">{roles}</span>}
-            {/* The spaces stay outside the hidden dot so screen readers don't run the two together. */}
-            {roles && engagement.session_title && <>{' '}<span aria-hidden="true">·</span>{' '}</>}
-            {engagement.session_title && <span>{engagement.session_title}</span>}
-          </p>
-        )}
+          {engagement.description && (
+            <p
+              id={descriptionId}
+              ref={descriptionRef}
+              className={`text-sm leading-snug text-navy-600 ${hasDetails ? 'mt-1.5' : 'mt-1'} ${expanded ? '' : 'line-clamp-2'}`}
+            >
+              {engagement.description}
+            </p>
+          )}
+
+          {(topics.length > 0 || showToggle || hasActions || url) && (
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+              {topics.length > 0 && (
+                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                  <span className="text-xs font-semibold text-navy-600" aria-hidden="true">Topics</span>
+                  <ul aria-label="Topics" className="flex flex-wrap gap-1.5">
+                    {topics.map((topic, index) => (
+                      <li key={`${topic}-${index}`} className="rounded-md border border-navy-100 px-2 py-0.5 text-xs font-medium text-navy-700">{topic}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {(showToggle || hasActions || url) && (
+                // Above the stretched link, but only the buttons take clicks: the
+                // gaps around them, and the website label, still open the event website.
+                <div className="pointer-events-none relative z-10 ml-auto flex flex-wrap items-center gap-x-3 gap-y-2">
+                  {showToggle && (
+                    <button
+                      type="button"
+                      aria-expanded={expanded}
+                      aria-controls={descriptionId}
+                      onClick={toggle}
+                      className="pointer-events-auto rounded-sm text-sm font-semibold text-cyan-800 hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-cyan-700 focus-visible:ring-offset-2 dark:text-cyan-300"
+                    >
+                      {/* The space sits outside the hidden text so the name doesn't run together. */}
+                      {expanded ? 'Show less' : 'Show more'}{' '}
+                      <span className="sr-only">about {engagement.event_title}</span>
+                    </button>
+                  )}
+                  {(hasActions || url) && (
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      {hasActions && <EngagementActions engagement={engagement} track={track} />}
+                      {url && (
+                        // Looks like a button, but the whole card is the link; this only labels it.
+                        <span
+                          className="pointer-events-none inline-flex items-center gap-1.5 rounded-lg border border-cyan-700 px-3 py-1.5 text-sm font-semibold text-cyan-800 transition-colors group-hover:bg-cyan-700 group-hover:text-white dark:border-cyan-400 dark:text-cyan-300 dark:group-hover:bg-cyan-600 dark:group-hover:text-white"
+                          aria-hidden="true"
+                        >
+                          Event website
+                          <ArrowUpRight size={16} className="transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Too cramped beside the title on phones. */}
       {image && (
-        <img
-          src={image}
-          alt={engagement.image_alt || ''}
-          className={`hidden size-20 shrink-0 self-start rounded-xl border border-navy-100 bg-white object-contain p-1.5 sm:block ${hasBadges ? 'md:row-span-2' : ''}`}
-        />
-      )}
-
-      {/* After the heading, so screen reader users moving by heading still hear the status. */}
-      {hasBadges && (
-        <div className="col-span-full flex flex-wrap gap-1.5 md:col-span-1 md:col-start-2">
-          {badges.map((badge) => <Badge key={badge.label} tone={badge.tone}>{badge.label}</Badge>)}
+        <div className="relative w-28 shrink-0 self-stretch sm:w-44 md:w-56 lg:w-72">
+          <img
+            src={image}
+            alt={engagement.image_alt || ''}
+            className="absolute inset-0 h-full w-full object-cover"
+          />
         </div>
       )}
-
-      <div className="col-span-full min-w-0 wrap-anywhere md:col-start-2">
-        {/* One row on wide screens, however many details there are. */}
-        {hasDetails && (
-          <dl className="grid grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] gap-x-6 gap-y-2.5 rounded-xl bg-navy-50 px-4 py-3">
-            {session && <Detail icon={Clock} label="Session">{session}</Detail>}
-            {location && <Detail icon={MapPin} label="Location">{location}</Detail>}
-            {engagement.organiser && <Detail icon={Users} label="Organiser">{engagement.organiser}</Detail>}
-          </dl>
-        )}
-
-        {engagement.description && (
-          <p
-            id={descriptionId}
-            ref={descriptionRef}
-            className={`text-sm leading-relaxed text-navy-600 ${hasDetails ? 'mt-3' : ''} ${expanded ? '' : 'line-clamp-2'}`}
-          >
-            {engagement.description}
-          </p>
-        )}
-
-        {topics.length > 0 && (
-          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-            <span className="text-xs font-semibold text-navy-600" aria-hidden="true">Topics</span>
-            <ul aria-label="Topics" className="flex flex-wrap gap-1.5">
-              {topics.map((topic, index) => (
-                <li key={`${topic}-${index}`} className="rounded-md border border-navy-100 px-2 py-0.5 text-xs font-medium text-navy-700">{topic}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {(showToggle || hasActions || url) && (
-          // Above the stretched link, but only the buttons take clicks: the
-          // gaps around them, and the website label, still open the event website.
-          <div className="pointer-events-none relative z-10 mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
-            {showToggle && (
-              <button
-                type="button"
-                aria-expanded={expanded}
-                aria-controls={descriptionId}
-                onClick={toggle}
-                className="pointer-events-auto rounded-sm text-sm font-semibold text-cyan-800 hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-cyan-700 focus-visible:ring-offset-2 dark:text-cyan-300"
-              >
-                {/* The space sits outside the hidden text so the name doesn't run together. */}
-                {expanded ? 'Show less' : 'Show more'}{' '}
-                <span className="sr-only">about {engagement.event_title}</span>
-              </button>
-            )}
-            {(hasActions || url) && (
-              <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-                {hasActions && <EngagementActions engagement={engagement} track={track} />}
-                {url && (
-                  // Looks like a button, but the whole card is the link; this only labels it.
-                  <span
-                    className="pointer-events-none inline-flex items-center gap-1.5 rounded-lg border border-cyan-700 px-3.5 py-1.5 text-sm font-semibold text-cyan-800 transition-colors group-hover:bg-cyan-700 group-hover:text-white dark:border-cyan-400 dark:text-cyan-300 dark:group-hover:bg-cyan-600 dark:group-hover:text-white"
-                    aria-hidden="true"
-                  >
-                    Event website
-                    <ArrowUpRight size={16} className="transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
     </article>
   );
 }
