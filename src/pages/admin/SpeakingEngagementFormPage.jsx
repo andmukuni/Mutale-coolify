@@ -341,12 +341,12 @@ export default function SpeakingEngagementFormPage() {
 
   const urlStatus = (() => {
     const raw = form.event_url.trim();
-    if (!raw) return { tone: 'muted', text: 'No website: the card will not be clickable.' };
+    if (!raw) return { tone: 'muted', text: 'No website: the engagement’s page will have no Event website button.' };
     const safe = safeExternalUrl(raw);
     if (!safe) return { tone: 'error', text: 'Only full http:// or https:// addresses are allowed.' };
     // Same rule as the server, which measures the normalised address.
     if (safe.length > ENGAGEMENT_LIMITS.event_url) return { tone: 'error', text: 'This web address is too long.' };
-    return { tone: 'ok', text: `The card will link to ${safe} (opens in a new tab).` };
+    return { tone: 'ok', text: `The Event website button on the engagement’s page will open ${safe} in a new tab.` };
   })();
 
   // A zone saved from another browser can be missing from this one's list; keep it selectable.
@@ -421,7 +421,7 @@ export default function SpeakingEngagementFormPage() {
               value={form.description}
               onChange={handleChange}
               maxLength={ENGAGEMENT_LIMITS.description}
-              helpText={`${descriptionLength}/${ENGAGEMENT_LIMITS.description} characters. Shown on the card.`}
+              helpText={`${descriptionLength}/${ENGAGEMENT_LIMITS.description} characters. Shown on the engagement’s page.`}
               error={fieldErrors.description}
             />
           </Section>
@@ -597,14 +597,14 @@ export default function SpeakingEngagementFormPage() {
               value={form.topics}
               onChange={handleChange}
               placeholder="e.g. Leadership, Laboratory systems"
-              helpText="Separate topics with commas. Shown on the card and used by the topic filter on the Speaking page."
+              helpText="Separate topics with commas. Shown on the engagement’s page and used by the topic filter on the Speaking page."
               error={fieldErrors.topics}
             />
           </Section>
 
           <Section
             title="Recordings and resources"
-            description="Approved recordings, slides, photos or articles, usually added after the event. Each one shows as its own button on the card and never makes the card itself clickable."
+            description="Approved recordings, slides, photos or articles, usually added after the event. Each one shows as its own button on the engagement’s page."
           >
             <div data-field-wrapper="media" className="space-y-3">
               {form.media.length === 0 && <p className="text-sm text-navy-600">No links yet.</p>}

@@ -14,16 +14,18 @@ Speaking engagements are kept apart from the events you organise and sell. Nothi
 
 ## Add an engagement
 
+Every published engagement has a short card on the Speaking page and its own page at `/speaking/<id>`, which the card opens. The card shows the date, type, status, title, your role and the city; everything else (your session, the venue, the organiser, the description, topics, recordings, Add to calendar and the event website) is on the engagement's page.
+
 Open **Speaking → Add Engagement**. Only the **Event title** is required, so a record can be saved as soon as you are invited.
 
 - **Your role**: tick every role you have at the event, for example Speaker and Panellist. The event type (conference, forum, workshop, and so on) is a separate field.
-- **Dates**: enter the event's start date and, for events over several days, its end date. If the dates aren't known yet, tick **Dates to be confirmed**. The card then shows "Date to be announced", and any dates you entered are kept for later.
+- **Dates**: enter the event's start date and, for events over several days, its end date. If the dates aren't known yet, tick **Dates to be confirmed**. The card then shows "TBA" and the engagement's page "Dates to be announced", and any dates you entered are kept for later.
 - **Event time zone**: choose the zone where the event happens (Africa/Lusaka is the default). It decides the day the event moves to Previous Engagements.
 - **Your speaking session**: fill this in only if you know when you speak. Leave it empty rather than guessing; the page never invents a time. The session date must fall within the event's dates.
-- **Event website**: add the full address, starting with `https://`. With a website, the whole card becomes a link that opens in a new tab. Without one, the card is plain text and can't be clicked. The hint under the field tells you which it will be.
+- **Event website**: add the full address, starting with `https://`. It appears as an **Event website** button on the engagement's page, opening in a new tab. Without one there is no button. The hint under the field tells you which it will be.
 - **Event image or organiser logo**: use only images you are approved to publish, and describe the image in the alt-text field that appears.
-- **Topics**: a few topics separated by commas, such as `Leadership, Laboratory systems`. They appear on the card and power the topic filter.
-- **Recordings and resources**: after an event, add approved links to a recording, slides, photos or an article. Each appears as its own button on the card (for example "Watch recording"). They never make the card itself clickable.
+- **Topics**: a few topics separated by commas, such as `Leadership, Laboratory systems`. They appear on the engagement's page and power the topic filter.
+- **Recordings and resources**: after an event, add approved links to a recording, slides, photos or an article. Each appears as its own button on the engagement's page (for example "Watch recording").
 - **Status**: *Your participation* (Invited, Confirmed, Declined) and *Event status* (Scheduled, Postponed, Cancelled) are labels. Changing them never publishes an engagement. The one exception keeps you safe: saving a published engagement as **Declined** takes it off the website (it becomes Hidden), and it stays off until you publish it again.
 - **Featured engagement**: shows this engagement in the homepage's "Next Speaking Engagement" band while it is upcoming, confirmed and scheduled. Without a featured one, the band shows the next confirmed engagement, and with none it doesn't appear.
 - **Private notes**: contacts, fees, logistics and reminders. They are never sent to the website.
@@ -44,7 +46,7 @@ Whether an engagement is on the website is decided only by the buttons in the **
 - **Declined** engagements are never shown and can't be published.
 - Hiding removes an engagement from the website straight away. It can't recall copies visitors already downloaded, or pages external search engines have already cached.
 
-**Preview card** shows exactly how the card will look to visitors, including whether it will be clickable, without publishing anything.
+**Preview card** shows exactly how the card and the engagement's page will look to visitors, without publishing anything.
 
 **Duplicate as draft** copies an engagement (for an event that repeats each year, say) into a new draft marked "(copy)". **Delete engagement** removes it permanently after you confirm. To take something off the website but keep it, hide it instead.
 

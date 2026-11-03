@@ -10,7 +10,7 @@ import { publicMediaItems } from './engagementMedia';
 
 const MEDIA_ICONS = { recording: PlayCircle, slides: FileText, photos: Images, article: Newspaper };
 
-const actionClass = 'pointer-events-auto inline-flex items-center gap-1.5 rounded-lg border border-navy-200 bg-white px-3 py-1.5 text-sm font-semibold text-navy-800 transition-colors hover:border-cyan-700 hover:text-cyan-800 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-cyan-700 focus-visible:ring-offset-2 dark:text-navy-100 dark:hover:text-cyan-300';
+const actionClass = 'inline-flex items-center justify-center gap-1.5 rounded-lg border border-navy-200 bg-white px-3 py-1.5 text-sm font-semibold text-navy-800 transition-colors hover:border-cyan-700 hover:text-cyan-800 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-cyan-700 focus-visible:ring-offset-2 dark:text-navy-100 dark:hover:text-cyan-300';
 
 function downloadIcs(engagement) {
   const pageUrl = typeof window === 'undefined' ? '' : `${window.location.origin}/speaking`;
@@ -27,20 +27,17 @@ function downloadIcs(engagement) {
 }
 
 /**
- * Separate actions for a card: recordings, slides, photos and articles, plus
- * "Add to calendar" for confirmed engagements with known dates. They sit above
- * the card's stretched link, never inside it, and never make a card without an
- * event website clickable.
+ * An engagement's actions, on its page: recordings, slides, photos and
+ * articles, plus "Add to calendar" for confirmed engagements with known dates.
+ * `stacked` lays them out full width, one per line.
  */
-export default function EngagementActions({ engagement, track = true }) {
+export default function EngagementActions({ engagement, track = true, stacked = false }) {
   const media = publicMediaItems(engagement).filter((item) => MEDIA_ICONS[item.type]);
   const calendar = canAddToCalendar(engagement);
   if (!calendar && media.length === 0) return null;
 
   return (
-    // The card's footer lifts these above its stretched link and passes clicks
-    // in the gaps through to it; only the buttons themselves take clicks.
-    <div className="pointer-events-none flex flex-wrap gap-2">
+    <div className={stacked ? 'flex flex-col gap-2' : 'flex flex-wrap gap-2'}>
       {media.map((item, index) => {
         const Icon = MEDIA_ICONS[item.type];
         const label = mediaActionLabel(item);

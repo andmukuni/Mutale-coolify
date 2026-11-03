@@ -230,8 +230,8 @@ describe('SpeakingPage — keyboard order', () => {
   const tabbable = (root) => [...root.querySelectorAll(TABBABLE)].filter((el) => el.getAttribute('tabindex') !== '-1');
   const nameOf = (el) => el.getAttribute('aria-label') || el.getAttribute('name') || el.textContent.trim();
 
-  it('visits the invite button, linked cards only, then the closing invitation', async () => {
-    // Invited, so neither card offers "Add to calendar"; the card tests cover that button.
+  it('visits the invite button, every card, then the closing invitation', async () => {
+    // Cards carry no other controls; Add to calendar and the event website are on each engagement’s page.
     mocks.fetchEngagements.mockResolvedValue({
       upcoming: [
         card({ id: 'u1', event_title: 'Linked Summit', start_date: '2099-01-10', section: 'upcoming', participation_status: 'invited', event_url: 'https://summit.example.org' }),
@@ -242,12 +242,14 @@ describe('SpeakingPage — keyboard order', () => {
     const { container } = renderPage();
     const plain = (await screen.findByRole('heading', { name: 'Plain Forum' })).closest('article');
 
+    // Every card opens its own page, whether or not the event has a website.
     expect(tabbable(container).map(nameOf)).toEqual([
       'Invite Me to Speak',
-      'Linked Summit — event website (opens in a new tab)',
+      'Linked Summit',
+      'Plain Forum',
       'Invite Me to Speak',
     ]);
-    expect(tabbable(plain)).toHaveLength(0);
+    expect(tabbable(plain)).toHaveLength(1);
   });
 });
 

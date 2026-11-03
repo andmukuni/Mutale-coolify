@@ -7,7 +7,7 @@ What was delivered against the *Speaking Page — Developer Requirements* brief 
 
 ## What was delivered
 
-- **Public page** `/speaking`, which includes:
+- **Public pages** `/speaking`, `/speaking/<id>` (one engagement) and `/speaking/invite` (the enquiry form). The Speaking page includes:
   - the introductory banner and the speaking-formats strip;
   - Upcoming, Dates to be announced, Previous and Cancelled sections;
   - conditional event-website links;
@@ -51,9 +51,9 @@ Other changes:
 |---|---|---|
 | 1 | Draft → publish → hide → republish without losing data | Route tests compare every writable field after each step, including a "dates to be confirmed" record (`server/__tests__/speakingRoutes.test.js`). |
 | 2 | Hidden and draft records can't be retrieved publicly | Route tests cover past, upcoming and undated drafts, hidden and declined records. All are absent from the list, and their detail requests return the same 404. Private notes never appear in any public response. |
-| 3 | A card with a URL opens the right site | Component tests check the native link, the exact `href`, `target="_blank"`, `rel="noopener noreferrer"` and an accessible name with a new-tab warning. Also checked in the browser. |
-| 4 | A card without a URL isn't clickable, including by keyboard | Component tests: no link and nothing focusable apart from clearly labelled separate actions. A DOM-order tab-sequence test on the page. In the browser, Tab reached only the 5 linked cards out of 10. |
-| 5 | Removing a URL removes all link behaviour | The same card re-rendered without its URL loses the link, the label, the arrow, the hover styles and its tab stop. Route tests check the list and detail responses after the URL is cleared. |
+| 3 | A card with a URL opens the right site | *Changed on 3 November (see Decisions):* every card now opens the engagement's own page, and the event website is a button there. Component tests check that button's native link, exact `href`, `target="_blank"`, `rel="noopener noreferrer"`, its name with a new-tab warning, and that clicks are counted. Card tests check the card's one link to `/speaking/<id>`. Checked in the browser. |
+| 4 | A card without a URL isn't clickable, including by keyboard | *Changed (see Decisions):* every card is one link, to the engagement's page, with one tab stop and nothing else focusable. Without a URL, the page shows no Event website button; unsafe addresses are treated as none. A DOM-order tab-sequence test on the Speaking page. |
+| 5 | Removing a URL removes all link behaviour | The engagement's page re-rendered without its URL loses the Event website button. Route tests check the list and detail responses after the URL is cleared. |
 | 6 | Date ranges and time zones handled correctly | Unit tests across a day boundary (Lusaka and Honolulu), for ranges, single days, "to be confirmed" and the sort orders, plus server grouping tests. |
 | 7 | Postponed and cancelled labelled accurately | Rendered-card tests for each section and status. Past cancellations sit under their own heading, and cancelled cards never show "Confirmed". |
 | 8 | Enquiries stored and acknowledged, never public | Route tests check that the enquiry is stored, that both emails are sent with the real template text, that the acknowledgement repeats nothing the visitor typed, and that the public list is unchanged. |
@@ -81,7 +81,7 @@ Other changes:
 **Browser pass** with sample engagements (local dev server, real rendering):
 - **Widths:** 375, 768, 1024 and 1280 px, in light and dark mode. No horizontal overflow at any width, and long unbroken titles wrap inside the card.
 - **Layout:** cards run horizontally from 768 px and stack on phones. The portrait shows from 1280 px. The filters fit on one row, and on phones the listings heading stays on the first screen.
-- **Cards (revised 3 November):** a calendar-leaf date (month band, days, year), grey for past and cancelled engagements. The status badges sit under the title, beside the framed image (shown from 640 px). Session, location and organiser share one row of labelled details on wide screens; the dates are in the leaf, and screen readers get them in full. Descriptions are cut to two lines, and "Show more" shares the footer row with the calendar and media actions and the "Event website" label, which is styled as a button. The whole card is still the one link. A thin bar marks an engagement that is happening now. A card like the live one measures about 320 px tall at 1280 px wide, down from about 500 px.
+- **Cards and engagement pages (revised 3 November):** each card shows only the calendar-leaf date, type, status badges, title, role, city and photo, with "View details", and is about 134 px tall at 1280 px. The card opens the engagement's page, `/speaking/<id>`, which has the full description, topics, Mutale's session, venue, organiser, recordings, Add to calendar and the Event website button. Unpublished or hidden engagements show "isn't available" there, as the API returns the same 404 for them. Checked at 1280 and 375 px, light and dark.
 - **Navigation:** "Speaking" is the current page in the nav, marked with an underline and `aria-current`.
 - **Keyboard:** Tab order runs from the hero button to the linked cards only, then the closing button. On the enquiry page it runs through the current step's fields, then Back and Next. Focus rings are visible.
 - **Filters:** they narrow every section and announce "Showing 2 of 11 engagements". Clear filters resets them.
@@ -104,6 +104,8 @@ Other changes:
 5. Expect the cookie banner to appear again for returning visitors (consent version 2).
 
 ## Decisions taken with the client
+
+- **Cards open the engagement's page (3 November, decided by the developer; needs the client's agreement):** the brief (§6, §10 items 3–5) has a card open the event website, and a card without one not clickable. Cards now hold less, and every card opens the engagement's own page, where the Event website button opens the event's site. If the client wants the brief's rule back, the card can link to the website again and carry a separate "View details" button.
 
 - **Approved:** the closing-invitation wording and the four format descriptions from the mockup. The unapproved line "Every enquiry is read personally." was removed.
 - **Portrait:** `mutale-navy-suit-and-tie.png`, the homepage photo.

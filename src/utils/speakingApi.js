@@ -27,6 +27,15 @@ export async function fetchPublicSpeakingEngagements() {
   };
 }
 
+/** One published engagement, or null when there is none to show (not published, hidden or removed). */
+export async function fetchPublicSpeakingEngagement(id) {
+  const res = await request(`${API_BASE}/speaking/engagements/${encodeURIComponent(id)}`, { cache: 'no-store' });
+  if (res.status === 404) return null;
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || !json?.ok) throw new Error(json?.message || 'This speaking engagement could not be loaded.');
+  return json.data || null;
+}
+
 /** Signed timestamp the enquiry form must send back (spam protection). */
 export async function fetchEnquiryToken() {
   const res = await request(`${API_BASE}/speaking/enquiry-token`, { cache: 'no-store' });

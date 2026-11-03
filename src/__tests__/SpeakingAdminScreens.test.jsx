@@ -119,7 +119,7 @@ describe('SpeakingEngagementFormPage', () => {
     expect(screen.getByText('This web address is too long.')).toBeInTheDocument();
 
     fireEvent.change(url, { target: { value: 'https://example.org/event' } });
-    expect(screen.getByText('The card will link to https://example.org/event (opens in a new tab).')).toBeInTheDocument();
+    expect(screen.getByText('The Event website button on the engagement’s page will open https://example.org/event in a new tab.')).toBeInTheDocument();
   });
 
   it('keeps text typed while a save is in flight, and leaves it unsaved', async () => {
