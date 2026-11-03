@@ -20,6 +20,7 @@ export default function FormField({
   max,
   step,
   maxLength,
+  autoComplete,
   children,
   onClearError,
 }) {
@@ -116,6 +117,7 @@ export default function FormField({
         max={max}
         step={step}
         maxLength={maxLength}
+        autoComplete={autoComplete}
         aria-invalid={hasError || undefined}
         aria-describedby={describedBy}
         className={baseClass}

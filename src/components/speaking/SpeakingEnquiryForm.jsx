@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { CheckCircle2, Info, Send } from 'lucide-react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, Info, Send } from 'lucide-react';
 import FormField from '../ui/FormField';
 import Spinner from '../ui/Spinner';
 import { useFieldErrors } from '../../hooks/useFieldErrors';
+import { FORM_VALIDATED_CLASS } from '../../utils/formFieldHighlight';
 import { fetchEnquiryToken, submitSpeakingEnquiry } from '../../utils/speakingApi';
 import {
   ENQUIRY_FORMAT_OPTIONS,
@@ -11,6 +12,13 @@ import {
   normalizeEnquiryInput,
 } from '../../../shared/speakingEnquiries.js';
 import { DEFAULT_SPEAKING_TIMEZONE } from '../../../shared/speakingEngagements.js';
+import {
+  ENQUIRY_STEPS,
+  REVIEW_STEP,
+  enquiryReview,
+  errorsForStep,
+  firstStepWithErrors,
+} from './enquirySteps';
 
 // Must match ENQUIRY_HONEYPOT_FIELD on the server.
 const HONEYPOT = 'leave_this_blank';
@@ -20,6 +28,10 @@ const HONEYPOT = 'leave_this_blank';
 // token near the second, so people never meet either.
 const TOKEN_MIN_AGE_MS = 3_200;
 const TOKEN_MAX_AGE_MS = 23 * 60 * 60 * 1000;
+
+const CHECK_FIELDS = 'Please check the highlighted fields.';
+// The sticky site header covers about this much of the top of the window.
+const HEADER_CLEARANCE_PX = 72;
 
 const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 
@@ -56,13 +68,121 @@ const TIME_ZONES = (() => {
 
 const choose = (options, label) => [{ value: '', label }, ...options];
 
+function Notice() {
+  return (
+    <p className="flex items-start gap-2 rounded-xl bg-navy-50 px-4 py-3 text-sm text-navy-700">
+      <Info size={16} className="mt-0.5 shrink-0 text-cyan-700 dark:text-cyan-300" aria-hidden="true" />
+      <span>
+        Sending this form does not confirm availability. You’ll receive an acknowledgement, and availability will be
+        confirmed separately. Your details are used only to reply to this enquiry, never for mailing lists.
+      </span>
+    </p>
+  );
+}
+
+/**
+ * Where the visitor is in the form. Steps already reached can be opened again;
+ * steps ahead can't be skipped to until the ones before them are complete.
+ */
+function StepProgress({ current, furthest, onSelect }) {
+  return (
+    <ol aria-label="Progress" className="grid grid-cols-4 gap-2 sm:gap-3">
+      {ENQUIRY_STEPS.map((item, index) => {
+        const done = index < current;
+        const active = index === current;
+        const content = (
+          <>
+            <span className={`block h-1.5 rounded-full ${index <= current ? 'bg-cyan-700' : 'bg-navy-100'}`} aria-hidden="true" />
+            <span className="mt-2 flex items-center gap-1.5 text-xs font-semibold">
+              <span
+                className={`flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] ${
+                  done
+                    ? 'bg-cyan-700 text-white'
+                    : active
+                      ? 'text-cyan-800 ring-2 ring-inset ring-cyan-700 dark:text-cyan-300'
+                      : 'bg-navy-50 text-navy-600'
+                }`}
+                aria-hidden="true"
+              >
+                {done ? <Check size={12} strokeWidth={3} /> : index + 1}
+              </span>
+              {/* Phones show the numbers alone; the step's heading names it. */}
+              <span className={`sr-only sm:not-sr-only ${active ? 'text-navy-900' : 'text-navy-600'}`}>
+                {item.title}
+                {done && <span className="sr-only">, completed</span>}
+              </span>
+            </span>
+          </>
+        );
+        const reachable = !active && index <= furthest;
+        return (
+          <li key={item.id} aria-current={active ? 'step' : undefined}>
+            {reachable ? (
+              <button
+                type="button"
+                onClick={() => onSelect(index)}
+                className="block w-full rounded-md text-left hover:opacity-80 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-cyan-700 focus-visible:ring-offset-2"
+              >
+                {content}
+              </button>
+            ) : (
+              <div>{content}</div>
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function Review({ form, onEdit }) {
+  return (
+    <div className="space-y-4">
+      {enquiryReview(form).map((section) => (
+        <section key={section.step} aria-label={section.title} className="rounded-xl border border-navy-100 p-4 sm:p-5">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-navy-900">{section.title}</h3>
+            <button
+              type="button"
+              onClick={() => onEdit(section.step)}
+              className="rounded-sm text-sm font-semibold text-cyan-800 hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-cyan-700 focus-visible:ring-offset-2 dark:text-cyan-300"
+            >
+              Edit{' '}
+              <span className="sr-only">{section.title}</span>
+            </button>
+          </div>
+          <dl className="mt-3 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[11rem_minmax(0,1fr)]">
+            {section.rows.map(({ label, value }) => (
+              <Fragment key={label}>
+                <dt className="text-navy-600">{label}</dt>
+                <dd className="whitespace-pre-line wrap-anywhere text-navy-900">{value}</dd>
+              </Fragment>
+            ))}
+          </dl>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The "Invite Me to Speak" form, one step at a time: about you, the event,
+ * what you have in mind, then a review before sending. Each step is checked
+ * before the next one opens, and nothing is sent until the visitor presses Send.
+ */
 export default function SpeakingEnquiryForm({ successMessage }) {
   const { fieldErrors, setErrors, clearField, clearAll, rootRef } = useFieldErrors();
   const [form, setForm] = useState(EMPTY);
+  const [step, setStep] = useState(0);
+  const [furthest, setFurthest] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [sent, setSent] = useState(null);
   const successRef = useRef(null);
+  const stepHeading = useRef(null);
+  // Set when a step opens normally, so focus moves to its heading. A step
+  // opened to show an error leaves focus to the invalid field instead.
+  const announceStep = useRef(false);
   // What takes focus once the form is back, if the button that had it was
   // disabled or replaced, so keyboard users keep their place.
   const focusNext = useRef('');
@@ -102,6 +222,19 @@ export default function SpeakingEnquiryForm({ successMessage }) {
     focusNext.current = '';
   }, [submitting, sent, rootRef]);
 
+  // A new step starts at its heading, with the top of the form in view.
+  useEffect(() => {
+    if (!announceStep.current) return;
+    announceStep.current = false;
+    // Next submits the form, which the site-wide highlighter (FormErrorHighlight)
+    // marks as validated; left on, the new step's empty required fields would
+    // show as errors before the visitor has typed anything.
+    rootRef.current?.classList.remove(FORM_VALIDATED_CLASS);
+    const top = rootRef.current?.getBoundingClientRect().top ?? 0;
+    if (top < HEADER_CLEARANCE_PX) rootRef.current?.scrollIntoView?.({ block: 'start' });
+    stepHeading.current?.focus({ preventScroll: true });
+  }, [step, rootRef]);
+
   const handleChange = (event) => {
     const { name, type, checked, value } = event.target;
     clearField(name);
@@ -112,13 +245,48 @@ export default function SpeakingEnquiryForm({ successMessage }) {
     setForm((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
   };
 
+  /** Opens the step with errors and highlights them there; true if there were any. */
+  const showErrors = (errors) => {
+    const index = firstStepWithErrors(errors);
+    if (index === -1) return false;
+    setStep(index);
+    setErrors(errorsForStep(errors, index));
+    return true;
+  };
+
+  // Moving on checks every step before the one asked for, so none can be skipped.
+  const goTo = (target) => {
+    setError('');
+    if (target > step) {
+      const { errors } = normalizeEnquiryInput(form);
+      const blocking = Object.fromEntries(
+        ENQUIRY_STEPS.slice(0, target).flatMap((_, index) => Object.entries(errorsForStep(errors, index))),
+      );
+      if (showErrors(blocking)) {
+        setError(CHECK_FIELDS);
+        return;
+      }
+    }
+    clearAll();
+    announceStep.current = true;
+    setStep(target);
+    setFurthest((value) => Math.max(value, target));
+  };
+
+  // Once the review has been reached, editing an earlier step returns straight to it.
+  const nextStep = furthest === REVIEW_STEP ? REVIEW_STEP : step + 1;
+
   const handleSubmit = async (event) => {
     event.preventDefault();
+    // Enter in a field moves on, like the Next button, until the last step.
+    if (step < REVIEW_STEP) {
+      goTo(nextStep);
+      return;
+    }
     setError('');
     const { errors } = normalizeEnquiryInput(form);
-    if (Object.keys(errors).length) {
-      setErrors(errors);
-      setError('Please check the highlighted fields.');
+    if (showErrors(errors)) {
+      setError(CHECK_FIELDS);
       return;
     }
     clearAll();
@@ -128,11 +296,12 @@ export default function SpeakingEnquiryForm({ successMessage }) {
       const result = await submitSpeakingEnquiry({ ...form, form_token: formToken });
       setSent({ email: form.email.trim(), acknowledged: result.acknowledgementSent !== false });
       setForm(EMPTY);
+      setStep(0);
+      setFurthest(0);
     } catch (err) {
       setError(err.message);
-      // Invalid fields take focus themselves; otherwise focus returns to Send.
-      if (err.fieldErrors) setErrors(err.fieldErrors);
-      else focusNext.current = 'button[type="submit"]';
+      // Invalid fields take focus themselves, on their own step; otherwise focus returns to Send.
+      if (!(err.fieldErrors && showErrors(err.fieldErrors))) focusNext.current = 'button[type="submit"]';
       // The token stays valid after other failures; a rejected one is replaced
       // quietly, keeping everything typed, ready for the next Send.
       if (err.tokenRejected) requestToken();
@@ -151,9 +320,9 @@ export default function SpeakingEnquiryForm({ successMessage }) {
     return (
       <div className="rounded-2xl border border-cyan-200 bg-white p-6 sm:p-8 text-center dark:border-cyan-500/30" role="status">
         <CheckCircle2 size={40} className="mx-auto text-cyan-700 dark:text-cyan-300" aria-hidden="true" />
-        <h3 ref={successRef} tabIndex={-1} className="mt-3 text-xl font-bold text-navy-900 focus:outline-none">
+        <h2 ref={successRef} tabIndex={-1} className="mt-3 text-xl font-bold text-navy-900 focus:outline-none">
           Thank you — your enquiry has been received.
-        </h3>
+        </h2>
         <p className="mt-2 text-navy-600">{successMessage}</p>
         <p className="mt-2 text-sm text-navy-600">
           {sent.acknowledged
@@ -172,6 +341,7 @@ export default function SpeakingEnquiryForm({ successMessage }) {
   }
 
   const needsLocation = form.attendance_format === 'in_person' || form.attendance_format === 'hybrid';
+  const field = (name) => ({ name, value: form[name], onChange: handleChange, error: fieldErrors[name] });
 
   return (
     <form ref={rootRef} onSubmit={handleSubmit} noValidate className="relative rounded-2xl border border-navy-100 bg-white p-5 sm:p-8">
@@ -183,70 +353,84 @@ export default function SpeakingEnquiryForm({ successMessage }) {
         </label>
       </div>
 
-      <p className="mb-6 flex items-start gap-2 rounded-xl bg-navy-50 px-4 py-3 text-sm text-navy-700">
-        <Info size={16} className="mt-0.5 shrink-0 text-cyan-700 dark:text-cyan-300" aria-hidden="true" />
-        <span>
-          Sending this form does not confirm availability. You’ll receive an acknowledgement, and availability will be
-          confirmed separately. Your details are used only to reply to this enquiry, never for mailing lists.
+      <StepProgress current={step} furthest={furthest} onSelect={goTo} />
+
+      <h2 ref={stepHeading} tabIndex={-1} className="mt-7 text-xl font-bold text-navy-900 focus:outline-none">
+        <span className="block text-xs font-semibold uppercase tracking-widest text-cyan-800 dark:text-cyan-300">
+          Step {step + 1} of {ENQUIRY_STEPS.length}
+          <span className="sr-only">:</span>
         </span>
-      </p>
+        {' '}
+        {ENQUIRY_STEPS[step].title}
+      </h2>
 
-      <fieldset className="space-y-4">
-        <legend className="text-base font-semibold text-navy-900">About you</legend>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FormField label="Your name" name="organiser_name" value={form.organiser_name} onChange={handleChange} required maxLength={ENQUIRY_LIMITS.organiser_name} error={fieldErrors.organiser_name} />
-          <FormField label="Organisation" name="organisation" value={form.organisation} onChange={handleChange} required maxLength={ENQUIRY_LIMITS.organisation} error={fieldErrors.organisation} />
-          <FormField label="Email address" name="email" type="email" value={form.email} onChange={handleChange} required maxLength={ENQUIRY_LIMITS.email} error={fieldErrors.email} />
-          <FormField label="Phone (optional)" name="phone" type="tel" value={form.phone} onChange={handleChange} maxLength={ENQUIRY_LIMITS.phone} error={fieldErrors.phone} />
-        </div>
-      </fieldset>
+      <div className="mt-5 space-y-4">
+        {step === 0 && (
+          <>
+            <Notice />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField label="Your name" {...field('organiser_name')} required maxLength={ENQUIRY_LIMITS.organiser_name} autoComplete="name" />
+              <FormField label="Organisation" {...field('organisation')} required maxLength={ENQUIRY_LIMITS.organisation} autoComplete="organization" />
+              <FormField label="Email address" {...field('email')} type="email" required maxLength={ENQUIRY_LIMITS.email} autoComplete="email" />
+              <FormField label="Phone (optional)" {...field('phone')} type="tel" maxLength={ENQUIRY_LIMITS.phone} autoComplete="tel" />
+            </div>
+          </>
+        )}
 
-      <fieldset className="mt-8 space-y-4">
-        <legend className="text-base font-semibold text-navy-900">About the event</legend>
-        <FormField label="Event title" name="event_title" value={form.event_title} onChange={handleChange} required maxLength={ENQUIRY_LIMITS.event_title} error={fieldErrors.event_title} />
+        {step === 1 && (
+          <>
+            <FormField label="Event title" {...field('event_title')} required maxLength={ENQUIRY_LIMITS.event_title} />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField label="Proposed date" {...field('proposed_start_date')} type="date" disabled={form.date_undecided} required={!form.date_undecided} />
+              <FormField label="End date (optional)" {...field('proposed_end_date')} type="date" disabled={form.date_undecided} helpText="For events over several days." />
+            </div>
+            <label className="flex items-center gap-3 text-sm text-navy-700 cursor-pointer">
+              <input
+                type="checkbox"
+                name="date_undecided"
+                checked={form.date_undecided}
+                onChange={handleChange}
+                className="h-4 w-4 rounded border-navy-300 text-cyan-700 focus:ring-cyan-700"
+              />
+              Date not decided yet
+            </label>
+            <FormField label="Time zone" {...field('timezone')} type="select" options={TIME_ZONES} />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField label="Format" {...field('attendance_format')} type="select" options={choose(ENQUIRY_FORMAT_OPTIONS, 'Choose…')} required />
+              <FormField
+                label={needsLocation ? 'Location' : 'Location (optional)'}
+                {...field('location')}
+                required={needsLocation}
+                maxLength={ENQUIRY_LIMITS.location}
+                placeholder="City, country or venue"
+              />
+            </div>
+          </>
+        )}
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FormField label="Proposed date" name="proposed_start_date" type="date" value={form.proposed_start_date} onChange={handleChange} disabled={form.date_undecided} required={!form.date_undecided} error={fieldErrors.proposed_start_date} />
-          <FormField label="End date (optional)" name="proposed_end_date" type="date" value={form.proposed_end_date} onChange={handleChange} disabled={form.date_undecided} helpText="For events over several days." error={fieldErrors.proposed_end_date} />
-        </div>
-        <label className="flex items-center gap-3 text-sm text-navy-700 cursor-pointer">
-          <input
-            type="checkbox"
-            name="date_undecided"
-            checked={form.date_undecided}
-            onChange={handleChange}
-            className="h-4 w-4 rounded border-navy-300 text-cyan-700 focus:ring-cyan-700"
-          />
-          Date not decided yet
-        </label>
-        <FormField label="Time zone" name="timezone" type="select" value={form.timezone} onChange={handleChange} options={TIME_ZONES} error={fieldErrors.timezone} />
+        {step === 2 && (
+          <>
+            <div className="grid gap-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+              <FormField label="Intended audience" {...field('audience')} required maxLength={ENQUIRY_LIMITS.audience} placeholder="e.g. laboratory managers and quality officers" />
+              <FormField label="Audience size (optional)" {...field('audience_size')} maxLength={ENQUIRY_LIMITS.audience_size} placeholder="e.g. 150" />
+            </div>
+            <FormField label="Proposed topic" {...field('topic')} textarea rows={2} required maxLength={ENQUIRY_LIMITS.topic} />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField label="Role you have in mind" {...field('requested_role')} type="select" options={choose(ENQUIRY_ROLE_OPTIONS, 'Choose…')} required />
+              <FormField label="Budget or honorarium (optional)" {...field('budget')} maxLength={ENQUIRY_LIMITS.budget} />
+            </div>
+            <FormField label="Anything else (optional)" {...field('message')} textarea rows={4} maxLength={ENQUIRY_LIMITS.message} />
+          </>
+        )}
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FormField label="Format" name="attendance_format" type="select" value={form.attendance_format} onChange={handleChange} options={choose(ENQUIRY_FORMAT_OPTIONS, 'Choose…')} required error={fieldErrors.attendance_format} />
-          <FormField
-            label={needsLocation ? 'Location' : 'Location (optional)'}
-            name="location"
-            value={form.location}
-            onChange={handleChange}
-            required={needsLocation}
-            maxLength={ENQUIRY_LIMITS.location}
-            placeholder="City, country or venue"
-            error={fieldErrors.location}
-          />
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <FormField label="Intended audience" name="audience" value={form.audience} onChange={handleChange} required maxLength={ENQUIRY_LIMITS.audience} placeholder="e.g. laboratory managers and quality officers" error={fieldErrors.audience} />
-          <FormField label="Audience size (optional)" name="audience_size" value={form.audience_size} onChange={handleChange} maxLength={ENQUIRY_LIMITS.audience_size} placeholder="e.g. 150" error={fieldErrors.audience_size} />
-        </div>
-        <FormField label="Proposed topic" name="topic" textarea rows={2} value={form.topic} onChange={handleChange} required maxLength={ENQUIRY_LIMITS.topic} error={fieldErrors.topic} />
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FormField label="Role you have in mind" name="requested_role" type="select" value={form.requested_role} onChange={handleChange} options={choose(ENQUIRY_ROLE_OPTIONS, 'Choose…')} required error={fieldErrors.requested_role} />
-          <FormField label="Budget or honorarium (optional)" name="budget" value={form.budget} onChange={handleChange} maxLength={ENQUIRY_LIMITS.budget} error={fieldErrors.budget} />
-        </div>
-        <FormField label="Anything else (optional)" name="message" textarea rows={4} value={form.message} onChange={handleChange} maxLength={ENQUIRY_LIMITS.message} error={fieldErrors.message} />
-      </fieldset>
+        {step === REVIEW_STEP && (
+          <>
+            <p className="text-sm text-navy-600">Check your details before sending. Nothing is sent until you press Send enquiry.</p>
+            <Review form={form} onEdit={goTo} />
+            <Notice />
+          </>
+        )}
+      </div>
 
       {error && (
         <p className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-400/30 dark:bg-red-500/10 dark:text-red-200" role="alert">
@@ -254,14 +438,37 @@ export default function SpeakingEnquiryForm({ successMessage }) {
         </p>
       )}
 
-      <button
-        type="submit"
-        disabled={submitting}
-        className="mt-6 inline-flex items-center gap-2 rounded-xl bg-cyan-700 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-cyan-700 focus-visible:ring-offset-2"
-      >
-        {submitting ? <Spinner size={16} /> : <Send size={16} aria-hidden="true" />}
-        {submitting ? 'Sending…' : 'Send enquiry'}
-      </button>
+      {/* Enter in a field presses the one submit button, wherever it sits. */}
+      <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-navy-100 pt-6">
+        {step > 0 ? (
+          <button
+            type="button"
+            onClick={() => goTo(step - 1)}
+            disabled={submitting}
+            className="inline-flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-navy-700 hover:bg-navy-50 disabled:opacity-60 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-cyan-700 focus-visible:ring-offset-2"
+          >
+            <ArrowLeft size={16} aria-hidden="true" />
+            Back
+          </button>
+        ) : <span />}
+        <button
+          type="submit"
+          disabled={submitting}
+          className="inline-flex items-center gap-2 rounded-xl bg-cyan-700 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-cyan-700 focus-visible:ring-offset-2"
+        >
+          {step === REVIEW_STEP ? (
+            <>
+              {submitting ? <Spinner size={16} /> : <Send size={16} aria-hidden="true" />}
+              {submitting ? 'Sending…' : 'Send enquiry'}
+            </>
+          ) : (
+            <>
+              {furthest === REVIEW_STEP ? 'Back to review' : 'Next'}
+              <ArrowRight size={16} aria-hidden="true" />
+            </>
+          )}
+        </button>
+      </div>
     </form>
   );
 }

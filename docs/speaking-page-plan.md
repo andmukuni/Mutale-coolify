@@ -151,11 +151,11 @@ New files: `src/pages/SpeakingPage.jsx`, `src/components/speaking/*`.
 
 Layout follows the mockup:
 
-1. **Banner (`speaking.hero`).** Eyebrow, heading, text, "Invite Me to Speak" (scrolls to `#invite`), and "Download Speaker Profile". The download button renders **only** if a profile PDF has been uploaded. The portrait shows **only** if an approved image has been uploaded; otherwise the banner has no photo. The optional quote is empty by default. Height stays compact (`py-12 md:py-16`) so the listings start above the fold on desktop.
+1. **Banner (`speaking.hero`).** Eyebrow, heading, text, "Invite Me to Speak" (opens `/speaking/invite`), and "Download Speaker Profile". The download button renders **only** if a profile PDF has been uploaded. The portrait shows **only** if an approved image has been uploaded; otherwise the banner has no photo. The optional quote is empty by default. Height stays compact (`py-12 md:py-16`) so the listings start above the fold on desktop.
 2. **Formats strip (`speaking.formats`, can be switched off).** Keynotes, Workshops, Panel Discussions, Facilitation. Static text only, no links.
 3. **Upcoming Engagements.** An "In progress" label on current events, then **Dates to be announced**, then **Previous Engagements**. When there are no records, it says: "New speaking engagements will be announced here."
-4. **Closing invite (`speaking.cta`).** Links to `#invite`.
-5. **Enquiry form (`#invite`).**
+4. **Closing invite (`speaking.cta`).** Links to `/speaking/invite`.
+5. **Enquiry form.** Moved on 3 November 2026 to its own page, `/speaking/invite` (`SpeakingInvitePage.jsx`), as a four-step form: About you, The event, What you have in mind, Review and send. Old links to `/speaking#invite` redirect there.
 
 **Card component.** One `EngagementCardBody` is placed inside one of two shells:
 

@@ -6,7 +6,7 @@ Everything lives in the admin sidebar under **Speaking**:
 
 - **Speaking Engagements**: every engagement, with tabs for All, Published, Drafts and Hidden, a search box (title, organiser, place or topic) and a year filter.
 - **Add Engagement**: a new record.
-- **Enquiries**: invitations sent from the "Invite Me to Speak" form.
+- **Enquiries**: invitations sent from the "Invite Me to Speak" page (`/speaking/invite`), which both "Invite Me to Speak" buttons on the Speaking page open.
 
 The page's own text, the speaker profile PDF and the portrait are edited in **Sections**, under the **Speaking** group.
 
@@ -63,7 +63,7 @@ Changes appear the next time a visitor loads the page.
 
 ## Speaking enquiries
 
-When someone sends the "Invite Me to Speak" form:
+The form asks for its details in four steps (about the organiser, the event, what they have in mind, then a review), and nothing is sent until the organiser presses **Send enquiry** on the review. When someone sends it:
 
 1. The enquiry is saved under **Speaking → Enquiries** with the status *New*.
 2. An alert goes to the **Alert Email** in **Settings → Notifications**. If that is empty, it goes to the Reply-To address in **Settings → Email**.
@@ -93,7 +93,7 @@ In **Sections**, open the **Speaking** group:
 - **Speaking formats**: one line per format, written as `Title | short description`. These describe how you contribute and are not links. The strip can be switched off.
 - **Engagement listings**: the section headings (including the heading for past cancellations) and the empty-page message.
 - **Closing invitation**: the band near the bottom of the page. It can be switched off.
-- **Enquiry form**: the heading, introduction and the message shown after sending. Don't promise availability there.
+- **Invite Me to Speak page**: the heading, introduction and the message shown after sending, on the page that holds the enquiry form. Don't promise availability there.
 
 ## Activity counts
 

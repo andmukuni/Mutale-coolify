@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { defaultWebsitePages, mergeWebsitePages } from '../data/websitePages';
 import { DEFAULT_MENU_ITEMS, buildMenuTree } from '../../shared/menuItems.js';
 import { navLinks } from '../config/siteHeader.js';
@@ -16,6 +16,7 @@ vi.mock('../utils/speakingApi', () => ({
 vi.mock('../utils/speakingMetrics', () => ({ trackSpeaking: mocks.track }));
 
 import SpeakingPage from '../pages/SpeakingPage';
+import SpeakingInvitePage from '../pages/SpeakingInvitePage';
 
 const card = (overrides) => ({
   id: 'spk-x',
@@ -50,28 +51,21 @@ describe('SpeakingPage — introduction', () => {
     renderPage();
     expect(screen.getByRole('heading', { level: 1, name: 'Conversations that Create Change' })).toBeInTheDocument();
     expect(screen.getByText(/Keynotes, panel discussions, workshops, and facilitated conversations/)).toBeInTheDocument();
-    // No unapproved promises about how enquiries are handled.
-    expect(screen.getByText('Share a few details about your event and what you have in mind.')).toBeInTheDocument();
-    expect(screen.queryByText(/read personally/)).not.toBeInTheDocument();
     await screen.findByText('New speaking engagements will be announced here.');
   });
 
-  it('sends both invite buttons to the enquiry form on the same page', async () => {
+  it('sends both invite buttons to the Invite Me to Speak page, with no form on this one', async () => {
     const { container } = renderPage();
     const invites = screen.getAllByRole('link', { name: /Invite Me to Speak/ });
     expect(invites).toHaveLength(2);
-    for (const link of invites) expect(link).toHaveAttribute('href', '#invite');
-
-    const section = container.querySelector('#invite');
-    expect(within(section).getByRole('heading', { name: 'Tell me about your event' })).toBeInTheDocument();
-    expect(within(section).getByRole('button', { name: /Send enquiry/ })).toBeInTheDocument();
+    for (const link of invites) expect(link).toHaveAttribute('href', '/speaking/invite');
+    expect(container.querySelector('form')).toBeNull();
     await screen.findByText('New speaking engagements will be announced here.');
   });
 
-  it('hides the closing invitation when it is switched off, but keeps the form', async () => {
-    const { container } = renderPage({}, { 'speaking.cta': false });
+  it('keeps the banner’s invite button when the closing invitation is switched off', async () => {
+    renderPage({}, { 'speaking.cta': false });
     expect(screen.getAllByRole('link', { name: /Invite Me to Speak/ })).toHaveLength(1);
-    expect(container.querySelector('#invite form')).not.toBeNull();
     await screen.findByText('New speaking engagements will be announced here.');
   });
 
@@ -236,7 +230,7 @@ describe('SpeakingPage — keyboard order', () => {
   const tabbable = (root) => [...root.querySelectorAll(TABBABLE)].filter((el) => el.getAttribute('tabindex') !== '-1');
   const nameOf = (el) => el.getAttribute('aria-label') || el.getAttribute('name') || el.textContent.trim();
 
-  it('visits the invite button, linked cards only, the closing invitation, then the form', async () => {
+  it('visits the invite button, linked cards only, then the closing invitation', async () => {
     // Invited, so neither card offers "Add to calendar"; the card tests cover that button.
     mocks.fetchEngagements.mockResolvedValue({
       upcoming: [
@@ -252,14 +246,8 @@ describe('SpeakingPage — keyboard order', () => {
       'Invite Me to Speak',
       'Linked Summit — event website (opens in a new tab)',
       'Invite Me to Speak',
-      'organiser_name', 'organisation', 'email', 'phone',
-      'event_title', 'proposed_start_date', 'proposed_end_date', 'date_undecided', 'timezone',
-      'attendance_format', 'location', 'audience', 'audience_size', 'topic', 'requested_role', 'budget', 'message',
-      'Send enquiry',
     ]);
     expect(tabbable(plain)).toHaveLength(0);
-    // The spam trap is in the form but out of the tab order.
-    expect(container.querySelector('input[name="leave_this_blank"]')).not.toBeNull();
   });
 });
 
@@ -340,23 +328,18 @@ describe('SpeakingPage — filters', () => {
 });
 
 describe('SpeakingPage — invite link and counting', () => {
-  it('jumps to the enquiry form only after the listings above it have loaded', async () => {
-    let resolve;
-    mocks.fetchEngagements.mockReturnValue(new Promise((r) => { resolve = r; }));
-    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => { cb(0); return 1; });
-    const scroll = vi.fn();
-    Element.prototype.scrollIntoView = scroll;
-
-    renderPage({}, {}, { path: '/speaking#invite' });
-    expect(scroll).not.toHaveBeenCalled();
-
-    await act(async () => { resolve({ upcoming: [card({ id: 'u1', event_title: 'Soon', start_date: '2099-01-01' })], tba: [], previous: [], cancelled: [] }); });
-    expect(scroll).toHaveBeenCalledTimes(1);
-    expect(scroll.mock.contexts[0]).toBe(document.getElementById('invite'));
-    // Keyboard and screen-reader users land there too; the next Tab reaches the first field.
-    const heading = screen.getByRole('heading', { name: 'Tell me about your event' });
-    expect(heading).toHaveFocus();
-    expect(heading).toHaveAttribute('tabindex', '-1');
+  it('sends old links to the form’s place on this page to the Invite Me to Speak page', async () => {
+    mocks.profile = { websitePages: { ...defaultWebsitePages, sectionVisibility: {} } };
+    render(
+      <MemoryRouter initialEntries={['/speaking#invite']}>
+        <Routes>
+          <Route path="/speaking" element={<SpeakingPage />} />
+          <Route path="/speaking/invite" element={<SpeakingInvitePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('heading', { level: 1, name: 'Tell me about your event' })).toBeInTheDocument();
+    expect(mocks.fetchEngagements).not.toHaveBeenCalled();
   });
 
   it('counts speaker profile downloads', async () => {
@@ -364,5 +347,31 @@ describe('SpeakingPage — invite link and counting', () => {
     fireEvent.click(screen.getByRole('link', { name: /Download Speaker Profile/ }));
     expect(mocks.track).toHaveBeenCalledWith('profile_download');
     await screen.findByText('New speaking engagements will be announced here.');
+  });
+});
+
+describe('SpeakingInvitePage', () => {
+  function renderInvite(speaking = {}) {
+    mocks.profile = { websitePages: { ...defaultWebsitePages, speaking: { ...defaultWebsitePages.speaking, ...speaking } } };
+    return render(<MemoryRouter initialEntries={['/speaking/invite']}><SpeakingInvitePage /></MemoryRouter>);
+  }
+
+  it('uses the approved copy and starts the form at its first step', async () => {
+    renderInvite();
+    expect(screen.getByRole('heading', { level: 1, name: 'Tell me about your event' })).toBeInTheDocument();
+    expect(screen.getByText('Share a few details about your event and what you have in mind.')).toBeInTheDocument();
+    // No unapproved promises about how enquiries are handled.
+    expect(screen.queryByText(/read personally/)).not.toBeInTheDocument();
+    expect(screen.getByText(/does not confirm availability/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: /Step 1 of 4.*About you/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back to Speaking' })).toHaveAttribute('href', '/speaking');
+    await act(async () => {});
+  });
+
+  it('shows the copy saved in Sections', async () => {
+    renderInvite({ enquiryTitle: 'Bring Mutale to your event', enquiryIntro: 'A few questions first.' });
+    expect(screen.getByRole('heading', { level: 1, name: 'Bring Mutale to your event' })).toBeInTheDocument();
+    expect(screen.getByText('A few questions first.')).toBeInTheDocument();
+    await act(async () => {});
   });
 });

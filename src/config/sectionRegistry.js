@@ -321,7 +321,7 @@ export const SECTION_REGISTRY = [
       { key: 'heroEyebrow', label: 'Eyebrow', type: 'text', path: 'websitePages.speaking.heroEyebrow' },
       { key: 'heroTitle', label: 'Heading', type: 'text', path: 'websitePages.speaking.heroTitle' },
       { key: 'heroText', label: 'Supporting text', type: 'textarea', path: 'websitePages.speaking.heroText' },
-      { key: 'primaryButtonLabel', label: 'Primary button', type: 'text', path: 'websitePages.speaking.primaryButtonLabel', helpText: 'Takes visitors to the enquiry form at the bottom of the page.' },
+      { key: 'primaryButtonLabel', label: 'Primary button', type: 'text', path: 'websitePages.speaking.primaryButtonLabel', helpText: 'Opens the Invite Me to Speak page (/speaking/invite).' },
       { key: 'profileButtonLabel', label: 'Download button', type: 'text', path: 'websitePages.speaking.profileButtonLabel' },
       {
         key: 'speakerProfileFile',
@@ -375,14 +375,14 @@ export const SECTION_REGISTRY = [
       { key: 'ctaEyebrow', label: 'Eyebrow', type: 'text', path: 'websitePages.speaking.ctaEyebrow' },
       { key: 'ctaTitle', label: 'Heading', type: 'text', path: 'websitePages.speaking.ctaTitle' },
       { key: 'ctaText', label: 'Text', type: 'textarea', path: 'websitePages.speaking.ctaText' },
-      { key: 'ctaButtonLabel', label: 'Button', type: 'text', path: 'websitePages.speaking.ctaButtonLabel' },
+      { key: 'ctaButtonLabel', label: 'Button', type: 'text', path: 'websitePages.speaking.ctaButtonLabel', helpText: 'Opens the Invite Me to Speak page.' },
       { key: 'ctaBackgroundImage', label: 'Background image', type: 'image', path: 'websitePages.speaking.ctaBackgroundImage', helpText: 'Optional. Leave empty for the default navy background.' },
     ],
   },
   {
     id: 'speaking.enquiry',
     page: 'Speaking',
-    name: 'Enquiry form',
+    name: 'Invite Me to Speak page',
     type: 'dynamic',
     toggleable: false,
     fields: [

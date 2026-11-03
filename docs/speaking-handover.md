@@ -13,7 +13,8 @@ What was delivered against the *Speaking Page — Developer Requirements* brief 
   - conditional event-website links;
   - year, role and topic filters, which appear at 6 or more engagements;
   - Add to calendar, and recording/slides/photos/article actions;
-  - the "Invite Me to Speak" enquiry form.
+  - "Invite Me to Speak" buttons that open the enquiry page.
+- **Invite Me to Speak page** `/speaking/invite`: the enquiry form in four steps (About you, The event, What you have in mind, Review and send). Each step is checked before the next opens, and nothing is sent until **Send enquiry** on the review. Old links to `/speaking#invite` redirect here.
 - **Homepage:** a "Next Speaking Engagement" band. It shows the featured engagement, otherwise the next confirmed one, and can be switched off in Sections.
 - **Admin, under Speaking:**
   - engagements: list, form, preview, publish, hide, duplicate and delete, plus activity counts;
@@ -62,7 +63,7 @@ Other changes:
 ## Test results (3 November 2026)
 
 **Unit and component tests.** Run with `NODE_OPTIONS=--no-experimental-webstorage npx vitest run`.
-- 912 tests: 902 pass, 10 fail. All 208 tests in the Speaking test files pass.
+- 926 tests: 921 pass, 5 fail (re-run on 3 November after the card and enquiry-page changes; earlier runs showed 10 failures, the extra 5 being the clock-dependent ones below). Every Speaking test passes.
 - Node 26 needs that flag. Without it, its built-in `localStorage` breaks jsdom; the Dockerfile's Node 20 doesn't need it.
 - Every one of the 10 failures predates this work:
   - `ReceiptsPage` (3), `EventSessionsPanel` (1) and `shared/receiptSnapshotHtml` (1) fail the same way on the code from before this work.
@@ -82,14 +83,14 @@ Other changes:
 - **Layout:** cards run horizontally from 768 px and stack on phones. The portrait shows from 1280 px. The filters fit on one row, and on phones the listings heading stays on the first screen.
 - **Cards (revised 3 November):** the date tile keeps to its own height, and past or cancelled engagements get a grey tile. Status badges sit under the title, and the card's details run across the row. Calendar and media actions share a footer with "Event website". Descriptions longer than three lines are cut short with a "Show more" button. The button is a separate control: screen readers always get the full text, and the card still has only one link.
 - **Navigation:** "Speaking" is the current page in the nav, marked with an underline and `aria-current`.
-- **Keyboard:** Tab order runs from the hero button to the linked cards only, then the closing button, then the form fields in order. "Invite Me to Speak" lands focus on the form. Focus rings are visible.
+- **Keyboard:** Tab order runs from the hero button to the linked cards only, then the closing button. On the enquiry page it runs through the current step's fields, then Back and Next. Focus rings are visible.
 - **Filters:** they narrow every section and announce "Showing 2 of 11 engagements". Clear filters resets them.
 - **Labels and actions:**
   - Calendar adds appear only for confirmed, scheduled, upcoming engagements.
   - Media actions appear on the past masterclass.
   - A past engagement still marked Invited keeps its label.
   - Past cancellations are listed apart.
-- **Enquiry form:** validates the nine required fields and moves focus to the first one. I didn't submit it, because a real submission emails the configured address.
+- **Enquiry page (revised 3 November):** each step highlights only its own missing fields and moves focus to the first one. Enter moves on like Next, and focus lands on each new step's heading. The review lists what was entered, and Edit returns to the right step, with "Back to review" to come back. Checked at 1280 and 375 px, light and dark. I didn't submit it, because a real submission emails the configured address.
 - **Not checked in a browser:** the admin screens, because the browser wasn't signed in. They are covered by component tests for the list, the form, enquiries, the Sections drawer and the sidebar.
 
 **Smoke test** of existing features on 2 November: home, the events list, event detail, registration (sends signed-out visitors to sign-in), shop, cart, contact and about all loaded without failed requests. The local database has no upcoming events or products, so a full checkout wasn't possible.

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { Link, Navigate, useLocation } from 'react-router-dom';
 import { ArrowRight, Download, RefreshCw } from 'lucide-react';
 import defaultPortrait from '../assets/mutale-navy-suit-and-tie.png';
 import PageHeaderBackdrop from '../components/PageHeaderBackdrop';
@@ -13,7 +13,6 @@ import {
   hasActiveFilters,
 } from '../components/speaking/engagementFilterRules';
 import SpeakingEngagementCard from '../components/speaking/SpeakingEngagementCard';
-import SpeakingEnquiryForm from '../components/speaking/SpeakingEnquiryForm';
 import { parseSpeakingFormats } from '../components/speaking/speakingFormats';
 import { useData } from '../context/DataContext';
 import { defaultWebsitePages, normalizeSectionVisibility } from '../data/websitePages';
@@ -21,8 +20,9 @@ import { resolveMediaUrl } from '../utils/mediaUrl';
 import { fetchPublicSpeakingEngagements } from '../utils/speakingApi';
 import { trackSpeaking } from '../utils/speakingMetrics';
 
-const ENQUIRY_ANCHOR = 'invite';
-const ENQUIRY_HEADING = 'speaking-enquiry';
+// The enquiry form has its own page; links to where it used to be on this one are sent there.
+const INVITE_PATH = '/speaking/invite';
+const OLD_INVITE_ANCHOR = '#invite';
 const UPCOMING_HEADING = 'speaking-upcoming';
 
 /** `focusable` lets the page move focus to the heading (it never joins the tab order). */
@@ -65,6 +65,12 @@ function LoadingCards() {
 }
 
 export default function SpeakingPage() {
+  const { hash } = useLocation();
+  if (hash === OLD_INVITE_ANCHOR) return <Navigate to={INVITE_PATH} replace />;
+  return <SpeakingListings />;
+}
+
+function SpeakingListings() {
   const { profile } = useData();
   const defaults = defaultWebsitePages.speaking;
   const page = { ...defaults, ...(profile?.websitePages?.speaking || {}) };
@@ -74,27 +80,6 @@ export default function SpeakingPage() {
   const [result, setResult] = useState({ status: 'loading', data: null });
   const [attempt, setAttempt] = useState(0);
   const [filters, setFilters] = useState(NO_FILTERS);
-  const { hash } = useLocation();
-
-  // The page loads lazily, after the browser's own jump to #invite has been
-  // missed, and the listings above the form arrive later still. Jump once they
-  // have rendered, or the form ends up pushed off screen. Only once per arrival,
-  // so retrying the listings doesn't pull the visitor away. Focus moves to the
-  // form's heading too, so keyboard and screen-reader users start there.
-  const jumpedFor = useRef('');
-  useEffect(() => {
-    if (hash !== `#${ENQUIRY_ANCHOR}`) {
-      jumpedFor.current = '';
-      return undefined;
-    }
-    if (result.status === 'loading' || jumpedFor.current === hash) return undefined;
-    const frame = requestAnimationFrame(() => {
-      jumpedFor.current = hash;
-      document.getElementById(ENQUIRY_HEADING)?.focus({ preventScroll: true });
-      document.getElementById(ENQUIRY_ANCHOR)?.scrollIntoView();
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [hash, result.status]);
 
   useEffect(() => {
     let cancelled = false;
@@ -152,13 +137,13 @@ export default function SpeakingPage() {
             <h1 className="mt-3 text-3xl sm:text-4xl lg:text-5xl font-bold leading-tight">{text('heroTitle')}</h1>
             <p className="mt-4 max-w-2xl text-base sm:text-lg leading-relaxed text-navy-200">{text('heroText')}</p>
             <div className="mt-7 flex flex-wrap gap-3">
-              <a
-                href={`#${ENQUIRY_ANCHOR}`}
+              <Link
+                to={INVITE_PATH}
                 className="inline-flex items-center gap-2 rounded-xl bg-cyan-700 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-cyan-800 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-navy-900"
               >
                 {text('primaryButtonLabel')}
                 <ArrowRight size={16} aria-hidden="true" />
-              </a>
+              </Link>
               {profileFile && (
                 <a
                   href={resolveMediaUrl(profileFile)}
@@ -278,29 +263,16 @@ export default function SpeakingPage() {
               <h2 id="speaking-cta" className="mt-2 text-2xl sm:text-3xl font-bold">{text('ctaTitle')}</h2>
               <p className="mt-3 leading-relaxed text-navy-200">{text('ctaText')}</p>
             </div>
-            <a
-              href={`#${ENQUIRY_ANCHOR}`}
+            <Link
+              to={INVITE_PATH}
               className="inline-flex shrink-0 items-center gap-2 self-start rounded-xl bg-coral px-6 py-3 text-sm font-semibold text-navy-950 transition-colors hover:bg-[#f08a83] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-navy-950 md:self-center"
             >
               {text('ctaButtonLabel')}
               <ArrowRight size={16} aria-hidden="true" />
-            </a>
+            </Link>
           </div>
         </section>
       )}
-
-      <section id={ENQUIRY_ANCHOR} className="scroll-mt-10 bg-navy-50" aria-labelledby={ENQUIRY_HEADING}>
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-14">
-          <div className="mb-6">
-            <p className="text-xs font-semibold uppercase tracking-widest text-cyan-800 dark:text-cyan-300">{text('enquiryEyebrow')}</p>
-            <h2 id={ENQUIRY_HEADING} tabIndex={-1} className="mt-1 text-2xl sm:text-3xl font-bold text-navy-900 focus:outline-none">
-              {text('enquiryTitle')}
-            </h2>
-            <p className="mt-3 text-navy-600">{text('enquiryIntro')}</p>
-          </div>
-          <SpeakingEnquiryForm successMessage={text('enquirySuccessMessage')} />
-        </div>
-      </section>
     </div>
   );
 }
