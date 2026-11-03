@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import SpeakingEngagementCard from '../components/speaking/SpeakingEngagementCard';
 import { engagementBadges } from '../components/speaking/engagementBadges';
 import { previewEngagement } from '../../shared/speakingEngagements.js';
@@ -152,7 +152,59 @@ describe('SpeakingEngagementCard — separate actions', () => {
 
   it('lists topics when they are set', () => {
     render(<SpeakingEngagementCard engagement={{ ...PLAIN, topics: ['Leadership', 'Quality systems'] }} />);
-    expect(screen.getByText('Leadership · Quality systems')).toBeInTheDocument();
+    const list = screen.getByRole('list', { name: 'Topics' });
+    expect(within(list).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['Leadership', 'Quality systems']);
+  });
+
+  it('puts the actions and the event website label in one footer, above the stretched link', () => {
+    render(<SpeakingEngagementCard engagement={{ ...BASE, event_url: 'https://bmsz.org' }} />);
+    const footer = screen.getByRole('button', { name: /^Add to calendar:/ }).closest('.border-t');
+    expect(footer).toHaveClass('relative', 'z-10', 'pointer-events-none');
+    expect(within(footer).getByText('Event website')).toBeInTheDocument();
+  });
+
+  it('leaves the footer out when there is nothing to put in it', () => {
+    const { container } = render(<SpeakingEngagementCard engagement={{ ...PLAIN, event_url: null }} />);
+    expect(container.querySelector('.border-t')).toBeNull();
+  });
+});
+
+describe('SpeakingEngagementCard — long descriptions', () => {
+  const LONG = { ...PLAIN, event_url: 'https://bmsz.org', description: 'A long description. '.repeat(30) };
+
+  // jsdom has no layout, so the text is made to measure taller than its three lines.
+  // The overrides shadow jsdom's own getters on Element.prototype and are removed afterwards.
+  function withOverflow(run) {
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, get() { return 200; } });
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get() { return 60; } });
+    try {
+      run();
+    } finally {
+      delete HTMLElement.prototype.scrollHeight;
+      delete HTMLElement.prototype.clientHeight;
+    }
+  }
+
+  it('cuts a long description to three lines and lets it be opened, outside the card link', () => {
+    withOverflow(() => {
+      render(<SpeakingEngagementCard engagement={LONG} />);
+      const toggle = screen.getByRole('button', { name: 'Show more about BMSZ2026 Scientific Conference' });
+      const text = document.getElementById(toggle.getAttribute('aria-controls'));
+      expect(text).toHaveClass('line-clamp-3');
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      expect(toggle).toHaveClass('relative', 'z-10');
+      expect(screen.getByRole('link').contains(toggle)).toBe(false);
+
+      fireEvent.click(toggle);
+      expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      expect(toggle).toHaveAccessibleName('Show less about BMSZ2026 Scientific Conference');
+      expect(text).not.toHaveClass('line-clamp-3');
+    });
+  });
+
+  it('shows no button when the description fits', () => {
+    render(<SpeakingEngagementCard engagement={LONG} />);
+    expect(screen.queryByRole('button', { name: /^Show more/ })).not.toBeInTheDocument();
   });
 });
 

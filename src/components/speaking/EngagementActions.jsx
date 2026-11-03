@@ -38,9 +38,9 @@ export default function EngagementActions({ engagement, track = true }) {
   if (!calendar && media.length === 0) return null;
 
   return (
-    // Above the stretched link, but only the buttons take clicks: the gaps
-    // around them still open the event website.
-    <div className="pointer-events-none relative z-10 mt-3 flex flex-wrap gap-2">
+    // The card's footer lifts these above its stretched link and passes clicks
+    // in the gaps through to it; only the buttons themselves take clicks.
+    <div className="pointer-events-none flex flex-wrap gap-2">
       {media.map((item, index) => {
         const Icon = MEDIA_ICONS[item.type];
         const label = mediaActionLabel(item);

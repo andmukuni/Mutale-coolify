@@ -80,6 +80,7 @@ Other changes:
 **Browser pass** with sample engagements (local dev server, real rendering):
 - **Widths:** 375, 768, 1024 and 1280 px, in light and dark mode. No horizontal overflow at any width, and long unbroken titles wrap inside the card.
 - **Layout:** cards run horizontally from 768 px and stack on phones. The portrait shows from 1280 px. The filters fit on one row, and on phones the listings heading stays on the first screen.
+- **Cards (revised 3 November):** the date tile keeps to its own height, and past or cancelled engagements get a grey tile. Status badges sit under the title, and the card's details run across the row. Calendar and media actions share a footer with "Event website". Descriptions longer than three lines are cut short with a "Show more" button. The button is a separate control: screen readers always get the full text, and the card still has only one link.
 - **Navigation:** "Speaking" is the current page in the nav, marked with an underline and `aria-current`.
 - **Keyboard:** Tab order runs from the hero button to the linked cards only, then the closing button, then the form fields in order. "Invite Me to Speak" lands focus on the form. Focus rings are visible.
 - **Filters:** they narrow every section and announce "Showing 2 of 11 engagements". Clear filters resets them.
