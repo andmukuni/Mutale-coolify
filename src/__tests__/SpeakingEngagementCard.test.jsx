@@ -158,14 +158,14 @@ describe('SpeakingEngagementCard — separate actions', () => {
 
   it('puts the actions and the event website label in one footer, above the stretched link', () => {
     render(<SpeakingEngagementCard engagement={{ ...BASE, event_url: 'https://bmsz.org' }} />);
-    const footer = screen.getByRole('button', { name: /^Add to calendar:/ }).closest('.border-t');
-    expect(footer).toHaveClass('relative', 'z-10', 'pointer-events-none');
+    const footer = screen.getByRole('button', { name: /^Add to calendar:/ }).closest('.relative.z-10');
+    expect(footer).toHaveClass('pointer-events-none');
     expect(within(footer).getByText('Event website')).toBeInTheDocument();
   });
 
   it('leaves the footer out when there is nothing to put in it', () => {
     const { container } = render(<SpeakingEngagementCard engagement={{ ...PLAIN, event_url: null }} />);
-    expect(container.querySelector('.border-t')).toBeNull();
+    expect(container.querySelector('.relative.z-10')).toBeNull();
   });
 });
 
@@ -185,20 +185,22 @@ describe('SpeakingEngagementCard — long descriptions', () => {
     }
   }
 
-  it('cuts a long description to three lines and lets it be opened, outside the card link', () => {
+  it('cuts a long description to two lines and lets it be opened from the footer, outside the card link', () => {
     withOverflow(() => {
       render(<SpeakingEngagementCard engagement={LONG} />);
       const toggle = screen.getByRole('button', { name: 'Show more about BMSZ2026 Scientific Conference' });
       const text = document.getElementById(toggle.getAttribute('aria-controls'));
-      expect(text).toHaveClass('line-clamp-3');
+      expect(text).toHaveClass('line-clamp-2');
       expect(toggle).toHaveAttribute('aria-expanded', 'false');
-      expect(toggle).toHaveClass('relative', 'z-10');
+      // In the footer, which sits above the stretched link; the button itself takes the click.
+      expect(toggle.closest('.relative.z-10')).not.toBeNull();
+      expect(toggle).toHaveClass('pointer-events-auto');
       expect(screen.getByRole('link').contains(toggle)).toBe(false);
 
       fireEvent.click(toggle);
       expect(toggle).toHaveAttribute('aria-expanded', 'true');
       expect(toggle).toHaveAccessibleName('Show less about BMSZ2026 Scientific Conference');
-      expect(text).not.toHaveClass('line-clamp-3');
+      expect(text).not.toHaveClass('line-clamp-2');
     });
   });
 
@@ -216,9 +218,8 @@ describe('SpeakingEngagementCard — content', () => {
     expect(card.getByText('Dec')).toBeInTheDocument();
     expect(card.getByText('02–03')).toBeInTheDocument();
     expect(card.getByText('2099')).toBeInTheDocument();
-    // …and the dates in full, under their label, for everyone.
-    expect(card.getByText('Dates', VISIBLE)).toBeInTheDocument();
-    expect(card.getByText('2–3 December 2099', VISIBLE)).toBeInTheDocument();
+    // …and the dates in full for screen readers, which skip the leaf.
+    expect(card.getByText('2–3 December 2099')).toHaveClass('sr-only');
     expect(card.getByRole('heading', { name: 'BMSZ2026 Scientific Conference' })).toBeInTheDocument();
     expect(card.getByText('Livingstone, Zambia')).toBeInTheDocument();
     expect(card.getByText('Speaker · Facilitator')).toBeInTheDocument();
@@ -241,7 +242,7 @@ describe('SpeakingEngagementCard — content', () => {
     expect(container.querySelector('ul')).toBeNull();
     expect(container.querySelectorAll('img')).toHaveLength(0);
     expect(screen.getByText('TBA')).toBeInTheDocument();
-    expect(screen.getByText('To be announced', VISIBLE)).toBeInTheDocument();
+    expect(screen.getByText('Dates to be announced')).toHaveClass('sr-only');
   });
 
   it('shows "Online" for online events', () => {
