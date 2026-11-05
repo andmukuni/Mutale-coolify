@@ -2,17 +2,20 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
+// Set API_PROXY_TARGET to reach an API running somewhere other than port 4000.
+const apiTarget = process.env.API_PROXY_TARGET || 'http://localhost:4000'
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     historyApiFallback: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:4000',
+        target: apiTarget,
         changeOrigin: true,
       },
       '/uploads': {
-        target: 'http://localhost:4000',
+        target: apiTarget,
         changeOrigin: true,
       },
     },
