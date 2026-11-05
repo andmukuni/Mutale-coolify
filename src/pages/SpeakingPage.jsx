@@ -4,7 +4,7 @@ import { ArrowRight, Download, RefreshCw } from 'lucide-react';
 import defaultPortrait from '../assets/mutale-navy-suit-and-tie.png';
 import PageHeaderBackdrop from '../components/PageHeaderBackdrop';
 import EngagementFilters from '../components/speaking/EngagementFilters';
-import EngagementGridCard from '../components/speaking/EngagementGridCard';
+import EngagementCarousel from '../components/speaking/EngagementCarousel';
 import { EngagementRowList } from '../components/speaking/EngagementRow';
 import { listingBadges } from '../components/speaking/engagementBadges';
 import {
@@ -44,28 +44,16 @@ function SectionHeading({ eyebrow, title, id, focusable = false }) {
   );
 }
 
-const GRID = 'grid gap-5 sm:grid-cols-2 lg:grid-cols-3';
-
-/** Upcoming engagements as equal cards, one to three a row by screen width. */
-function EngagementGrid({ engagements }) {
-  return (
-    <ul className={GRID}>
-      {engagements.map((engagement) => (
-        // Each card fills its cell, so cards in a row share one height.
-        <li key={engagement.id} className="flex">
-          <EngagementGridCard engagement={engagement} headingLevel="h3" />
-        </li>
-      ))}
-    </ul>
-  );
-}
-
+// Shaped like the carousel: one card on phones, two from 640 px.
 // Announced through the section's status line, which is always present.
 function LoadingCards() {
   return (
-    <div className={GRID}>
-      {[0, 1, 2].map((key) => (
-        <div key={key} className="h-72 rounded-2xl border border-navy-100 bg-white animate-pulse" aria-hidden="true" />
+    <div className="flex gap-4 overflow-hidden sm:gap-5" aria-hidden="true">
+      {[0, 1].map((key) => (
+        <div
+          key={key}
+          className={`h-80 w-full shrink-0 rounded-2xl border border-navy-100 bg-white animate-pulse motion-reduce:animate-none sm:w-[calc((100%-1.25rem)/2)] ${key ? 'hidden sm:block' : ''}`}
+        />
       ))}
     </div>
   );
@@ -240,7 +228,7 @@ function SpeakingListings() {
             )}
             {result.status === 'ready' && (
               <>
-                {upcoming.length > 0 && <EngagementGrid engagements={upcoming} />}
+                {upcoming.length > 0 && <EngagementCarousel engagements={upcoming} />}
                 {nothingAhead && (
                   <p className="rounded-2xl border border-dashed border-navy-200 bg-white px-6 py-10 text-center text-navy-600">
                     {text('emptyMessage')}

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import {
@@ -64,6 +65,9 @@ export default function EngagementGridCard({ engagement, headingLevel = 'h3', li
   const eventType = optionLabel(SPEAKING_EVENT_TYPES, engagement.event_type);
   const badges = listingBadges(engagement);
   const image = engagement.image_url ? resolveMediaUrl(engagement.image_url) : '';
+  // A photo that fails to load (moved, deleted, offline) gives way to the date panel.
+  const [failedImage, setFailedImage] = useState('');
+  const showImage = Boolean(image) && failedImage !== image;
 
   // Forced-colours mode drops rings, so the link also keeps a transparent
   // outline (outline-hidden) that the system then draws in its focus colour.
@@ -76,15 +80,16 @@ export default function EngagementGridCard({ engagement, headingLevel = 'h3', li
       className={`relative flex h-full w-full flex-col overflow-hidden rounded-2xl border border-navy-100 bg-white transition-shadow ${linkedClasses}`}
       data-linked={to ? 'true' : 'false'}
     >
-      {/* A little shallower on phones, where the cards stack. */}
-      <div className="relative aspect-[2/1] shrink-0 overflow-hidden bg-navy-900 sm:aspect-[16/9]">
-        {image ? (
+      {/* Shallower where the card is wide (phones, and two to a row on large screens), so a whole card fits on screen. */}
+      <div className="relative aspect-[2/1] shrink-0 overflow-hidden bg-navy-900 sm:aspect-[16/9] lg:aspect-[2/1]">
+        {showImage ? (
           <>
             <img
               src={image}
               alt={engagement.image_alt || ''}
+              onError={() => setFailedImage(image)}
               // Portraits: keep faces in view rather than centring on the middle.
-              className="absolute inset-0 h-full w-full object-cover object-[50%_25%] transition-transform duration-300 group-hover:scale-[1.03]"
+              className="absolute inset-0 h-full w-full object-cover object-[50%_25%] motion-safe:transition-transform motion-safe:duration-300 motion-safe:group-hover:scale-[1.03]"
             />
             {leaf && <DateChip leaf={leaf} />}
           </>
@@ -142,7 +147,7 @@ export default function EngagementGridCard({ engagement, headingLevel = 'h3', li
             aria-hidden="true"
           >
             View details
-            <ArrowRight size={15} className="transition-transform group-hover:translate-x-0.5" />
+            <ArrowRight size={15} className="motion-safe:transition-transform motion-safe:group-hover:translate-x-0.5" />
           </span>
         )}
       </div>

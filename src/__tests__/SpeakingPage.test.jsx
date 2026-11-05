@@ -244,10 +244,16 @@ describe('SpeakingPage — keyboard order', () => {
     const plain = (await screen.findByRole('heading', { name: 'Plain Forum' })).closest('article');
 
     // Every card opens its own page, whether or not the event has a website.
+    // The carousel's controls follow the cards. (Tests have no layout, so one
+    // card is in view, as on phones; with two in view the controls aren't shown.)
     expect(tabbable(container).map(nameOf)).toEqual([
       'Invite Me to Speak',
       'Linked Summit',
       'Plain Forum',
+      'Engagement 1',
+      'Engagement 2',
+      'Previous engagement',
+      'Next engagement',
       'Invite Me to Speak',
     ]);
     expect(tabbable(plain)).toHaveLength(1);
@@ -385,8 +391,8 @@ describe('SpeakingPage — filters', () => {
   });
 });
 
-describe('SpeakingPage — upcoming grid and undated rows', () => {
-  it('shows upcoming engagements as cards in a grid, labelled only where they differ from the usual', async () => {
+describe('SpeakingPage — upcoming carousel and undated rows', () => {
+  it('shows upcoming engagements as cards in a carousel, labelled only where they differ from the usual', async () => {
     mocks.fetchEngagements.mockResolvedValue({
       upcoming: [
         card({ id: 'u1', event_title: 'Confirmed Summit', start_date: '2099-01-10', section: 'upcoming', audience_access: 'public' }),
@@ -396,8 +402,9 @@ describe('SpeakingPage — upcoming grid and undated rows', () => {
     });
     renderPage();
     const upcoming = await screen.findByRole('region', { name: 'Where I’ll Be Next' });
-    const list = within(upcoming).getByRole('list');
-    expect(list).toHaveClass('grid', 'sm:grid-cols-2', 'lg:grid-cols-3');
+    const carousel = within(upcoming).getByRole('group', { name: 'Upcoming engagements' });
+    expect(carousel).toHaveAttribute('aria-roledescription', 'carousel');
+    expect(within(within(carousel).getByRole('list')).getAllByRole('listitem')).toHaveLength(2);
 
     const confirmed = within(upcoming).getByRole('heading', { level: 3, name: 'Confirmed Summit' }).closest('article');
     expect(within(confirmed).getByRole('link')).toHaveAttribute('href', '/speaking/u1');

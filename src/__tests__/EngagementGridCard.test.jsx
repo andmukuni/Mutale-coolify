@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import EngagementGridCard from '../components/speaking/EngagementGridCard';
 import { listingBadges, pastBadges } from '../components/speaking/engagementBadges';
@@ -73,6 +73,17 @@ describe('EngagementGridCard — content', () => {
     renderCard({ ...BASE, image_url: 'https://cdn.example.org/mutale.jpg', image_alt: 'Mutale Mubanga speaking' });
     expect(screen.getByRole('img', { name: 'Mutale Mubanga speaking' })).toHaveAttribute('src', 'https://cdn.example.org/mutale.jpg');
     expect(screen.getByText('26–27').parentElement).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('falls back to the large date when the photo fails to load', () => {
+    renderCard({ ...BASE, image_url: 'https://cdn.example.org/missing.jpg', image_alt: 'Mutale Mubanga speaking' });
+    fireEvent.error(screen.getByRole('img', { name: 'Mutale Mubanga speaking' }));
+
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    const panel = screen.getByText('26–27').parentElement;
+    expect(within(panel).getByText('Nov')).toBeInTheDocument();
+    expect(panel).toHaveClass('inset-0');
+    expect(screen.getByText('26–27 November 2099')).toHaveClass('sr-only');
   });
 
   it('shows the type, title, role and city, and leaves the rest to the engagement’s page', () => {
