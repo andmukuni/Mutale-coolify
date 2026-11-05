@@ -1,6 +1,6 @@
 # Managing speaking engagements
 
-A short guide to the Speaking page at `/speaking` and its admin screens.
+A short guide to the Speaking pages, `/speaking` and `/speaking/past`, and their admin screens.
 
 Everything lives in the admin sidebar under **Speaking**:
 
@@ -14,7 +14,7 @@ Speaking engagements are kept apart from the events you organise and sell. Nothi
 
 ## Add an engagement
 
-Every published engagement has a short card on the Speaking page and its own page at `/speaking/<id>`, which the card opens. The card shows the date, type, status, title, your role and the city; everything else (your session, the venue, the organiser, the description, topics, recordings, Add to calendar and the event website) is on the engagement's page.
+Every published engagement is listed (as a card in the Speaking page's carousel if it's coming up with dates, otherwise as a row on the Where I've Spoken page at `/speaking/past`) and has its own page at `/speaking/<id>`, which the card or row opens. The card shows the date, type, status, title, your role and the city; everything else (your session, the venue, the organiser, the description, topics, recordings, Add to calendar and the event website) is on the engagement's page.
 
 Open **Speaking → Add Engagement**. Only the **Event title** is required, so a record can be saved as soon as you are invited.
 
@@ -50,16 +50,18 @@ Whether an engagement is on the website is decided only by the buttons in the **
 
 **Duplicate as draft** copies an engagement (for an event that repeats each year, say) into a new draft marked "(copy)". **Delete engagement** removes it permanently after you confirm. To take something off the website but keep it, hide it instead.
 
-## How the page arranges engagements
+## How the pages arrange engagements
+
+The Speaking page lists only upcoming engagements with dates. Everything else is on **Where I've Spoken** (`/speaking/past`), linked from under the upcoming engagements whenever it has something to list.
 
 - **Upcoming Engagements**: published engagements that haven't ended, nearest first. An event that is on today is marked **Happening now** and listed first.
-- **Dates to be announced**: published engagements marked "Dates to be confirmed".
-- **Previous Engagements**: published engagements whose last day has passed in the event's own time zone, most recent first. Moving into this section never changes a draft or hidden record. An engagement still marked *Invited* keeps its "Invited" label here; mark it *Confirmed* once you have spoken.
-- **Cancelled engagements**: past engagements marked Cancelled are listed under their own heading, never under "Where I've Spoken". An upcoming cancellation stays in Upcoming with its "Cancelled" label.
+- **Dates to be announced** (on Where I've Spoken): published engagements marked "Dates to be confirmed".
+- **Previous Engagements** (on Where I've Spoken): published engagements whose last day has passed in the event's own time zone, most recent first. Moving into this section never changes a draft or hidden record. An engagement still marked *Invited* keeps its "Invited" label here; mark it *Confirmed* once you have spoken.
+- **Cancelled engagements** (on Where I've Spoken): past engagements marked Cancelled are listed under their own heading, never under "Where I've Spoken". An upcoming cancellation stays in Upcoming with its "Cancelled" label.
 - **Postponed** and **Cancelled** labels show wherever the engagement appears. A cancelled engagement shows no participation label, so it never reads as a confirmed appearance.
 - **Add to calendar** appears on confirmed, scheduled, upcoming engagements with known dates. The calendar entry uses your session time when you've entered it (otherwise the event's days) and says that saving it does not register the visitor.
-- **Filters** by year, role and topic appear once six or more engagements are published.
-- With nothing published, the page says "New speaking engagements will be announced here."
+- **Filters** by year, role and topic appear on Where I've Spoken once there are six or more past engagements (including past cancellations).
+- With nothing coming up with dates, the Speaking page says "New speaking engagements will be announced here."
 
 Changes appear the next time a visitor loads the page.
 
@@ -93,7 +95,7 @@ In **Sections**, open the **Speaking** group:
   - **Portrait**: the homepage's approved photo is used until you upload another. It shows beside the banner text on wide screens (1280px and up) and is left out on smaller ones, so the listings stay near the top.
   - **Quote beside the portrait**: stays hidden until you add it. Use only approved wording.
 - **Speaking formats**: one line per format, written as `Title | short description`. These describe how you contribute and are not links. The strip can be switched off.
-- **Engagement listings**: the section headings (including the heading for past cancellations) and the empty-page message.
+- **Engagement listings**: the headings on both Speaking pages (the Previous heading also names the Where I've Spoken page and the link to it, and there's one for past cancellations) and the message shown when nothing is coming up.
 - **Closing invitation**: the band near the bottom of the page. It can be switched off.
 - **Invite Me to Speak page**: the heading, introduction and the message shown after sending, on the page that holds the enquiry form. Don't promise availability there.
 

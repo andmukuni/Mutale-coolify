@@ -58,32 +58,48 @@ describe('EngagementGridCard — link', () => {
 });
 
 describe('EngagementGridCard — content', () => {
-  it('shows the date large when there is no photo, and the dates in full to screen readers', () => {
+  it('shows the date on a badge over the top of the card, and in full to screen readers', () => {
     renderCard(BASE);
     const card = within(screen.getByRole('article'));
-    const panel = card.getByText('26–27').parentElement;
-    expect(panel).toHaveAttribute('aria-hidden', 'true');
-    expect(within(panel).getByText('Nov')).toBeInTheDocument();
-    expect(within(panel).getByText('2099')).toBeInTheDocument();
+    const badge = card.getByText('26–27').parentElement;
+    expect(badge).toHaveAttribute('aria-hidden', 'true');
+    expect(within(badge).getByText('Nov')).toBeInTheDocument();
+    expect(within(badge).getByText('2099')).toBeInTheDocument();
+    // It sits above the stretched link, so it must let clicks through to it.
+    expect(badge).toHaveClass('pointer-events-none');
     expect(card.getByText('26–27 November 2099')).toHaveClass('sr-only');
-    expect(screen.queryByRole('img')).not.toBeInTheDocument();
   });
 
-  it('shows the photo with its description, and the date in a corner of it', () => {
-    renderCard({ ...BASE, image_url: 'https://cdn.example.org/mutale.jpg', image_alt: 'Mutale Mubanga speaking' });
+  it('shows a panel with an icon for the kind of event when there is no photo', () => {
+    const { container } = renderCard(BASE);
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    const panel = container.querySelector('[class*="from-navy-950"]');
+    expect(panel).toHaveAttribute('aria-hidden', 'true');
+    expect(panel.querySelector('svg')).not.toBeNull();
+  });
+
+  it('shows the photo with its description, with the same date badge', () => {
+    const { container } = renderCard({ ...BASE, image_url: 'https://cdn.example.org/mutale.jpg', image_alt: 'Mutale Mubanga speaking' });
     expect(screen.getByRole('img', { name: 'Mutale Mubanga speaking' })).toHaveAttribute('src', 'https://cdn.example.org/mutale.jpg');
     expect(screen.getByText('26–27').parentElement).toHaveAttribute('aria-hidden', 'true');
+    expect(container.querySelector('[class*="from-navy-950 via"]')).toBeNull();
   });
 
-  it('falls back to the large date when the photo fails to load', () => {
-    renderCard({ ...BASE, image_url: 'https://cdn.example.org/missing.jpg', image_alt: 'Mutale Mubanga speaking' });
+  it('falls back to the icon panel when the photo fails to load, keeping the date', () => {
+    const { container } = renderCard({ ...BASE, image_url: 'https://cdn.example.org/missing.jpg', image_alt: 'Mutale Mubanga speaking' });
     fireEvent.error(screen.getByRole('img', { name: 'Mutale Mubanga speaking' }));
 
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
-    const panel = screen.getByText('26–27').parentElement;
-    expect(within(panel).getByText('Nov')).toBeInTheDocument();
-    expect(panel).toHaveClass('inset-0');
+    expect(container.querySelector('[class*="from-navy-950 via"]')).not.toBeNull();
+    expect(within(screen.getByText('26–27').parentElement).getByText('Nov')).toBeInTheDocument();
     expect(screen.getByText('26–27 November 2099')).toHaveClass('sr-only');
+  });
+
+  it('says the dates are to be announced when they are', () => {
+    renderCard({ ...BASE, start_date: null, end_date: null, dates_tbc: true, section: 'tba' });
+    const badge = screen.getByText('TBA').parentElement;
+    expect(badge).toHaveAttribute('aria-hidden', 'true');
+    expect(within(badge).getByText('Dates')).toBeInTheDocument();
   });
 
   it('shows the type, title, role and city, and leaves the rest to the engagement’s page', () => {

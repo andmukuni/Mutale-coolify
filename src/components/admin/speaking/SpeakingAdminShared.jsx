@@ -35,9 +35,9 @@ export function HideNotice({ className = '' }) {
 }
 
 /**
- * The engagement as it appears in the Speaking page's listings: a card for a
- * dated upcoming engagement, otherwise a row. Not a link here: a draft's page
- * can't be opened by visitors yet.
+ * The engagement as it appears where it's listed: a card in the Speaking
+ * page's carousel for a dated upcoming engagement, otherwise a row on the past
+ * engagements page. Not a link here: a draft's page can't be opened by visitors yet.
  */
 function ListingPreview({ engagement }) {
   if (engagement.section === 'upcoming') {
@@ -60,7 +60,7 @@ export function SpeakingPreviewModal({ record, isOpen, onClose }) {
       isOpen={isOpen}
       onClose={onClose}
       title="Preview"
-      subtitle="How this engagement looks to website visitors, in the Speaking page’s listings and on its own page."
+      subtitle="How this engagement looks to website visitors, where it’s listed and on its own page."
       size="xl"
     >
       <p className="mb-4 rounded-xl bg-navy-50 px-3 py-2 text-sm text-navy-700">{visibilitySummary(record)}</p>

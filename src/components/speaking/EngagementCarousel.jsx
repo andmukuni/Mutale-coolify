@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { SLIDE_WIDTH } from './carouselLayout';
 import EngagementGridCard from './EngagementGridCard';
 
 // A swipe or trackpad scroll updates the position once it has come to rest.
 const SETTLE_MS = 120;
 
-// Two cards in view from 640 px, one on phones with the next one peeking in so
-// it's clear the row can be swiped. A single engagement fills the phone width.
-const SLIDE_WIDTH = 'sm:w-[calc((100%-1.25rem)/2)]';
+// On phones, one card, with the next peeking in so it's clear the row can be
+// swiped; a single engagement fills the phone width. Wider screens: SLIDE_WIDTH.
 
 function prefersReducedMotion() {
   return typeof window !== 'undefined' && Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);

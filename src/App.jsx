@@ -14,6 +14,7 @@ const AboutPage = lazy(() => import('./pages/AboutPage'));
 const ExperiencePage = lazy(() => import('./pages/ExperiencePage'));
 const SpeakingPage = lazy(() => import('./pages/SpeakingPage'));
 const SpeakingInvitePage = lazy(() => import('./pages/SpeakingInvitePage'));
+const SpeakingPastPage = lazy(() => import('./pages/SpeakingPastPage'));
 const SpeakingEngagementPage = lazy(() => import('./pages/SpeakingEngagementPage'));
 const EventsPage = lazy(() => import('./pages/EventsPage'));
 const EventDetailPage = lazy(() => import('./pages/EventDetailPage'));
@@ -164,6 +165,7 @@ export default function App() {
         <Route path="/experience" element={<ExperiencePage />} />
         <Route path="/speaking" element={<SpeakingPage />} />
         <Route path="/speaking/invite" element={<SpeakingInvitePage />} />
+        <Route path="/speaking/past" element={<SpeakingPastPage />} />
         <Route path="/speaking/:id" element={<SpeakingEngagementPage />} />
         <Route path="/events" element={<EventsPage />} />
         <Route path="/events/:slug" element={<EventDetailPage />} />

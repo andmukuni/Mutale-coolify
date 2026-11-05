@@ -49,6 +49,10 @@ describe('EngagementCarousel', () => {
     const { carousel, track } = renderCarousel(several(3));
     expect(carousel).toHaveAttribute('aria-roledescription', 'carousel');
     expect(within(track).getAllByRole('listitem')).toHaveLength(3);
+    // Four in view on wide screens, three, two, then one (with the next peeking in) on phones.
+    expect(within(track).getAllByRole('listitem')[0]).toHaveClass(
+      'w-[85%]', 'sm:w-[calc((100%-1.25rem)/2)]', 'lg:w-[calc((100%-2.5rem)/3)]', 'xl:w-[calc((100%-3.75rem)/4)]',
+    );
     expect(within(track).getByRole('link', { name: 'Engagement B' })).toHaveAttribute('href', '/speaking/spk-2');
     expect(within(track).getAllByRole('heading', { level: 3 })).toHaveLength(3);
   });

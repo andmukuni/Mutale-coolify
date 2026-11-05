@@ -16,7 +16,17 @@ import { fetchPublicSpeakingEngagement } from '../utils/speakingApi';
 
 const BACK_LINK = 'inline-flex items-center gap-1.5 rounded-sm text-sm font-semibold text-cyan-300 hover:text-white focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-navy-900';
 
+/** Back to the page that lists the engagement: the Speaking page for upcoming ones, the past page for the rest. */
+function backLink(engagement) {
+  if (engagement?.section === 'previous' || engagement?.section === 'cancelled') {
+    return { to: '/speaking/past', label: 'All past engagements' };
+  }
+  if (engagement?.section === 'tba') return { to: '/speaking/past', label: 'More speaking engagements' };
+  return { to: '/speaking', label: 'All speaking engagements' };
+}
+
 function Header({ engagement }) {
+  const back = backLink(engagement);
   const eventType = optionLabel(SPEAKING_EVENT_TYPES, engagement?.event_type);
   const badges = engagement ? engagementBadges(engagement) : [];
   const roles = formatRoles(engagement?.roles);
@@ -28,9 +38,9 @@ function Header({ engagement }) {
     <section className="relative overflow-hidden bg-gradient-to-br from-navy-950 via-navy-900 to-cyan-900 text-white">
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10 grid gap-8 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
         <div className="min-w-0 wrap-anywhere">
-          <Link to="/speaking" className={BACK_LINK}>
+          <Link to={back.to} className={BACK_LINK}>
             <ArrowLeft size={16} aria-hidden="true" />
-            All speaking engagements
+            {back.label}
           </Link>
           {engagement ? (
             <>

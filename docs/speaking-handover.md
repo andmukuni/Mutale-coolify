@@ -7,14 +7,10 @@ What was delivered against the *Speaking Page — Developer Requirements* brief 
 
 ## What was delivered
 
-- **Public pages** `/speaking`, `/speaking/<id>` (one engagement) and `/speaking/invite` (the enquiry form). The Speaking page includes:
-  - the introductory banner and the speaking-formats strip;
-  - Upcoming, Dates to be announced, Previous and Cancelled sections;
-  - conditional event-website links;
-  - upcoming engagements as a carousel of cards, and past ones as compact rows by year;
-  - year, role and topic filters for past engagements, which appear once there are 6 or more;
-  - Add to calendar, and recording/slides/photos/article actions;
-  - "Invite Me to Speak" buttons that open the enquiry page.
+- **Public pages** `/speaking`, `/speaking/past` (Where I've Spoken), `/speaking/<id>` (one engagement) and `/speaking/invite` (the enquiry form).
+  - The Speaking page has the introductory banner, the speaking-formats strip, upcoming engagements as a carousel of cards, a link to Where I've Spoken (shown only when it has something to list) and "Invite Me to Speak" buttons that open the enquiry page.
+  - Where I've Spoken has past engagements as compact rows by year, year, role and topic filters for them once there are 6 or more, past cancellations under their own heading, and engagements whose dates are to be announced.
+  - Each engagement's page has conditional event-website links, Add to calendar, and recording/slides/photos/article actions. Its back link returns to the page that lists it.
 - **Invite Me to Speak page** `/speaking/invite`: the enquiry form in four steps (About you, The event, What you have in mind, Review and send). Each step is checked before the next opens, and nothing is sent until **Send enquiry** on the review. Old links to `/speaking#invite` redirect here.
 - **Homepage:** a "Next Speaking Engagement" band. It shows the featured engagement, otherwise the next confirmed one, and can be switched off in Sections.
 - **Admin, under Speaking:**
@@ -64,7 +60,7 @@ Other changes:
 ## Test results (5 November 2026)
 
 **Unit and component tests.** Run with `NODE_OPTIONS=--no-experimental-webstorage npx vitest run`.
-- 960 tests: 955 pass, 5 fail (re-run on 5 November after the carousel; earlier runs showed 10 failures, the extra 5 being the clock-dependent ones below). Every Speaking test passes.
+- 968 tests: 963 pass, 5 fail (re-run on 5 November after the four-card carousel and new card design; earlier runs showed 10 failures, the extra 5 being the clock-dependent ones below). Every Speaking test passes.
 - Node 26 needs that flag. Without it, its built-in `localStorage` breaks jsdom; the Dockerfile's Node 20 doesn't need it.
 - Every one of the 10 failures predates this work:
   - `ReceiptsPage` (3), `EventSessionsPanel` (1) and `shared/receiptSnapshotHtml` (1) fail the same way on the code from before this work.
@@ -81,13 +77,14 @@ Other changes:
 
 **Browser pass** with sample engagements (local dev server, real rendering):
 - **Widths:** 375, 768, 1024 and 1280 px, in light and dark mode. No horizontal overflow at any width, and long unbroken titles wrap inside the card.
-- **Layout (revised 5 November):** upcoming engagements are a carousel of equal cards: two in view from 640 px, and one on phones with the next one peeking in. Arrows and position dots appear under the cards only when there are more than fit; with one or two engagements on a wide screen there are none. The portrait shows from 1280 px, and on phones the listings heading stays on the first screen.
-- **Cards and engagement pages (revised 5 November):** each card shows the photo, or the dates large on the banner's navy when there is no photo, then the type, any label that sets it apart, the title, role and city, and "View details". Cards are about 590 × 446 px at 1280 px and 292 × 338 px on phones. A photo that fails to load gives way to the date panel. The card opens the engagement's page, `/speaking/<id>`, which has every label, the full description, topics, Mutale's session, venue, organiser, recordings, Add to calendar and the Event website button. Unpublished or hidden engagements show "isn't available" there, as the API returns the same 404 for them. Checked at 1280, 768 and 375 px, light and dark; the dates over a photo measure at least 5:1 contrast in dark mode.
+- **Layout (revised 5 November):** upcoming engagements are a carousel of equal cards: four in view from 1280 px, three from 1024 px, two from 640 px, and one on phones with the next one peeking in. Cards are about 290 px wide at every size (285–343 px measured). Arrows and position dots appear under the cards only when there are more than fit; with four or fewer engagements on a wide screen there are none. The portrait shows from 1280 px, and on phones the listings heading stays on the first screen.
+- **Cards and engagement pages (revised 5 November):** each card shows the photo (4:3), or a navy-and-teal panel with an icon for the kind of event when there is no photo, with the date on a badge floating over its bottom edge. Below come the type, any label that sets it apart, the title, the role and the place (each with a small icon), and a "View details" footer. Cards are about 285 × 506 px at 1280 px and 292 × 510 px on phones. A photo that fails to load gives way to the icon panel; the date badge stays. Clicks on the badge reach the card's link. The card opens the engagement's page, `/speaking/<id>`, which has every label, the full description, topics, Mutale's session, venue, organiser, recordings, Add to calendar and the Event website button. Unpublished or hidden engagements show "isn't available" there, as the API returns the same 404 for them. Checked at 1280, 768 and 375 px, light and dark; the dates over a photo measure at least 5:1 contrast in dark mode.
+- **Where I've Spoken page (5 November):** past, undated and cancelled engagements are on `/speaking/past`, reached from a link under the carousel that counts what's there ("9 past engagements · 2 with dates to be announced · 1 cancelled"). Its headings run h1 page title, h2 years, h3 rows, then h2 "Cancelled engagements" and "Dates to be announced". Checked at 1280 and 375 px: the link opens it, the filters work, a past engagement's back link returns to it, and nothing overflows sideways. The site's scroll-to-top on a new page is smooth, and the browser pane I tested in doesn't animate smooth page scrolls, so I couldn't watch it there; it's the same code every page uses.
 - **Past and undated engagements (5 November):** "Where I've Spoken" and past cancellations are compact rows (about 68 px each at 1280 px) under a heading for each year, most recent first. Each row shows a short date, the title, type, role and city, and only the Invited, Postponed or Cancelled labels. "Dates to be announced" uses the same rows without a date. The whole row opens the engagement's page.
 - **Navigation:** "Speaking" is the current page in the nav, marked with an underline and `aria-current`.
 - **Carousel (5 November):** checked at 1280 and 375 px, light and dark. The arrows and dots move one card at a time and stop at either end; a part swipe snaps to the next card, and the dots and the screen-reader status ("Engagements 2–3 of 5") follow once it settles. Tab and → bring an off-screen card fully into view; the page itself never scrolls sideways. With reduced motion, the arrows jump instead of sliding, and the card hover effects are off. Tested with 0, 1, 2, 3 and 5 upcoming engagements and a missing photo. Touch swipes were checked as native scrolling in the browser, not on a physical phone.
-- **Keyboard:** Tab order runs from the hero button through the upcoming cards, the carousel's dots and arrows, then the undated rows, the filters and past rows, then the closing button. Each card or row is one tab stop, and ← and → move between carousel cards. On the enquiry page it runs through the current step's fields, then Back and Next. Focus rings are visible.
-- **Filters (revised 5 November):** they sit under "Where I've Spoken", narrow only past engagements and past cancellations, and announce "Showing 2 of 10 past engagements". Upcoming engagements are always listed in full. When nothing matches, the filters stay with "No past engagements match these filters." Clear filters resets them.
+- **Keyboard:** on the Speaking page, Tab order runs from the hero button through the upcoming cards, the carousel's dots and arrows, the link to Where I've Spoken, then the closing button. On Where I've Spoken it runs from the back link through the filters, the past rows, the cancelled and undated rows, then the closing button. Each card or row is one tab stop, and ← and → move between carousel cards. On the enquiry page it runs through the current step's fields, then Back and Next. Focus rings are visible.
+- **Filters (revised 5 November):** they sit at the top of the Where I've Spoken page, narrow only past engagements and past cancellations, and announce "Showing 2 of 10 past engagements". Upcoming engagements are always listed in full. When nothing matches, the filters stay with "No past engagements match these filters." Clear filters resets them.
 - **Labels and actions:**
   - Calendar adds appear only for confirmed, scheduled, upcoming engagements.
   - Media actions appear on the past masterclass.
@@ -107,6 +104,8 @@ Other changes:
 5. Expect the cookie banner to appear again for returning visitors (consent version 2).
 
 ## Decisions taken with the client
+
+- **Past engagements on their own page (5 November, decided by the developer; needs the client's agreement):** the brief has Upcoming, Dates to be announced, Previous and Cancelled sections on one page. The Speaking page now shows only the upcoming carousel; the other three sections, with the filters, are on `/speaking/past`, linked from it. Nothing was removed from the site.
 
 - **Carousel and fewer labels in listings (5 November, decided by the developer; needs the client's agreement):** the mockup lists engagements one under another. Upcoming engagements are now a carousel of cards, and the filters cover past engagements only. Listings leave out "Confirmed" and "Open to the public", which describe most engagements; they show Invited, Postponed, Cancelled, Invitation only and Happening now. Every label is still on the engagement's own page, and the homepage band still shows them all.
 

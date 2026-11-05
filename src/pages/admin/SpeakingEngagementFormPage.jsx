@@ -597,7 +597,7 @@ export default function SpeakingEngagementFormPage() {
               value={form.topics}
               onChange={handleChange}
               placeholder="e.g. Leadership, Laboratory systems"
-              helpText="Separate topics with commas. Shown on the engagement’s page and used by the topic filter on the Speaking page."
+              helpText="Separate topics with commas. Shown on the engagement’s page and used by the topic filter for past engagements."
               error={fieldErrors.topics}
             />
           </Section>

@@ -126,33 +126,52 @@ describe('SpeakingPage — engagement sections', () => {
     expect(screen.queryByRole('heading', { name: 'Where I’ve Spoken' })).not.toBeInTheDocument();
   });
 
-  it('labels upcoming, to-be-announced, and previous engagements in separate sections', async () => {
+  it('lists only dated upcoming engagements, and links to the rest on their own page', async () => {
     mocks.fetchEngagements.mockResolvedValue({
       upcoming: [card({ id: 'u1', event_title: 'Future Summit', start_date: '2099-01-10', section: 'upcoming' })],
       tba: [card({ id: 't1', event_title: 'Undated Forum', dates_tbc: true, section: 'tba' })],
-      previous: [card({ id: 'p1', event_title: 'Past Conference', start_date: '2020-05-01', section: 'previous' })],
+      previous: [
+        card({ id: 'p1', event_title: 'Past Conference', start_date: '2020-05-01', section: 'previous' }),
+        card({ id: 'p2', event_title: 'Past Seminar', start_date: '2019-05-01', section: 'previous' }),
+      ],
+      cancelled: [card({ id: 'c1', event_title: 'Called Off', start_date: '2020-06-01', section: 'cancelled', event_status: 'cancelled' })],
     });
     renderPage();
 
     const upcoming = await screen.findByRole('region', { name: 'Where I’ll Be Next' });
     expect(within(upcoming).getByText('Upcoming Engagements')).toBeInTheDocument();
     expect(within(upcoming).getByRole('heading', { level: 3, name: 'Future Summit' })).toBeInTheDocument();
-    expect(within(upcoming).getByRole('heading', { level: 3, name: 'Dates to be announced' })).toBeInTheDocument();
-    expect(within(upcoming).getByRole('heading', { level: 4, name: 'Undated Forum' })).toBeInTheDocument();
+    for (const title of ['Undated Forum', 'Past Conference', 'Called Off']) {
+      expect(screen.queryByText(title)).not.toBeInTheDocument();
+    }
+    expect(screen.queryByRole('search')).not.toBeInTheDocument();
 
-    const previous = screen.getByRole('region', { name: 'Where I’ve Spoken' });
-    expect(within(previous).getByText('Previous Engagements')).toBeInTheDocument();
-    expect(within(previous).getByRole('heading', { name: 'Past Conference' })).toBeInTheDocument();
+    const link = screen.getByRole('link', { name: /Where I’ve Spoken/ });
+    expect(link).toHaveAttribute('href', '/speaking/past');
+    expect(link).toHaveTextContent('Previous Engagements');
+    expect(link).toHaveTextContent('2 past engagements · 1 with dates to be announced · 1 cancelled');
     expect(screen.queryByText('New speaking engagements will be announced here.')).not.toBeInTheDocument();
   });
 
-  it('keeps the empty message under Upcoming when only past engagements exist', async () => {
+  it('shows no link to past engagements when there are none', async () => {
     mocks.fetchEngagements.mockResolvedValue({
-      upcoming: [], tba: [], previous: [card({ id: 'p1', event_title: 'Past Conference', start_date: '2020-05-01', section: 'previous' })],
+      upcoming: [card({ id: 'u1', event_title: 'Future Summit', start_date: '2099-01-10', section: 'upcoming' })],
+      tba: [], previous: [], cancelled: [],
+    });
+    renderPage();
+    await screen.findByRole('heading', { name: 'Future Summit' });
+    expect(screen.queryByRole('link', { name: /Where I’ve Spoken/ })).not.toBeInTheDocument();
+  });
+
+  it('keeps the empty message under Upcoming when nothing is coming up with a date', async () => {
+    mocks.fetchEngagements.mockResolvedValue({
+      upcoming: [], cancelled: [],
+      tba: [card({ id: 't1', event_title: 'Undated Forum', dates_tbc: true, section: 'tba' })],
+      previous: [card({ id: 'p1', event_title: 'Past Conference', start_date: '2020-05-01', section: 'previous' })],
     });
     renderPage();
     expect(await screen.findByText('New speaking engagements will be announced here.')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Past Conference' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Where I’ve Spoken/ })).toHaveTextContent('1 past engagement · 1 with dates to be announced');
   });
 
   it('offers a retry when the engagements cannot be loaded', async () => {
@@ -185,42 +204,22 @@ describe('SpeakingPage — engagement sections', () => {
 
 // Brief §10 item 7: the labels survive into every section on the page.
 describe('SpeakingPage — postponed and cancelled labels', () => {
-  it('shows them on the cards in Upcoming, Dates to be announced, Previous and Cancelled', async () => {
-    const undated = { dates_tbc: true, start_date: null };
+  it('shows them on the upcoming cards (the past page has the rest)', async () => {
     mocks.fetchEngagements.mockResolvedValue({
       upcoming: [
         card({ id: 'u1', event_title: 'Moved Summit', start_date: '2099-01-10', section: 'upcoming', event_status: 'postponed' }),
         card({ id: 'u2', event_title: 'Dropped Summit', start_date: '2099-02-10', section: 'upcoming', event_status: 'cancelled' }),
       ],
-      tba: [
-        card({ id: 't1', event_title: 'Moved Forum', ...undated, section: 'tba', event_status: 'postponed' }),
-        card({ id: 't2', event_title: 'Dropped Forum', ...undated, section: 'tba', event_status: 'cancelled' }),
-      ],
-      previous: [card({ id: 'p1', event_title: 'Moved Seminar', start_date: '2020-05-01', section: 'previous', event_status: 'postponed' })],
-      cancelled: [card({ id: 'c1', event_title: 'Dropped Seminar', start_date: '2020-06-01', section: 'cancelled', event_status: 'cancelled' })],
+      tba: [], previous: [], cancelled: [],
     });
     renderPage();
 
     const upcoming = await screen.findByRole('region', { name: 'Where I’ll Be Next' });
-    const cardIn = (region, title, level = 3) => within(region).getByRole('heading', { level, name: title }).closest('article');
+    const cardIn = (title) => within(upcoming).getByRole('heading', { level: 3, name: title }).closest('article');
     const visible = { ignore: '[aria-hidden="true"], [aria-hidden="true"] *' };
-    const expectations = [
-      [cardIn(upcoming, 'Moved Summit'), 'Postponed'],
-      [cardIn(upcoming, 'Dropped Summit'), 'Cancelled'],
-      [cardIn(upcoming, 'Moved Forum', 4), 'Postponed'],
-      [cardIn(upcoming, 'Dropped Forum', 4), 'Cancelled'],
-      // Past engagements are rows under a heading for their year.
-      [cardIn(screen.getByRole('region', { name: 'Where I’ve Spoken' }), 'Moved Seminar', 4), 'Postponed'],
-      [cardIn(screen.getByRole('region', { name: 'Cancelled engagements' }), 'Dropped Seminar', 4), 'Cancelled'],
-    ];
-    for (const [article, label] of expectations) {
-      expect(within(article).getByText(label, visible)).toBeInTheDocument();
-      if (label === 'Cancelled') expect(within(article).queryByText('Confirmed')).not.toBeInTheDocument();
-    }
-    // Confirmed but in the past: not presented as a confirmed appearance either.
-    expect(within(cardIn(screen.getByRole('region', { name: 'Where I’ve Spoken' }), 'Moved Seminar', 4)).queryByText('Confirmed'))
-      .not.toBeInTheDocument();
-    expect(cardIn(upcoming, 'Dropped Forum', 4).textContent).not.toMatch(/to be announced/i);
+    expect(within(cardIn('Moved Summit')).getByText('Postponed', visible)).toBeInTheDocument();
+    expect(within(cardIn('Dropped Summit')).getByText('Cancelled', visible)).toBeInTheDocument();
+    expect(within(cardIn('Dropped Summit')).queryByText('Confirmed')).not.toBeInTheDocument();
   });
 });
 
@@ -231,14 +230,15 @@ describe('SpeakingPage — keyboard order', () => {
   const tabbable = (root) => [...root.querySelectorAll(TABBABLE)].filter((el) => el.getAttribute('tabindex') !== '-1');
   const nameOf = (el) => el.getAttribute('aria-label') || el.getAttribute('name') || el.textContent.trim();
 
-  it('visits the invite button, every card, then the closing invitation', async () => {
+  it('visits the invite button, every card, the link to past engagements, then the closing invitation', async () => {
     // Cards carry no other controls; Add to calendar and the event website are on each engagement’s page.
     mocks.fetchEngagements.mockResolvedValue({
       upcoming: [
         card({ id: 'u1', event_title: 'Linked Summit', start_date: '2099-01-10', section: 'upcoming', participation_status: 'invited', event_url: 'https://summit.example.org' }),
         card({ id: 'u2', event_title: 'Plain Forum', start_date: '2099-02-10', section: 'upcoming', participation_status: 'invited', event_url: null }),
       ],
-      tba: [], previous: [], cancelled: [],
+      tba: [], cancelled: [],
+      previous: [card({ id: 'p1', event_title: 'Past Conference', start_date: '2020-05-01', section: 'previous' })],
     });
     const { container } = renderPage();
     const plain = (await screen.findByRole('heading', { name: 'Plain Forum' })).closest('article');
@@ -254,6 +254,7 @@ describe('SpeakingPage — keyboard order', () => {
       'Engagement 2',
       'Previous engagement',
       'Next engagement',
+      'Previous EngagementsWhere I’ve Spoken1 past engagement',
       'Invite Me to Speak',
     ]);
     expect(tabbable(plain)).toHaveLength(1);
@@ -276,122 +277,7 @@ describe('Speaking page wiring', () => {
   });
 });
 
-describe('SpeakingPage — past engagements', () => {
-  it('lists them as compact rows under a heading for each year, most recent first, each opening its page', async () => {
-    mocks.fetchEngagements.mockResolvedValue({
-      upcoming: [], tba: [], cancelled: [],
-      previous: [
-        card({ id: 'p1', event_title: 'Accreditation Masterclass', event_type: 'workshop', roles: ['trainer'], start_date: '2026-09-28', end_date: '2026-10-02', city: 'Lusaka', country: 'Zambia', audience_access: 'public', section: 'previous' }),
-        card({ id: 'p2', event_title: 'Quality Week Forum', start_date: '2026-06-10', section: 'previous', participation_status: 'invited' }),
-        card({ id: 'p3', event_title: 'Lab Leaders Summit', start_date: '2025-11-14', section: 'previous' }),
-      ],
-    });
-    renderPage();
-    const previous = await screen.findByRole('region', { name: 'Where I’ve Spoken' });
-    expect(within(previous).getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual(['2026', '2025']);
-
-    const row = within(previous).getByRole('heading', { level: 4, name: 'Accreditation Masterclass' }).closest('article');
-    expect(within(row).getByText('28 Sep – 2 Oct')).toBeInTheDocument();
-    expect(within(row).getByText('Workshop · Trainer · Lusaka, Zambia')).toBeInTheDocument();
-    expect(within(row).getByRole('link', { name: 'Accreditation Masterclass' })).toHaveAttribute('href', '/speaking/p1');
-    // One link per row, and no "Open to the public" once the event is over.
-    expect(within(row).getAllByRole('link')).toHaveLength(1);
-    expect(within(row).queryByText('Open to the public')).not.toBeInTheDocument();
-    // An unconfirmed invitation still says so, so it never reads as a talk given.
-    const invited = within(previous).getByRole('heading', { level: 4, name: 'Quality Week Forum' }).closest('article');
-    expect(within(invited).getByText('Invited')).toBeInTheDocument();
-  });
-});
-
-describe('SpeakingPage — past cancellations', () => {
-  it('lists them under their own heading, never under “Where I’ve Spoken”', async () => {
-    mocks.fetchEngagements.mockResolvedValue({
-      upcoming: [], tba: [],
-      previous: [card({ id: 'p1', event_title: 'Took Place', start_date: '2020-05-01', section: 'previous' })],
-      cancelled: [card({ id: 'c1', event_title: 'Called Off', start_date: '2020-06-01', section: 'cancelled', event_status: 'cancelled' })],
-    });
-    renderPage();
-    const cancelled = await screen.findByRole('region', { name: 'Cancelled engagements' });
-    expect(within(cancelled).getByRole('heading', { name: 'Called Off' })).toBeInTheDocument();
-    expect(within(cancelled).getByText('Cancelled')).toBeInTheDocument();
-    const previous = screen.getByRole('region', { name: 'Where I’ve Spoken' });
-    expect(within(previous).queryByText('Called Off')).not.toBeInTheDocument();
-  });
-});
-
-describe('SpeakingPage — filters', () => {
-  const FILTERS = { name: 'Filter past engagements' };
-  const many = () => ({
-    upcoming: [
-      card({ id: 'u1', event_title: 'Leadership Keynote', start_date: '2099-03-01', roles: ['keynote_speaker'], topics: ['Leadership'], section: 'upcoming' }),
-    ],
-    tba: [card({ id: 't1', event_title: 'Undated Workshop', dates_tbc: true, roles: ['facilitator'], section: 'tba' })],
-    previous: [
-      card({ id: 'p1', event_title: 'Past Keynote', start_date: '2025-05-01', roles: ['keynote_speaker'], topics: ['leadership'], section: 'previous' }),
-      card({ id: 'p2', event_title: 'Past Training', start_date: '2025-02-01', roles: ['trainer'], section: 'previous' }),
-      card({ id: 'p3', event_title: 'Past Panel', start_date: '2024-09-01', roles: ['panellist'], section: 'previous' }),
-      card({ id: 'p4', event_title: 'Past Forum', start_date: '2024-05-01', roles: ['moderator'], topics: ['Leadership'], section: 'previous' }),
-      card({ id: 'p5', event_title: 'Past Seminar', start_date: '2023-05-01', roles: ['speaker'], section: 'previous' }),
-    ],
-    cancelled: [card({ id: 'c1', event_title: 'Called-off Keynote', start_date: '2024-03-01', roles: ['keynote_speaker'], section: 'cancelled', event_status: 'cancelled' })],
-  });
-  const titlesIn = (region) => within(region).queryAllByRole('article').map((a) => within(a).getByRole('heading').textContent);
-
-  it('stay hidden until the archive is large enough to need them, however much is coming up', async () => {
-    const data = many();
-    mocks.fetchEngagements.mockResolvedValue({
-      ...data,
-      upcoming: [...data.upcoming, ...data.previous.map((e) => ({ ...e, id: `u-${e.id}`, start_date: '2099-06-01', section: 'upcoming' }))],
-      previous: data.previous.slice(0, 4),
-    });
-    renderPage();
-    await screen.findByRole('heading', { name: 'Leadership Keynote' });
-    expect(screen.queryByRole('search', FILTERS)).not.toBeInTheDocument();
-  });
-
-  it('sit under “Where I’ve Spoken” and narrow only the past, by role, year and topic', async () => {
-    mocks.fetchEngagements.mockResolvedValue(many());
-    renderPage();
-    const previous = await screen.findByRole('region', { name: 'Where I’ve Spoken' });
-    const filters = within(previous).getByRole('search', FILTERS);
-    expect(within(filters).getByText('6 past engagements')).toBeInTheDocument();
-    const upcoming = screen.getByRole('region', { name: 'Where I’ll Be Next' });
-
-    fireEvent.change(within(filters).getByLabelText('Role'), { target: { value: 'keynote_speaker' } });
-    expect(titlesIn(previous)).toEqual(['Past Keynote']);
-    expect(titlesIn(screen.getByRole('region', { name: 'Cancelled engagements' }))).toEqual(['Called-off Keynote']);
-    expect(within(filters).getByText('Showing 2 of 6 past engagements')).toBeInTheDocument();
-    // What's coming up stays in full.
-    expect(titlesIn(upcoming)).toEqual(['Leadership Keynote', 'Undated Workshop']);
-
-    fireEvent.change(within(filters).getByLabelText('Year'), { target: { value: '2023' } });
-    expect(titlesIn(previous)).toEqual([]);
-    expect(screen.queryByRole('region', { name: 'Cancelled engagements' })).not.toBeInTheDocument();
-    // The filters stay, so the visitor can change them.
-    expect(within(previous).getByText('No past engagements match these filters.')).toBeInTheDocument();
-    expect(within(previous).getByRole('search', FILTERS)).toBe(filters);
-
-    fireEvent.click(within(filters).getByRole('button', { name: /Clear filters/ }));
-    // "leadership" and "Leadership" are one topic, offered as first written, and match both.
-    const topic = within(filters).getByLabelText('Topic');
-    expect([...topic.options].map((o) => o.value)).toEqual(['', 'leadership']);
-    fireEvent.change(topic, { target: { value: 'leadership' } });
-    expect(titlesIn(previous)).toEqual(['Past Keynote', 'Past Forum']);
-  });
-
-  it('move to the cancellations when nothing in the archive took place', async () => {
-    const cancelledOnly = Array.from({ length: 6 }, (_, i) => card({
-      id: `c${i}`, event_title: `Called Off ${i}`, start_date: `202${i}-05-01`, section: 'cancelled', event_status: 'cancelled',
-    }));
-    mocks.fetchEngagements.mockResolvedValue({ upcoming: [], tba: [], previous: [], cancelled: cancelledOnly });
-    renderPage();
-    const cancelled = await screen.findByRole('region', { name: 'Cancelled engagements' });
-    expect(within(cancelled).getByRole('search', FILTERS)).toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'Where I’ve Spoken' })).not.toBeInTheDocument();
-  });
-});
-
-describe('SpeakingPage — upcoming carousel and undated rows', () => {
+describe('SpeakingPage — upcoming carousel', () => {
   it('shows upcoming engagements as cards in a carousel, labelled only where they differ from the usual', async () => {
     mocks.fetchEngagements.mockResolvedValue({
       upcoming: [
@@ -415,21 +301,6 @@ describe('SpeakingPage — upcoming carousel and undated rows', () => {
     const invited = within(upcoming).getByRole('heading', { level: 3, name: 'Private Workshop' }).closest('article');
     expect(within(invited).getByText('Invited')).toBeInTheDocument();
     expect(within(invited).getByText('Invitation only')).toBeInTheDocument();
-  });
-
-  it('lists engagements with dates to be announced as rows, without a date', async () => {
-    mocks.fetchEngagements.mockResolvedValue({
-      upcoming: [],
-      tba: [card({ id: 't1', event_title: 'Undated Forum', dates_tbc: true, event_type: 'forum', city: 'Ndola', country: 'Zambia', section: 'tba', audience_access: 'invitation_only' })],
-      previous: [], cancelled: [],
-    });
-    renderPage();
-    const row = (await screen.findByRole('heading', { level: 4, name: 'Undated Forum' })).closest('article');
-    expect(within(row).getByText('Forum · Speaker · Ndola, Zambia')).toBeInTheDocument();
-    expect(within(row).getByText('Invitation only')).toBeInTheDocument();
-    expect(within(row).queryByText('Confirmed')).not.toBeInTheDocument();
-    expect(within(row).getByRole('link')).toHaveAttribute('href', '/speaking/t1');
-    expect(row.querySelectorAll('p')).toHaveLength(1);
   });
 });
 

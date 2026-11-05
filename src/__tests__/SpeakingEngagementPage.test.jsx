@@ -155,6 +155,20 @@ describe('SpeakingEngagementPage', () => {
     expect(screen.getByRole('link', { name: /Event website/ })).toBeInTheDocument();
   });
 
+  it('leads back to the past engagements page from a past, cancelled or undated engagement', async () => {
+    const cases = [
+      [{ section: 'previous', start_date: '2020-05-01', end_date: null }, 'All past engagements'],
+      [{ section: 'cancelled', start_date: '2020-05-01', end_date: null, event_status: 'cancelled' }, 'All past engagements'],
+      [{ section: 'tba', dates_tbc: true, start_date: null, end_date: null }, 'More speaking engagements'],
+    ];
+    for (const [overrides, label] of cases) {
+      mocks.fetchOne.mockResolvedValue({ ...BASE, ...overrides });
+      const { unmount } = renderPage();
+      expect(await screen.findByRole('link', { name: label })).toHaveAttribute('href', '/speaking/past');
+      unmount();
+    }
+  });
+
   it('shows the engagement a card passed at once, then the latest copy', async () => {
     let resolve;
     mocks.fetchOne.mockReturnValue(new Promise((r) => { resolve = r; }));

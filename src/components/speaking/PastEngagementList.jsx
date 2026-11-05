@@ -17,17 +17,23 @@ function groupByYear(engagements) {
  * Engagements that have passed, as one compact row each under a heading for
  * its year, so the list stays short as it grows. Each row opens the
  * engagement's page. Used for "Where I've Spoken" and past cancellations.
+ * `headingLevel` is the level of the year headings; row titles sit one below.
  */
-export default function PastEngagementList({ engagements }) {
+export default function PastEngagementList({ engagements, headingLevel = 'h3' }) {
+  const YearHeading = headingLevel;
+  const rowLevel = `h${Math.min(Number(headingLevel.slice(1)) + 1, 6)}`;
   return (
     <div className="space-y-6">
       {groupByYear(engagements).map(({ year, items }) => (
         <div key={year}>
-          <h3 className="mb-2 flex items-center gap-3 text-sm font-bold tracking-wider text-navy-700">
+          <YearHeading className="mb-2 flex items-center gap-3 text-sm font-bold tracking-wider text-navy-700">
             {year}
             <span className="h-px flex-1 bg-navy-200" aria-hidden="true" />
-          </h3>
-          <EngagementRowList engagements={items} rowProps={(engagement) => ({ badges: pastBadges(engagement) })} />
+          </YearHeading>
+          <EngagementRowList
+            engagements={items}
+            rowProps={(engagement) => ({ badges: pastBadges(engagement), headingLevel: rowLevel })}
+          />
         </div>
       ))}
     </div>
