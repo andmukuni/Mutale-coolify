@@ -125,25 +125,36 @@ describe('speaking API errors', () => {
 
 describe('filter rules', () => {
   const groups = {
-    upcoming: [engagement({ id: 'u', start_date: '2026-12-30', end_date: '2027-01-02', roles: ['panellist'], topics: ['Quality'] })],
-    tba: [engagement({ id: 't', start_date: null, roles: ['speaker'], section: 'tba' })],
-    previous: [engagement({ id: 'p', start_date: '2025-03-01', roles: ['keynote_speaker', 'speaker'], topics: ['quality', 'Growth'] })],
-    cancelled: [],
+    upcoming: [engagement({ id: 'u', start_date: '2099-03-01', roles: ['moderator'], topics: ['Upcoming only'] })],
+    tba: [engagement({ id: 't', start_date: null, roles: ['trainer'], section: 'tba' })],
+    previous: [
+      engagement({ id: 'p1', start_date: '2025-12-30', end_date: '2026-01-02', roles: ['panellist'], topics: ['Quality'] }),
+      engagement({ id: 'p2', start_date: '2024-03-01', roles: ['keynote_speaker', 'speaker'], topics: ['quality', 'Growth'] }),
+    ],
+    cancelled: [engagement({ id: 'c', start_date: '2023-05-01', roles: ['speaker'], event_status: 'cancelled', section: 'cancelled' })],
   };
+  const pastIds = (filtered) => [...filtered.previous, ...filtered.cancelled].map((e) => e.id);
 
-  it('offers only the years, roles and topics that occur', () => {
+  it('offers only the years, roles and topics that occur in past engagements', () => {
     const options = filterOptions(groups);
     expect(options.total).toBe(3);
-    expect(options.years).toEqual(['2027', '2026', '2025']);
+    expect(options.years).toEqual(['2026', '2025', '2024', '2023']);
     expect(options.roles.map((r) => r.value)).toEqual(['keynote_speaker', 'speaker', 'panellist']);
     expect(options.topics).toEqual(['Growth', 'Quality']);
   });
 
-  it('matches an event in every year it spans, and leaves undated ones out of a year filter', () => {
-    const ids = (filtered) => Object.values(filtered).flat().map((e) => e.id);
-    expect(ids(applyFilters(groups, { year: '2027', role: '', topic: '' }))).toEqual(['u']);
-    expect(ids(applyFilters(groups, { year: '', role: 'speaker', topic: '' }))).toEqual(['t', 'p']);
-    expect(ids(applyFilters(groups, { year: '', role: '', topic: 'QUALITY' }))).toEqual(['u', 'p']);
+  it('matches an event in every year it spans, and topics regardless of case', () => {
+    expect(pastIds(applyFilters(groups, { year: '2026', role: '', topic: '' }))).toEqual(['p1']);
+    expect(pastIds(applyFilters(groups, { year: '2025', role: '', topic: '' }))).toEqual(['p1']);
+    expect(pastIds(applyFilters(groups, { year: '', role: 'speaker', topic: '' }))).toEqual(['p2', 'c']);
+    expect(pastIds(applyFilters(groups, { year: '', role: '', topic: 'QUALITY' }))).toEqual(['p1', 'p2']);
+  });
+
+  it('leaves upcoming and undated engagements in full', () => {
+    const filtered = applyFilters(groups, { year: '2024', role: 'speaker', topic: 'Growth' });
+    expect(filtered.upcoming).toBe(groups.upcoming);
+    expect(filtered.tba).toBe(groups.tba);
+    expect(pastIds(filtered)).toEqual(['p2']);
   });
 });
 

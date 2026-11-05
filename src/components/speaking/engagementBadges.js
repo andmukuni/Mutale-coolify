@@ -27,3 +27,19 @@ export function engagementBadges(engagement) {
   }
   return badges;
 }
+
+/**
+ * The labels a listing shows: only those that set an engagement apart.
+ * "Confirmed" and "Open to the public" describe most engagements, so they are
+ * left to the engagement's own page, which shows every label. Postponed,
+ * Cancelled, Invited, Invitation only and Happening now stay.
+ */
+export function listingBadges(engagement) {
+  return engagementBadges(engagement).filter((badge) => badge.tone !== 'confirmed'
+    && !(badge.tone === 'access' && engagement.audience_access === 'public'));
+}
+
+/** Labels for a past engagement's row: who could attend matters less once it is over. */
+export function pastBadges(engagement) {
+  return engagementBadges(engagement).filter((badge) => badge.tone !== 'access');
+}

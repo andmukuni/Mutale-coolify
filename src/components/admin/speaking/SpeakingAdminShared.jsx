@@ -1,6 +1,8 @@
 import { EyeOff, Globe, Info, PencilLine } from 'lucide-react';
 import { Modal } from '../../ui';
-import SpeakingEngagementCard from '../../speaking/SpeakingEngagementCard';
+import EngagementGridCard from '../../speaking/EngagementGridCard';
+import { EngagementRowList } from '../../speaking/EngagementRow';
+import { listingBadges, pastBadges } from '../../speaking/engagementBadges';
 import SpeakingEngagementDetails from '../../speaking/SpeakingEngagementDetails';
 import { previewEngagement } from '../../../../shared/speakingEngagements.js';
 import { HIDE_NOTICE, visibilitySummary } from '../../../utils/speakingAdminText';
@@ -32,22 +34,40 @@ export function HideNotice({ className = '' }) {
   );
 }
 
+/**
+ * The engagement as it appears in the Speaking page's listings: a card for a
+ * dated upcoming engagement, otherwise a row. Not a link here: a draft's page
+ * can't be opened by visitors yet.
+ */
+function ListingPreview({ engagement }) {
+  if (engagement.section === 'upcoming') {
+    return <div className="max-w-sm"><EngagementGridCard engagement={engagement} linked={false} /></div>;
+  }
+  const past = engagement.section === 'previous' || engagement.section === 'cancelled';
+  return (
+    <EngagementRowList
+      engagements={[engagement]}
+      rowProps={() => ({ linked: false, showDate: past, badges: past ? pastBadges(engagement) : listingBadges(engagement) })}
+    />
+  );
+}
+
 export function SpeakingPreviewModal({ record, isOpen, onClose }) {
   if (!record) return null;
+  const engagement = previewEngagement(record);
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
       title="Preview"
-      subtitle="How this engagement's card and its page look to website visitors."
+      subtitle="How this engagement looks to website visitors, in the Speaking page’s listings and on its own page."
       size="xl"
     >
       <p className="mb-4 rounded-xl bg-navy-50 px-3 py-2 text-sm text-navy-700">{visibilitySummary(record)}</p>
-      {/* Not a link here: a draft's page can't be opened by visitors yet. */}
-      <SpeakingEngagementCard engagement={previewEngagement(record)} linked={false} />
+      <ListingPreview engagement={engagement} />
       <h3 className="mt-6 mb-3 text-sm font-semibold text-navy-900">On the engagement’s page</h3>
       <div className="rounded-2xl bg-navy-50 p-3 sm:p-4">
-        <SpeakingEngagementDetails engagement={previewEngagement(record)} track={false} />
+        <SpeakingEngagementDetails engagement={engagement} track={false} />
       </div>
     </Modal>
   );

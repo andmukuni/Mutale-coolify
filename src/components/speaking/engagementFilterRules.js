@@ -3,15 +3,19 @@ import { SPEAKING_ROLES } from '../../../shared/speakingEngagements.js';
 /** Filters appear only once the archive is large enough to need them (brief §9). */
 export const FILTER_THRESHOLD = 6;
 export const NO_FILTERS = { year: '', role: '', topic: '' };
-export const SECTION_KEYS = ['upcoming', 'tba', 'previous', 'cancelled'];
+/**
+ * The filters narrow the archive only: past engagements and past cancellations.
+ * What's coming up is a short list that stays in full above them.
+ */
+export const FILTERED_SECTIONS = ['previous', 'cancelled'];
 
 const yearsOf = (e) => [e.start_date, e.end_date]
   .map((d) => String(d || '').slice(0, 4))
   .filter((y) => /^\d{4}$/.test(y));
 
-/** The choices that actually occur in the published engagements. */
+/** The choices that actually occur in the past engagements. */
 export function filterOptions(groups = {}) {
-  const all = SECTION_KEYS.flatMap((key) => groups[key] || []);
+  const all = FILTERED_SECTIONS.flatMap((key) => groups[key] || []);
   const years = new Set();
   const roles = new Set();
   const topics = new Map();
@@ -32,11 +36,14 @@ export function hasActiveFilters(filters) {
   return Boolean(filters.year || filters.role || filters.topic);
 }
 
-/** Same groups, keeping only the engagements that match every chosen filter. */
+/** Same groups, with the past sections narrowed to what matches every chosen filter. */
 export function applyFilters(groups = {}, filters = NO_FILTERS) {
   const topic = filters.topic.toLowerCase();
   const matches = (e) => (!filters.year || yearsOf(e).includes(filters.year))
     && (!filters.role || (e.roles || []).includes(filters.role))
     && (!topic || (e.topics || []).some((t) => t.toLowerCase() === topic));
-  return Object.fromEntries(SECTION_KEYS.map((key) => [key, (groups[key] || []).filter(matches)]));
+  return {
+    ...groups,
+    ...Object.fromEntries(FILTERED_SECTIONS.map((key) => [key, (groups[key] || []).filter(matches)])),
+  };
 }

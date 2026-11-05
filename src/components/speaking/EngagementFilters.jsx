@@ -18,11 +18,12 @@ function FilterSelect({ id, label, value, onChange, options, allLabel }) {
   );
 }
 
+/** Year, role and topic filters for the past engagements, with a count of what they show. */
 export default function EngagementFilters({ options, filters, onChange, shown }) {
   const set = (key) => (value) => onChange({ ...filters, [key]: value });
   const active = hasActiveFilters(filters);
   return (
-    <div role="search" aria-label="Filter speaking engagements" className="rounded-2xl border border-navy-100 bg-white p-3 sm:p-4">
+    <div role="search" aria-label="Filter past engagements" className="rounded-2xl border border-navy-100 bg-white p-3 sm:p-4">
       {/* One row on wider screens, so the filters don't push the listings down. */}
       <div className="grid grid-cols-3 gap-2 sm:gap-3 sm:grid-cols-[repeat(3,minmax(0,1fr))_auto] sm:items-end">
         <FilterSelect
@@ -53,7 +54,7 @@ export default function EngagementFilters({ options, filters, onChange, shown })
         )}
         <div className="col-span-3 flex flex-wrap items-center justify-between gap-2 sm:col-span-1 sm:flex-col sm:items-end sm:justify-end sm:gap-0">
         <p className="text-sm text-navy-600 sm:whitespace-nowrap" aria-live="polite">
-          {active ? `Showing ${shown} of ${options.total} engagements` : `${options.total} engagements`}
+          {active ? `Showing ${shown} of ${options.total} past engagements` : `${options.total} past engagements`}
         </p>
         {active && (
           <button

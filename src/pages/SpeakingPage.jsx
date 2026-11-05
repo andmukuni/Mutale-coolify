@@ -4,16 +4,18 @@ import { ArrowRight, Download, RefreshCw } from 'lucide-react';
 import defaultPortrait from '../assets/mutale-navy-suit-and-tie.png';
 import PageHeaderBackdrop from '../components/PageHeaderBackdrop';
 import EngagementFilters from '../components/speaking/EngagementFilters';
+import EngagementGridCard from '../components/speaking/EngagementGridCard';
+import { EngagementRowList } from '../components/speaking/EngagementRow';
+import { listingBadges } from '../components/speaking/engagementBadges';
 import {
   FILTER_THRESHOLD,
+  FILTERED_SECTIONS,
   NO_FILTERS,
-  SECTION_KEYS,
   applyFilters,
   filterOptions,
   hasActiveFilters,
 } from '../components/speaking/engagementFilterRules';
 import PastEngagementList from '../components/speaking/PastEngagementList';
-import SpeakingEngagementCard from '../components/speaking/SpeakingEngagementCard';
 import { parseSpeakingFormats } from '../components/speaking/speakingFormats';
 import { useData } from '../context/DataContext';
 import { defaultWebsitePages, normalizeSectionVisibility } from '../data/websitePages';
@@ -42,12 +44,16 @@ function SectionHeading({ eyebrow, title, id, focusable = false }) {
   );
 }
 
-function EngagementList({ engagements, headingLevel }) {
+const GRID = 'grid gap-5 sm:grid-cols-2 lg:grid-cols-3';
+
+/** Upcoming engagements as equal cards, one to three a row by screen width. */
+function EngagementGrid({ engagements }) {
   return (
-    <ul className="space-y-3">
+    <ul className={GRID}>
       {engagements.map((engagement) => (
-        <li key={engagement.id}>
-          <SpeakingEngagementCard engagement={engagement} headingLevel={headingLevel} />
+        // Each card fills its cell, so cards in a row share one height.
+        <li key={engagement.id} className="flex">
+          <EngagementGridCard engagement={engagement} headingLevel="h3" />
         </li>
       ))}
     </ul>
@@ -57,13 +63,15 @@ function EngagementList({ engagements, headingLevel }) {
 // Announced through the section's status line, which is always present.
 function LoadingCards() {
   return (
-    <div className="space-y-4">
-      {[0, 1].map((key) => (
-        <div key={key} className="h-28 rounded-2xl border border-navy-100 bg-white animate-pulse" aria-hidden="true" />
+    <div className={GRID}>
+      {[0, 1, 2].map((key) => (
+        <div key={key} className="h-72 rounded-2xl border border-navy-100 bg-white animate-pulse" aria-hidden="true" />
       ))}
     </div>
   );
 }
+
+const NO_MATCHES = 'No past engagements match these filters.';
 
 export default function SpeakingPage() {
   const { hash } = useLocation();
@@ -125,8 +133,23 @@ function SpeakingListings() {
     [filtering, result.data, filters],
   );
   const { upcoming = [], tba = [], previous = [], cancelled = [] } = groups;
-  const shown = SECTION_KEYS.reduce((sum, key) => sum + (groups[key] || []).length, 0);
+  const shown = FILTERED_SECTIONS.reduce((sum, key) => sum + (groups[key] || []).length, 0);
   const nothingAhead = upcoming.length === 0 && tba.length === 0;
+
+  // The filters sit in the first past section. That section stays while it has
+  // anything to filter, so a filter that matches nothing can't take the filters
+  // away with it.
+  const hasPrevious = (result.data?.previous || []).length > 0;
+  const hasCancelled = (result.data?.cancelled || []).length > 0;
+  const noMatches = filtering && shown === 0;
+  const filterBar = showFilters && (
+    <div className="mb-6">
+      <EngagementFilters options={options} filters={filters} onChange={setFilters} shown={shown} />
+    </div>
+  );
+  const noMatchesNote = noMatches && (
+    <p className="rounded-2xl border border-dashed border-navy-200 bg-white px-6 py-8 text-center text-navy-600">{NO_MATCHES}</p>
+  );
 
   return (
     <div>
@@ -194,13 +217,8 @@ function SpeakingListings() {
       )}
 
       <div className="bg-navy-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10 space-y-10">
-          {showFilters && (
-            <EngagementFilters options={options} filters={filters} onChange={setFilters} shown={shown} />
-          )}
-
-          {/* The filter bar sits closer to the listings it narrows. */}
-          <section aria-labelledby={UPCOMING_HEADING} className={showFilters ? 'mt-8!' : undefined}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10 space-y-12">
+          <section aria-labelledby={UPCOMING_HEADING}>
             <SectionHeading id={UPCOMING_HEADING} eyebrow={text('upcomingEyebrow')} title={text('upcomingTitle')} focusable />
             <p className="sr-only" role="status">
               {result.status === 'loading' ? 'Loading speaking engagements…' : ''}
@@ -222,34 +240,42 @@ function SpeakingListings() {
             )}
             {result.status === 'ready' && (
               <>
-                {upcoming.length > 0 && <EngagementList engagements={upcoming} headingLevel="h3" />}
+                {upcoming.length > 0 && <EngagementGrid engagements={upcoming} />}
                 {nothingAhead && (
                   <p className="rounded-2xl border border-dashed border-navy-200 bg-white px-6 py-10 text-center text-navy-600">
-                    {filtering ? 'No upcoming engagements match these filters.' : text('emptyMessage')}
+                    {text('emptyMessage')}
                   </p>
                 )}
+                {/* With no date to show, these are rows rather than cards. */}
                 {tba.length > 0 && (
                   <div className={upcoming.length > 0 ? 'mt-10' : ''}>
                     <h3 className="mb-4 text-lg font-semibold text-navy-900">{text('tbaTitle')}</h3>
-                    <EngagementList engagements={tba} headingLevel="h4" />
+                    <EngagementRowList
+                      engagements={tba}
+                      rowProps={(engagement) => ({ badges: listingBadges(engagement), showDate: false })}
+                    />
                   </div>
                 )}
               </>
             )}
           </section>
 
-          {result.status === 'ready' && previous.length > 0 && (
+          {result.status === 'ready' && hasPrevious && (
             <section aria-labelledby="speaking-previous">
               <SectionHeading id="speaking-previous" eyebrow={text('previousEyebrow')} title={text('previousTitle')} />
-              <PastEngagementList engagements={previous} />
+              {filterBar}
+              {previous.length > 0 && <PastEngagementList engagements={previous} />}
+              {noMatchesNote}
             </section>
           )}
 
           {/* Past cancellations are kept apart, so they never read as engagements that took place. */}
-          {result.status === 'ready' && cancelled.length > 0 && (
+          {result.status === 'ready' && hasCancelled && (cancelled.length > 0 || !hasPrevious) && (
             <section aria-labelledby="speaking-cancelled">
               <h2 id="speaking-cancelled" className="mb-4 text-lg font-semibold text-navy-900">{text('cancelledTitle')}</h2>
-              <PastEngagementList engagements={cancelled} />
+              {!hasPrevious && filterBar}
+              {cancelled.length > 0 && <PastEngagementList engagements={cancelled} />}
+              {!hasPrevious && noMatchesNote}
             </section>
           )}
         </div>

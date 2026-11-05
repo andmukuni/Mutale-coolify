@@ -314,46 +314,115 @@ describe('SpeakingPage — past cancellations', () => {
 });
 
 describe('SpeakingPage — filters', () => {
+  const FILTERS = { name: 'Filter past engagements' };
   const many = () => ({
     upcoming: [
-      card({ id: 'u1', event_title: 'Leadership Keynote', start_date: '2099-03-01', roles: ['keynote_speaker'], topics: ['Leadership'] }),
-      card({ id: 'u2', event_title: 'Quality Panel', start_date: '2099-04-01', roles: ['panellist'], topics: ['Quality systems'] }),
+      card({ id: 'u1', event_title: 'Leadership Keynote', start_date: '2099-03-01', roles: ['keynote_speaker'], topics: ['Leadership'], section: 'upcoming' }),
     ],
     tba: [card({ id: 't1', event_title: 'Undated Workshop', dates_tbc: true, roles: ['facilitator'], section: 'tba' })],
     previous: [
       card({ id: 'p1', event_title: 'Past Keynote', start_date: '2025-05-01', roles: ['keynote_speaker'], topics: ['leadership'], section: 'previous' }),
-      card({ id: 'p2', event_title: 'Past Training', start_date: '2024-02-01', roles: ['trainer'], section: 'previous' }),
+      card({ id: 'p2', event_title: 'Past Training', start_date: '2025-02-01', roles: ['trainer'], section: 'previous' }),
       card({ id: 'p3', event_title: 'Past Panel', start_date: '2024-09-01', roles: ['panellist'], section: 'previous' }),
+      card({ id: 'p4', event_title: 'Past Forum', start_date: '2024-05-01', roles: ['moderator'], topics: ['Leadership'], section: 'previous' }),
+      card({ id: 'p5', event_title: 'Past Seminar', start_date: '2023-05-01', roles: ['speaker'], section: 'previous' }),
     ],
-    cancelled: [],
+    cancelled: [card({ id: 'c1', event_title: 'Called-off Keynote', start_date: '2024-03-01', roles: ['keynote_speaker'], section: 'cancelled', event_status: 'cancelled' })],
   });
+  const titlesIn = (region) => within(region).queryAllByRole('article').map((a) => within(a).getByRole('heading').textContent);
 
-  it('stay hidden until there are enough engagements to need them', async () => {
-    mocks.fetchEngagements.mockResolvedValue({ ...many(), previous: [] });
+  it('stay hidden until the archive is large enough to need them, however much is coming up', async () => {
+    const data = many();
+    mocks.fetchEngagements.mockResolvedValue({
+      ...data,
+      upcoming: [...data.upcoming, ...data.previous.map((e) => ({ ...e, id: `u-${e.id}`, start_date: '2099-06-01', section: 'upcoming' }))],
+      previous: data.previous.slice(0, 4),
+    });
     renderPage();
     await screen.findByRole('heading', { name: 'Leadership Keynote' });
-    expect(screen.queryByRole('search', { name: 'Filter speaking engagements' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('search', FILTERS)).not.toBeInTheDocument();
   });
 
-  it('narrow every section by role, year and topic, and can be cleared', async () => {
+  it('sit under “Where I’ve Spoken” and narrow only the past, by role, year and topic', async () => {
     mocks.fetchEngagements.mockResolvedValue(many());
     renderPage();
-    const filters = await screen.findByRole('search', { name: 'Filter speaking engagements' });
-    expect(within(filters).getByText('6 engagements')).toBeInTheDocument();
+    const previous = await screen.findByRole('region', { name: 'Where I’ve Spoken' });
+    const filters = within(previous).getByRole('search', FILTERS);
+    expect(within(filters).getByText('6 past engagements')).toBeInTheDocument();
+    const upcoming = screen.getByRole('region', { name: 'Where I’ll Be Next' });
 
     fireEvent.change(within(filters).getByLabelText('Role'), { target: { value: 'keynote_speaker' } });
-    expect(screen.getAllByRole('article').map((a) => within(a).getByRole('heading').textContent))
-      .toEqual(['Leadership Keynote', 'Past Keynote']);
-    expect(within(filters).getByText('Showing 2 of 6 engagements')).toBeInTheDocument();
+    expect(titlesIn(previous)).toEqual(['Past Keynote']);
+    expect(titlesIn(screen.getByRole('region', { name: 'Cancelled engagements' }))).toEqual(['Called-off Keynote']);
+    expect(within(filters).getByText('Showing 2 of 6 past engagements')).toBeInTheDocument();
+    // What's coming up stays in full.
+    expect(titlesIn(upcoming)).toEqual(['Leadership Keynote', 'Undated Workshop']);
 
-    fireEvent.change(within(filters).getByLabelText('Year'), { target: { value: '2025' } });
-    expect(screen.getAllByRole('article')).toHaveLength(1);
-    expect(screen.getByText('No upcoming engagements match these filters.')).toBeInTheDocument();
+    fireEvent.change(within(filters).getByLabelText('Year'), { target: { value: '2023' } });
+    expect(titlesIn(previous)).toEqual([]);
+    expect(screen.queryByRole('region', { name: 'Cancelled engagements' })).not.toBeInTheDocument();
+    // The filters stay, so the visitor can change them.
+    expect(within(previous).getByText('No past engagements match these filters.')).toBeInTheDocument();
+    expect(within(previous).getByRole('search', FILTERS)).toBe(filters);
 
     fireEvent.click(within(filters).getByRole('button', { name: /Clear filters/ }));
-    fireEvent.change(within(filters).getByLabelText('Topic'), { target: { value: 'Leadership' } });
-    // Topics match regardless of case.
-    expect(screen.getAllByRole('article')).toHaveLength(2);
+    // "leadership" and "Leadership" are one topic, offered as first written, and match both.
+    const topic = within(filters).getByLabelText('Topic');
+    expect([...topic.options].map((o) => o.value)).toEqual(['', 'leadership']);
+    fireEvent.change(topic, { target: { value: 'leadership' } });
+    expect(titlesIn(previous)).toEqual(['Past Keynote', 'Past Forum']);
+  });
+
+  it('move to the cancellations when nothing in the archive took place', async () => {
+    const cancelledOnly = Array.from({ length: 6 }, (_, i) => card({
+      id: `c${i}`, event_title: `Called Off ${i}`, start_date: `202${i}-05-01`, section: 'cancelled', event_status: 'cancelled',
+    }));
+    mocks.fetchEngagements.mockResolvedValue({ upcoming: [], tba: [], previous: [], cancelled: cancelledOnly });
+    renderPage();
+    const cancelled = await screen.findByRole('region', { name: 'Cancelled engagements' });
+    expect(within(cancelled).getByRole('search', FILTERS)).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Where I’ve Spoken' })).not.toBeInTheDocument();
+  });
+});
+
+describe('SpeakingPage — upcoming grid and undated rows', () => {
+  it('shows upcoming engagements as cards in a grid, labelled only where they differ from the usual', async () => {
+    mocks.fetchEngagements.mockResolvedValue({
+      upcoming: [
+        card({ id: 'u1', event_title: 'Confirmed Summit', start_date: '2099-01-10', section: 'upcoming', audience_access: 'public' }),
+        card({ id: 'u2', event_title: 'Private Workshop', start_date: '2099-02-10', section: 'upcoming', audience_access: 'invitation_only', participation_status: 'invited' }),
+      ],
+      tba: [], previous: [], cancelled: [],
+    });
+    renderPage();
+    const upcoming = await screen.findByRole('region', { name: 'Where I’ll Be Next' });
+    const list = within(upcoming).getByRole('list');
+    expect(list).toHaveClass('grid', 'sm:grid-cols-2', 'lg:grid-cols-3');
+
+    const confirmed = within(upcoming).getByRole('heading', { level: 3, name: 'Confirmed Summit' }).closest('article');
+    expect(within(confirmed).getByRole('link')).toHaveAttribute('href', '/speaking/u1');
+    // "Confirmed" and "Open to the public" are on the engagement's page instead.
+    expect(within(confirmed).queryByText('Confirmed')).not.toBeInTheDocument();
+    expect(within(confirmed).queryByText('Open to the public')).not.toBeInTheDocument();
+
+    const invited = within(upcoming).getByRole('heading', { level: 3, name: 'Private Workshop' }).closest('article');
+    expect(within(invited).getByText('Invited')).toBeInTheDocument();
+    expect(within(invited).getByText('Invitation only')).toBeInTheDocument();
+  });
+
+  it('lists engagements with dates to be announced as rows, without a date', async () => {
+    mocks.fetchEngagements.mockResolvedValue({
+      upcoming: [],
+      tba: [card({ id: 't1', event_title: 'Undated Forum', dates_tbc: true, event_type: 'forum', city: 'Ndola', country: 'Zambia', section: 'tba', audience_access: 'invitation_only' })],
+      previous: [], cancelled: [],
+    });
+    renderPage();
+    const row = (await screen.findByRole('heading', { level: 4, name: 'Undated Forum' })).closest('article');
+    expect(within(row).getByText('Forum · Speaker · Ndola, Zambia')).toBeInTheDocument();
+    expect(within(row).getByText('Invitation only')).toBeInTheDocument();
+    expect(within(row).queryByText('Confirmed')).not.toBeInTheDocument();
+    expect(within(row).getByRole('link')).toHaveAttribute('href', '/speaking/t1');
+    expect(row.querySelectorAll('p')).toHaveLength(1);
   });
 });
 

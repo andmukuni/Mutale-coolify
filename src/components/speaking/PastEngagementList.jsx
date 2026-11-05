@@ -1,15 +1,5 @@
-import { Link } from 'react-router-dom';
-import { ChevronRight } from 'lucide-react';
-import {
-  SPEAKING_EVENT_TYPES,
-  formatEngagementShortRange,
-  formatEngagementLocation,
-  formatRoles,
-  optionLabel,
-} from '../../../shared/speakingEngagements.js';
-import EngagementBadge from './EngagementBadge';
-import { engagementBadges } from './engagementBadges';
-import { engagementPath } from './engagementLinks';
+import { EngagementRowList } from './EngagementRow';
+import { pastBadges } from './engagementBadges';
 
 /** Year groups in the order given (the server sends the most recent first). */
 function groupByYear(engagements) {
@@ -21,41 +11,6 @@ function groupByYear(engagements) {
     else groups.push({ year, items: [engagement] });
   }
   return groups;
-}
-
-function PastEngagementRow({ engagement }) {
-  const date = formatEngagementShortRange(engagement);
-  const meta = [
-    optionLabel(SPEAKING_EVENT_TYPES, engagement.event_type),
-    formatRoles(engagement.roles),
-    // City and country only; the venue is on the engagement's page.
-    formatEngagementLocation({ ...engagement, venue: null }),
-  ].filter(Boolean);
-  // Whether it was open to the public matters less once it is over.
-  const badges = engagementBadges(engagement).filter((badge) => badge.tone !== 'access');
-
-  return (
-    // The title is the row's one link, stretched over the whole row.
-    <article className="group relative grid gap-x-6 gap-y-1 px-4 py-3 transition-colors hover:bg-navy-50 sm:grid-cols-[9rem_minmax(0,1fr)_auto] sm:items-center sm:px-5 has-[a.card-link:focus-visible]:ring-2 has-[a.card-link:focus-visible]:ring-inset has-[a.card-link:focus-visible]:ring-cyan-700">
-      <p className="text-sm font-semibold text-navy-700">{date}</p>
-      <div className="min-w-0 wrap-anywhere">
-        <h4 className="font-semibold leading-snug text-navy-900">
-          <Link
-            to={engagementPath(engagement)}
-            state={{ engagement }}
-            className="card-link after:absolute after:inset-0 after:content-[''] focus:outline-hidden group-hover:text-cyan-800 dark:group-hover:text-cyan-300"
-          >
-            {engagement.event_title}
-          </Link>
-        </h4>
-        {meta.length > 0 && <p className="mt-0.5 text-sm text-navy-600">{meta.join(' · ')}</p>}
-      </div>
-      <div className="flex items-center gap-2 sm:justify-end">
-        {badges.map((badge) => <EngagementBadge key={badge.label} tone={badge.tone}>{badge.label}</EngagementBadge>)}
-        <ChevronRight size={18} className="hidden shrink-0 text-navy-400 transition-colors group-hover:text-cyan-700 sm:block dark:group-hover:text-cyan-300" aria-hidden="true" />
-      </div>
-    </article>
-  );
 }
 
 /**
@@ -72,13 +27,7 @@ export default function PastEngagementList({ engagements }) {
             {year}
             <span className="h-px flex-1 bg-navy-200" aria-hidden="true" />
           </h3>
-          <ul className="divide-y divide-navy-100 overflow-hidden rounded-2xl border border-navy-100 bg-white">
-            {items.map((engagement) => (
-              <li key={engagement.id}>
-                <PastEngagementRow engagement={engagement} />
-              </li>
-            ))}
-          </ul>
+          <EngagementRowList engagements={items} rowProps={(engagement) => ({ badges: pastBadges(engagement) })} />
         </div>
       ))}
     </div>

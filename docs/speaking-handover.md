@@ -11,7 +11,8 @@ What was delivered against the *Speaking Page — Developer Requirements* brief 
   - the introductory banner and the speaking-formats strip;
   - Upcoming, Dates to be announced, Previous and Cancelled sections;
   - conditional event-website links;
-  - year, role and topic filters, which appear at 6 or more engagements;
+  - upcoming engagements as a grid of cards, and past ones as compact rows by year;
+  - year, role and topic filters for past engagements, which appear once there are 6 or more;
   - Add to calendar, and recording/slides/photos/article actions;
   - "Invite Me to Speak" buttons that open the enquiry page.
 - **Invite Me to Speak page** `/speaking/invite`: the enquiry form in four steps (About you, The event, What you have in mind, Review and send). Each step is checked before the next opens, and nothing is sent until **Send enquiry** on the review. Old links to `/speaking#invite` redirect here.
@@ -60,10 +61,10 @@ Other changes:
 | 9 | Desktop, tablet, mobile and keyboard | Browser pass on 2–3 November 2026 (below), plus the tab-sequence and focus tests. |
 | 10 | Existing features still work | Full-suite results, lint and build below, plus the smoke test. |
 
-## Test results (3 November 2026)
+## Test results (5 November 2026)
 
 **Unit and component tests.** Run with `NODE_OPTIONS=--no-experimental-webstorage npx vitest run`.
-- 926 tests: 921 pass, 5 fail (re-run on 3 November after the card and enquiry-page changes; earlier runs showed 10 failures, the extra 5 being the clock-dependent ones below). Every Speaking test passes.
+- 951 tests: 946 pass, 5 fail (re-run on 5 November after the grid layout; earlier runs showed 10 failures, the extra 5 being the clock-dependent ones below). Every Speaking test passes.
 - Node 26 needs that flag. Without it, its built-in `localStorage` breaks jsdom; the Dockerfile's Node 20 doesn't need it.
 - Every one of the 10 failures predates this work:
   - `ReceiptsPage` (3), `EventSessionsPanel` (1) and `shared/receiptSnapshotHtml` (1) fail the same way on the code from before this work.
@@ -80,12 +81,12 @@ Other changes:
 
 **Browser pass** with sample engagements (local dev server, real rendering):
 - **Widths:** 375, 768, 1024 and 1280 px, in light and dark mode. No horizontal overflow at any width, and long unbroken titles wrap inside the card.
-- **Layout:** cards run horizontally from 768 px and stack on phones. The portrait shows from 1280 px. The filters fit on one row, and on phones the listings heading stays on the first screen.
-- **Cards and engagement pages (revised 3 November):** each card shows only the calendar-leaf date, type, status badges, title, role, city and photo, with "View details", and is about 134 px tall at 1280 px. The card opens the engagement's page, `/speaking/<id>`, which has the full description, topics, Mutale's session, venue, organiser, recordings, Add to calendar and the Event website button. Unpublished or hidden engagements show "isn't available" there, as the API returns the same 404 for them. Checked at 1280 and 375 px, light and dark.
-- **Past engagements (5 November):** "Where I've Spoken" and past cancellations are compact rows (about 68 px each at 1280 px) under a heading for each year, most recent first. Each row shows a short date, the title, type, role and city, and only the Invited, Postponed or Cancelled labels; the whole row opens the engagement's page.
+- **Layout (revised 5 November):** upcoming engagements are a grid of equal cards, three a row from 1024 px, two from 640 px and one on phones. The portrait shows from 1280 px, and on phones the listings heading stays on the first screen.
+- **Cards and engagement pages (revised 5 November):** each card shows the photo, or the dates large on the banner's navy when there is no photo, then the type, any label that sets it apart, the title, role and city, and "View details". Cards are about 393 px tall at 1280 px and 340 px on phones. The card opens the engagement's page, `/speaking/<id>`, which has every label, the full description, topics, Mutale's session, venue, organiser, recordings, Add to calendar and the Event website button. Unpublished or hidden engagements show "isn't available" there, as the API returns the same 404 for them. Checked at 1280, 768 and 375 px, light and dark; the dates over a photo measure at least 5:1 contrast in dark mode.
+- **Past and undated engagements (5 November):** "Where I've Spoken" and past cancellations are compact rows (about 68 px each at 1280 px) under a heading for each year, most recent first. Each row shows a short date, the title, type, role and city, and only the Invited, Postponed or Cancelled labels. "Dates to be announced" uses the same rows without a date. The whole row opens the engagement's page.
 - **Navigation:** "Speaking" is the current page in the nav, marked with an underline and `aria-current`.
-- **Keyboard:** Tab order runs from the hero button to the linked cards only, then the closing button. On the enquiry page it runs through the current step's fields, then Back and Next. Focus rings are visible.
-- **Filters:** they narrow every section and announce "Showing 2 of 11 engagements". Clear filters resets them.
+- **Keyboard:** Tab order runs from the hero button through the upcoming cards and rows, then the filters and past rows, then the closing button. Each card or row is one tab stop. On the enquiry page it runs through the current step's fields, then Back and Next. Focus rings are visible.
+- **Filters (revised 5 November):** they sit under "Where I've Spoken", narrow only past engagements and past cancellations, and announce "Showing 2 of 10 past engagements". Upcoming engagements are always listed in full. When nothing matches, the filters stay with "No past engagements match these filters." Clear filters resets them.
 - **Labels and actions:**
   - Calendar adds appear only for confirmed, scheduled, upcoming engagements.
   - Media actions appear on the past masterclass.
@@ -105,6 +106,8 @@ Other changes:
 5. Expect the cookie banner to appear again for returning visitors (consent version 2).
 
 ## Decisions taken with the client
+
+- **Grid layout and fewer labels in listings (5 November, decided by the developer; needs the client's agreement):** the mockup lists engagements one under another. Upcoming engagements are now a grid of cards, and the filters cover past engagements only. Listings leave out "Confirmed" and "Open to the public", which describe most engagements; they show Invited, Postponed, Cancelled, Invitation only and Happening now. Every label is still on the engagement's own page, and the homepage band still shows them all.
 
 - **Cards open the engagement's page (3 November, decided by the developer; needs the client's agreement):** the brief (§6, §10 items 3–5) has a card open the event website, and a card without one not clickable. Cards now hold less, and every card opens the engagement's own page, where the Event website button opens the event's site. If the client wants the brief's rule back, the card can link to the website again and carry a separate "View details" button.
 

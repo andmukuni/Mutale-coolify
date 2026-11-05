@@ -157,6 +157,7 @@ Layout follows the mockup:
 4. **Closing invite (`speaking.cta`).** Links to `/speaking/invite`.
 5. **Engagement pages.** Added on 3 November 2026: each card opens `/speaking/<id>` (`SpeakingEngagementPage.jsx`), which shows the full record through the existing public detail endpoint. The event website, recordings and Add to calendar moved there from the card.
 6. **Enquiry form.** Moved on 3 November 2026 to its own page, `/speaking/invite` (`SpeakingInvitePage.jsx`), as a four-step form: About you, The event, What you have in mind, Review and send. Old links to `/speaking#invite` redirect there.
+7. **Grid layout.** Revised on 5 November 2026: upcoming engagements are a grid of cards (`EngagementGridCard.jsx`); dates to be announced and past engagements are compact rows (`EngagementRow.jsx`, `PastEngagementList.jsx`). The filters cover past engagements only and sit under "Where I've Spoken". Listings show only the labels that set an engagement apart (`listingBadges`); its page shows them all. The homepage band keeps the wide `SpeakingEngagementCard`.
 
 **Card component.** One `EngagementCardBody` is placed inside one of two shells:
 
