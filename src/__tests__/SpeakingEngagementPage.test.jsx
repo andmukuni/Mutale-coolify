@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({ fetchOne: vi.fn(), track: vi.fn() }));
 
 vi.mock('../utils/speakingApi', () => ({ fetchPublicSpeakingEngagement: mocks.fetchOne }));
 vi.mock('../utils/speakingMetrics', () => ({ trackSpeaking: mocks.track }));
+vi.mock('../context/DataContext', () => ({ useData: () => ({ profile: {} }) }));
 
 import SpeakingEngagementDetails from '../components/speaking/SpeakingEngagementDetails';
 import SpeakingEngagementPage from '../pages/SpeakingEngagementPage';
@@ -74,14 +75,28 @@ describe('SpeakingEngagementDetails — the event website', () => {
 });
 
 describe('SpeakingEngagementDetails — everything the card leaves out', () => {
-  it('lists the dates, Mutale’s session, the place with its venue, and the organiser', () => {
+  it('leads with Mutale’s session: its title, role and time', () => {
     render(<SpeakingEngagementDetails engagement={BASE} />);
-    const details = within(screen.getByRole('region', { name: 'Details' }));
-    expect(details.getByText('1–4 December 2099')).toBeInTheDocument();
-    expect(details.getByText('Welcome remarks')).toBeInTheDocument();
-    expect(details.getByText('1 Dec 2099, 09:00–09:30 (GMT+2)')).toBeInTheDocument();
-    expect(details.getByText('Radisson Blu Mosi Oa Tunya, Livingstone, Zambia')).toBeInTheDocument();
-    expect(details.getByText('Biomedical Society of Zambia')).toBeInTheDocument();
+    const session = within(screen.getByRole('region', { name: 'Mutale’s session' }));
+    expect(session.getByText('Welcome remarks')).toBeInTheDocument();
+    expect(session.getByText('Speaker')).toBeInTheDocument();
+    expect(session.getByText('1 Dec 2099, 09:00–09:30 (GMT+2)')).toBeInTheDocument();
+  });
+
+  it('lists the dates, the place with its venue, and the organiser beside it', () => {
+    render(<SpeakingEngagementDetails engagement={BASE} />);
+    const details = screen.getByRole('region', { name: 'Details' });
+    expect(within(details).getByText('1–4 December 2099')).toBeInTheDocument();
+    expect(within(details).getByText('Radisson Blu Mosi Oa Tunya, Livingstone, Zambia')).toBeInTheDocument();
+    expect(within(details).getByText('Biomedical Society of Zambia')).toBeInTheDocument();
+    expect(within(details).queryByText('Welcome remarks')).not.toBeInTheDocument();
+    // It stays in view while the visitor reads, except in the admin preview's scrolling dialog.
+    expect(details).toHaveClass('lg:sticky');
+  });
+
+  it('keeps the details still in the admin preview', () => {
+    render(<SpeakingEngagementDetails engagement={BASE} track={false} stickyDetails={false} />);
+    expect(screen.getByRole('region', { name: 'Details' })).not.toHaveClass('lg:sticky');
   });
 
   it('shows the whole description, keeping its line breaks, and the topics', () => {
@@ -130,6 +145,7 @@ describe('SpeakingEngagementDetails — everything the card leaves out', () => {
     />);
     expect(container.textContent).not.toMatch(/null|undefined/);
     expect(screen.queryByRole('region', { name: 'About this engagement' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Mutale’s session' })).not.toBeInTheDocument();
     expect(screen.getByText('Dates to be announced')).toBeInTheDocument();
   });
 });
@@ -150,9 +166,38 @@ describe('SpeakingEngagementPage', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'BMSZ2026 Scientific Conference' })).toBeInTheDocument();
     expect(mocks.fetchOne).toHaveBeenCalledWith('spk-1');
     expect(screen.getByText('Confirmed')).toBeInTheDocument();
-    expect(screen.getByText('1–4 December 2099', { selector: 'header *, section p' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'All speaking engagements' })).toHaveAttribute('href', '/speaking');
     expect(screen.getByRole('link', { name: /Event website/ })).toBeInTheDocument();
+  });
+
+  it('gives the key facts under the title, beside the photo with its date', async () => {
+    mocks.fetchOne.mockResolvedValue({ ...BASE, image_url: 'https://cdn.example.org/mutale.jpg', image_alt: 'Mutale speaking' });
+    renderPage();
+    const banner = (await screen.findByRole('heading', { level: 1, name: 'BMSZ2026 Scientific Conference' })).closest('section');
+    const facts = within(within(banner).getByRole('list')).getAllByRole('listitem').map((li) => li.textContent);
+    // City and country here; the venue is in the details.
+    expect(facts).toEqual(['1–4 December 2099', 'Livingstone, Zambia', 'Speaker']);
+    expect(within(banner).getByRole('img', { name: 'Mutale speaking' })).toBeInTheDocument();
+    const badge = within(banner).getByText('01–04').parentElement;
+    expect(badge).toHaveAttribute('aria-hidden', 'true');
+    expect(within(badge).getByText('Dec')).toBeInTheDocument();
+  });
+
+  it('shows the event-type panel when the photo fails to load, on wide screens only', async () => {
+    mocks.fetchOne.mockResolvedValue({ ...BASE, image_url: 'https://cdn.example.org/missing.jpg', image_alt: 'Mutale speaking' });
+    renderPage();
+    const banner = (await screen.findByRole('heading', { level: 1, name: 'BMSZ2026 Scientific Conference' })).closest('section');
+    fireEvent.error(within(banner).getByRole('img', { name: 'Mutale speaking' }));
+    expect(within(banner).queryByRole('img')).not.toBeInTheDocument();
+    const panel = banner.querySelector('[class*="from-navy-950 via"]');
+    expect(panel.closest('.hidden.lg\\:block')).not.toBeNull();
+  });
+
+  it('ends with the invitation to book Mutale', async () => {
+    mocks.fetchOne.mockResolvedValue(BASE);
+    renderPage();
+    await screen.findByRole('heading', { level: 1, name: 'BMSZ2026 Scientific Conference' });
+    expect(screen.getByRole('link', { name: /Invite Me to Speak/ })).toHaveAttribute('href', '/speaking/invite');
   });
 
   it('leads back to the past engagements page from a past, cancelled or undated engagement', async () => {

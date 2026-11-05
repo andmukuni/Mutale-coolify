@@ -67,7 +67,7 @@ export function SpeakingPreviewModal({ record, isOpen, onClose }) {
       <ListingPreview engagement={engagement} />
       <h3 className="mt-6 mb-3 text-sm font-semibold text-navy-900">On the engagement’s page</h3>
       <div className="rounded-2xl bg-navy-50 p-3 sm:p-4">
-        <SpeakingEngagementDetails engagement={engagement} track={false} />
+        <SpeakingEngagementDetails engagement={engagement} track={false} stickyDetails={false} />
       </div>
     </Modal>
   );

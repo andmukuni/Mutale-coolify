@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { ArrowLeft, RefreshCw } from 'lucide-react';
+import { ArrowLeft, CalendarDays, Globe, MapPin, Mic, RefreshCw } from 'lucide-react';
 import EngagementBadge from '../components/speaking/EngagementBadge';
+import { EngagementDateBadge, EngagementPlaceholder } from '../components/speaking/EngagementVisuals';
+import SpeakingCta from '../components/speaking/SpeakingCta';
 import SpeakingEngagementDetails from '../components/speaking/SpeakingEngagementDetails';
 import { engagementBadges } from '../components/speaking/engagementBadges';
+import { useSpeakingCopy } from '../components/speaking/useSpeakingListings';
 import {
   SPEAKING_EVENT_TYPES,
   formatEngagementDateLeaf,
   formatEngagementDateRange,
+  formatEngagementLocation,
   formatRoles,
   optionLabel,
 } from '../../shared/speakingEngagements.js';
@@ -25,18 +29,39 @@ function backLink(engagement) {
   return { to: '/speaking', label: 'All speaking engagements' };
 }
 
+function Fact({ icon: Icon, children, strong = false }) {
+  return (
+    <li className="flex items-start gap-2">
+      <Icon size={17} className="mt-0.5 shrink-0 text-cyan-300" aria-hidden="true" />
+      <span className={strong ? 'font-semibold text-white' : ''}>{children}</span>
+    </li>
+  );
+}
+
+/**
+ * The banner: the way back, the type and labels, the title and the key facts
+ * (dates, place, Mutale's role), beside the photo with the date floating over
+ * it, as on the cards. Without a photo, wide screens show the same branded
+ * panel as the cards; phones skip it, as the facts already give the date.
+ */
 function Header({ engagement }) {
   const back = backLink(engagement);
   const eventType = optionLabel(SPEAKING_EVENT_TYPES, engagement?.event_type);
   const badges = engagement ? engagementBadges(engagement) : [];
   const roles = formatRoles(engagement?.roles);
-  const cancelledUndated = engagement && !formatEngagementDateLeaf(engagement) && engagement.event_status === 'cancelled';
+  const leaf = engagement ? formatEngagementDateLeaf(engagement) : null;
+  const cancelledUndated = engagement && !leaf && engagement.event_status === 'cancelled';
   const dateText = engagement && !cancelledUndated ? formatEngagementDateRange(engagement) : '';
+  // City and country here; the venue is in the details below.
+  const place = engagement ? formatEngagementLocation({ ...engagement, venue: null }) : '';
   const image = engagement?.image_url ? resolveMediaUrl(engagement.image_url) : '';
+  const [failedImage, setFailedImage] = useState('');
+  const showImage = Boolean(image) && failedImage !== image;
 
   return (
     <section className="relative overflow-hidden bg-gradient-to-br from-navy-950 via-navy-900 to-cyan-900 text-white">
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10 grid gap-8 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+      <span className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-cyan-400/10" aria-hidden="true" />
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 grid gap-8 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-center lg:gap-12">
         <div className="min-w-0 wrap-anywhere">
           <Link to={back.to} className={BACK_LINK}>
             <ArrowLeft size={16} aria-hidden="true" />
@@ -45,25 +70,41 @@ function Header({ engagement }) {
           {engagement ? (
             <>
               {(eventType || badges.length > 0) && (
-                <div className="mt-5 flex flex-wrap items-center gap-2">
+                <div className="mt-6 flex flex-wrap items-center gap-2">
                   {eventType && <p className="text-xs font-semibold uppercase tracking-widest text-cyan-400">{eventType}</p>}
                   {badges.map((badge) => <EngagementBadge key={badge.label} tone={badge.tone}>{badge.label}</EngagementBadge>)}
                 </div>
               )}
-              <h1 className="mt-2 text-3xl sm:text-4xl font-bold leading-tight">{engagement.event_title}</h1>
-              {roles && <p className="mt-3 text-base sm:text-lg text-navy-200">{roles}</p>}
-              {dateText && <p className="mt-1 text-base font-semibold text-cyan-200">{dateText}</p>}
+              <h1 className="mt-3 text-3xl sm:text-4xl lg:text-5xl font-bold leading-tight">{engagement.event_title}</h1>
+              {(dateText || place || roles) && (
+                <ul className="mt-6 flex flex-col gap-2.5 text-base text-navy-100 sm:flex-row sm:flex-wrap sm:gap-x-7">
+                  {dateText && <Fact icon={CalendarDays} strong>{dateText}</Fact>}
+                  {place && <Fact icon={engagement.attendance_format === 'online' ? Globe : MapPin}>{place}</Fact>}
+                  {roles && <Fact icon={Mic}>{roles}</Fact>}
+                </ul>
+              )}
             </>
           ) : (
-            <h1 className="mt-5 text-3xl sm:text-4xl font-bold leading-tight">Speaking engagement</h1>
+            <h1 className="mt-6 text-3xl sm:text-4xl font-bold leading-tight">Speaking engagement</h1>
           )}
         </div>
-        {image && (
-          <img
-            src={image}
-            alt={engagement.image_alt || ''}
-            className="hidden h-56 w-auto max-w-[18rem] rounded-2xl object-cover md:block"
-          />
+
+        {engagement && (
+          <div className={`relative ${showImage ? '' : 'hidden lg:block'}`}>
+            <div className="relative aspect-[16/9] overflow-hidden rounded-2xl shadow-2xl ring-1 ring-white/15 lg:aspect-[4/3]">
+              {showImage ? (
+                <img
+                  src={image}
+                  alt={engagement.image_alt || ''}
+                  onError={() => setFailedImage(image)}
+                  className="absolute inset-0 h-full w-full object-cover object-[50%_25%]"
+                />
+              ) : (
+                <EngagementPlaceholder eventType={engagement.event_type} large />
+              )}
+            </div>
+            {!cancelledUndated && <EngagementDateBadge leaf={leaf} className="absolute -bottom-5 left-5" />}
+          </div>
         )}
       </div>
     </section>
@@ -112,6 +153,7 @@ export default function SpeakingEngagementPage() {
   };
 
   const { status, engagement } = result;
+  const { page, text, visibility } = useSpeakingCopy();
 
   return (
     <div className="bg-navy-50 min-h-[60vh]">
@@ -120,8 +162,11 @@ export default function SpeakingEngagementPage() {
         <p className="sr-only" role="status">{status === 'loading' ? 'Loading the speaking engagement…' : ''}</p>
         {status === 'loading' && (
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]" aria-hidden="true">
-            <div className="h-48 rounded-2xl border border-navy-100 bg-white animate-pulse" />
-            <div className="h-64 rounded-2xl border border-navy-100 bg-white animate-pulse" />
+            <div className="space-y-6">
+              <div className="h-32 rounded-2xl border border-navy-100 bg-white animate-pulse motion-reduce:animate-none" />
+              <div className="h-48 rounded-2xl border border-navy-100 bg-white animate-pulse motion-reduce:animate-none" />
+            </div>
+            <div className="h-72 rounded-2xl border border-navy-100 bg-white animate-pulse motion-reduce:animate-none" />
           </div>
         )}
         {status === 'ready' && <SpeakingEngagementDetails engagement={engagement} />}
@@ -153,6 +198,7 @@ export default function SpeakingEngagementPage() {
           </Message>
         )}
       </div>
+      {visibility['speaking.cta'] !== false && <SpeakingCta page={page} text={text} />}
     </div>
   );
 }
