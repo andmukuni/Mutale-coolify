@@ -3,6 +3,7 @@ import {
   classifyEngagement,
   formatEngagementDateRange,
   formatEngagementDateLeaf,
+  formatEngagementShortRange,
   formatEngagementLocation,
   formatRoles,
   formatSessionTime,
@@ -253,6 +254,16 @@ describe('display helpers', () => {
     expect(formatEngagementDateLeaf({ start_date: '2026-12-30', end_date: '2027-01-02' }))
       .toEqual({ month: 'Dec – Jan', days: '30–02', year: '2026–27' });
     expect(formatEngagementDateLeaf({ start_date: '2026-12-01', dates_tbc: true })).toBeNull();
+  });
+
+  it('formats short ranges for lists grouped by year', () => {
+    expect(formatEngagementShortRange({ start_date: '2026-06-10' })).toBe('10 Jun');
+    expect(formatEngagementShortRange({ start_date: '2026-06-10', end_date: '2026-06-10' })).toBe('10 Jun');
+    expect(formatEngagementShortRange({ start_date: '2026-12-01', end_date: '2026-12-04' })).toBe('1–4 Dec');
+    expect(formatEngagementShortRange({ start_date: '2026-09-28', end_date: '2026-10-02' })).toBe('28 Sep – 2 Oct');
+    expect(formatEngagementShortRange({ start_date: '2025-12-30', end_date: '2026-01-02' })).toBe('30 Dec 2025 – 2 Jan 2026');
+    expect(formatEngagementShortRange({ start_date: '2026-12-01', dates_tbc: true })).toBe('');
+    expect(formatEngagementShortRange({ start_date: null })).toBe('');
 
     expect(formatEngagementDateRange({ start_date: '2026-11-06', end_date: '2026-11-11' })).toBe('6–11 November 2026');
     expect(formatEngagementDateRange({ start_date: '2026-12-30', end_date: '2027-01-02' }))

@@ -106,8 +106,12 @@ body {
 .dark .border-gray-100,
 .dark .border-gray-200 { border-color: var(--app-border); }
 
+/* Tailwind v4's divide-y draws a bottom border on every child but the last;
+   the ~ selectors cover the older top-border pattern. */
 .dark .divide-navy-100 > :not([hidden]) ~ :not([hidden]),
-.dark .divide-navy-200 > :not([hidden]) ~ :not([hidden]) {
+.dark .divide-navy-200 > :not([hidden]) ~ :not([hidden]),
+.dark .divide-navy-100 > :not(:last-child),
+.dark .divide-navy-200 > :not(:last-child) {
   border-color: var(--app-border);
 }
 
@@ -124,7 +128,10 @@ body {
 
 .dark .app-card.divide-navy-50 > :not([hidden]) ~ :not([hidden]),
 .dark .app-card.divide-navy-100 > :not([hidden]) ~ :not([hidden]),
-.dark .app-card.divide-navy-200 > :not([hidden]) ~ :not([hidden]) {
+.dark .app-card.divide-navy-200 > :not([hidden]) ~ :not([hidden]),
+.dark .app-card.divide-navy-50 > :not(:last-child),
+.dark .app-card.divide-navy-100 > :not(:last-child),
+.dark .app-card.divide-navy-200 > :not(:last-child) {
   border-color: var(--app-border-card-divider);
 }
 

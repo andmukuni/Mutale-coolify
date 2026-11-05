@@ -491,6 +491,22 @@ export function formatEngagementDateLeaf(engagement) {
   };
 }
 
+/**
+ * A short range for a list grouped by year, so the year is left out unless the
+ * range crosses one: "10 Jun", "1–4 Dec", "28 Sep – 2 Oct", "30 Dec 2025 – 2 Jan 2026".
+ * Empty when the dates are to be announced.
+ */
+export function formatEngagementShortRange(engagement) {
+  if (engagement?.dates_tbc) return '';
+  const start = dateParts(engagement?.start_date);
+  if (!start) return '';
+  const end = dateParts(engagement?.end_date) || start;
+  if (start.year !== end.year) return `${start.day} ${start.short} ${start.year} – ${end.day} ${end.short} ${end.year}`;
+  if (start.month !== end.month) return `${start.day} ${start.short} – ${end.day} ${end.short}`;
+  if (start.day !== end.day) return `${start.day}–${end.day} ${start.short}`;
+  return `${start.day} ${start.short}`;
+}
+
 /** Full readable range, e.g. "6–11 November 2026" or "30 December 2026 – 2 January 2027". */
 export function formatEngagementDateRange(engagement) {
   if (engagement?.dates_tbc) return 'Dates to be announced';

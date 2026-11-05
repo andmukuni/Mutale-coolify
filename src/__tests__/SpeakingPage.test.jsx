@@ -209,15 +209,16 @@ describe('SpeakingPage — postponed and cancelled labels', () => {
       [cardIn(upcoming, 'Dropped Summit'), 'Cancelled'],
       [cardIn(upcoming, 'Moved Forum', 4), 'Postponed'],
       [cardIn(upcoming, 'Dropped Forum', 4), 'Cancelled'],
-      [cardIn(screen.getByRole('region', { name: 'Where I’ve Spoken' }), 'Moved Seminar'), 'Postponed'],
-      [cardIn(screen.getByRole('region', { name: 'Cancelled engagements' }), 'Dropped Seminar'), 'Cancelled'],
+      // Past engagements are rows under a heading for their year.
+      [cardIn(screen.getByRole('region', { name: 'Where I’ve Spoken' }), 'Moved Seminar', 4), 'Postponed'],
+      [cardIn(screen.getByRole('region', { name: 'Cancelled engagements' }), 'Dropped Seminar', 4), 'Cancelled'],
     ];
     for (const [article, label] of expectations) {
       expect(within(article).getByText(label, visible)).toBeInTheDocument();
       if (label === 'Cancelled') expect(within(article).queryByText('Confirmed')).not.toBeInTheDocument();
     }
     // Confirmed but in the past: not presented as a confirmed appearance either.
-    expect(within(cardIn(screen.getByRole('region', { name: 'Where I’ve Spoken' }), 'Moved Seminar')).queryByText('Confirmed'))
+    expect(within(cardIn(screen.getByRole('region', { name: 'Where I’ve Spoken' }), 'Moved Seminar', 4)).queryByText('Confirmed'))
       .not.toBeInTheDocument();
     expect(cardIn(upcoming, 'Dropped Forum', 4).textContent).not.toMatch(/to be announced/i);
   });
@@ -266,6 +267,33 @@ describe('Speaking page wiring', () => {
     expect(labels.indexOf('Speaking')).toBe(labels.indexOf('About') + 1);
     expect(tree.find((link) => link.label === 'Speaking').to).toBe('/speaking');
     expect(navLinks.map((link) => link.to)).toContain('/speaking');
+  });
+});
+
+describe('SpeakingPage — past engagements', () => {
+  it('lists them as compact rows under a heading for each year, most recent first, each opening its page', async () => {
+    mocks.fetchEngagements.mockResolvedValue({
+      upcoming: [], tba: [], cancelled: [],
+      previous: [
+        card({ id: 'p1', event_title: 'Accreditation Masterclass', event_type: 'workshop', roles: ['trainer'], start_date: '2026-09-28', end_date: '2026-10-02', city: 'Lusaka', country: 'Zambia', audience_access: 'public', section: 'previous' }),
+        card({ id: 'p2', event_title: 'Quality Week Forum', start_date: '2026-06-10', section: 'previous', participation_status: 'invited' }),
+        card({ id: 'p3', event_title: 'Lab Leaders Summit', start_date: '2025-11-14', section: 'previous' }),
+      ],
+    });
+    renderPage();
+    const previous = await screen.findByRole('region', { name: 'Where I’ve Spoken' });
+    expect(within(previous).getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual(['2026', '2025']);
+
+    const row = within(previous).getByRole('heading', { level: 4, name: 'Accreditation Masterclass' }).closest('article');
+    expect(within(row).getByText('28 Sep – 2 Oct')).toBeInTheDocument();
+    expect(within(row).getByText('Workshop · Trainer · Lusaka, Zambia')).toBeInTheDocument();
+    expect(within(row).getByRole('link', { name: 'Accreditation Masterclass' })).toHaveAttribute('href', '/speaking/p1');
+    // One link per row, and no "Open to the public" once the event is over.
+    expect(within(row).getAllByRole('link')).toHaveLength(1);
+    expect(within(row).queryByText('Open to the public')).not.toBeInTheDocument();
+    // An unconfirmed invitation still says so, so it never reads as a talk given.
+    const invited = within(previous).getByRole('heading', { level: 4, name: 'Quality Week Forum' }).closest('article');
+    expect(within(invited).getByText('Invited')).toBeInTheDocument();
   });
 });
 

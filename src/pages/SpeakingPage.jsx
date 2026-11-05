@@ -12,6 +12,7 @@ import {
   filterOptions,
   hasActiveFilters,
 } from '../components/speaking/engagementFilterRules';
+import PastEngagementList from '../components/speaking/PastEngagementList';
 import SpeakingEngagementCard from '../components/speaking/SpeakingEngagementCard';
 import { parseSpeakingFormats } from '../components/speaking/speakingFormats';
 import { useData } from '../context/DataContext';
@@ -240,7 +241,7 @@ function SpeakingListings() {
           {result.status === 'ready' && previous.length > 0 && (
             <section aria-labelledby="speaking-previous">
               <SectionHeading id="speaking-previous" eyebrow={text('previousEyebrow')} title={text('previousTitle')} />
-              <EngagementList engagements={previous} headingLevel="h3" />
+              <PastEngagementList engagements={previous} />
             </section>
           )}
 
@@ -248,7 +249,7 @@ function SpeakingListings() {
           {result.status === 'ready' && cancelled.length > 0 && (
             <section aria-labelledby="speaking-cancelled">
               <h2 id="speaking-cancelled" className="mb-4 text-lg font-semibold text-navy-900">{text('cancelledTitle')}</h2>
-              <EngagementList engagements={cancelled} headingLevel="h3" />
+              <PastEngagementList engagements={cancelled} />
             </section>
           )}
         </div>
