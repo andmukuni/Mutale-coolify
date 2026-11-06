@@ -12,7 +12,7 @@ What was delivered against the *Speaking Page — Developer Requirements* brief 
   - Where I've Spoken has past engagements as compact rows by year, year, role and topic filters for them once there are 6 or more, past cancellations under their own heading, and engagements whose dates are to be announced.
   - Each engagement's page has conditional event-website links, Add to calendar, and recording/slides/photos/article actions. Its back link returns to the page that lists it.
 - **Invite Me to Speak page** `/speaking/invite`: the enquiry form in four steps (About you, The event, What you have in mind, Review and send). Each step is checked before the next opens, and nothing is sent until **Send enquiry** on the review. Old links to `/speaking#invite` redirect here.
-- **Homepage:** a "Next Speaking Engagement" band. It shows the featured engagement, otherwise the next confirmed one, and can be switched off in Sections.
+- **Homepage:** a "Next Speaking Engagement" feature (revised 6 November): a banner for the one featured engagement, otherwise the next confirmed one, with its title, dates, place, role, Mutale's session, a countdown for the next three months ("In 20 days", "Tomorrow", "Happening now", in the event's time zone), its photo with the floating date badge, "View details" and a "View more upcoming engagements" button showing how many more are on the Speaking page. It can be switched off in Sections.
 - **Admin, under Speaking:**
   - engagements: list, form, preview, publish, hide, duplicate and delete, plus activity counts;
   - enquiries: status, private notes, in-app reply and "create draft";
@@ -60,7 +60,7 @@ Other changes:
 ## Test results (5 November 2026)
 
 **Unit and component tests.** Run with `NODE_OPTIONS=--no-experimental-webstorage npx vitest run`.
-- 973 tests: 968 pass, 5 fail (re-run on 5 November after the engagement page redesign; earlier runs showed 10 failures, the extra 5 being the clock-dependent ones below). Every Speaking test passes.
+- 971 tests: 966 pass, 5 fail (re-run on 6 November after the homepage next-engagement feature; earlier runs showed 10 failures, the extra 5 being the clock-dependent ones below). Every Speaking test passes.
 - Node 26 needs that flag. Without it, its built-in `localStorage` breaks jsdom; the Dockerfile's Node 20 doesn't need it.
 - Every one of the 10 failures predates this work:
   - `ReceiptsPage` (3), `EventSessionsPanel` (1) and `shared/receiptSnapshotHtml` (1) fail the same way on the code from before this work.
@@ -108,7 +108,7 @@ Other changes:
 
 - **Past engagements on their own page (5 November, decided by the developer; needs the client's agreement):** the brief has Upcoming, Dates to be announced, Previous and Cancelled sections on one page. The Speaking page now shows only the upcoming carousel; the other three sections, with the filters, are on `/speaking/past`, linked from it. Nothing was removed from the site.
 
-- **Carousel and fewer labels in listings (5 November, decided by the developer; needs the client's agreement):** the mockup lists engagements one under another. Upcoming engagements are now a carousel of cards, and the filters cover past engagements only. Listings leave out "Confirmed" and "Open to the public", which describe most engagements; they show Invited, Postponed, Cancelled, Invitation only and Happening now. Every label is still on the engagement's own page, and the homepage band still shows them all.
+- **Carousel and fewer labels in listings (5 November, decided by the developer; needs the client's agreement):** the mockup lists engagements one under another. Upcoming engagements are now a carousel of cards, and the filters cover past engagements only. Listings leave out "Confirmed" and "Open to the public", which describe most engagements; they show Invited, Postponed, Cancelled, Invitation only and Happening now. Every label is still on the engagement's own page, and the homepage feature shows the same short set (it only ever features confirmed engagements, so "Confirmed" would say nothing).
 
 - **Cards open the engagement's page (3 November, decided by the developer; needs the client's agreement):** the brief (§6, §10 items 3–5) has a card open the event website, and a card without one not clickable. Cards now hold less, and every card opens the engagement's own page, where the Event website button opens the event's site. If the client wants the brief's rule back, the card can link to the website again and carry a separate "View details" button.
 

@@ -27,7 +27,7 @@ Open **Speaking → Add Engagement**. Only the **Event title** is required, so a
 - **Topics**: a few topics separated by commas, such as `Leadership, Laboratory systems`. They appear on the engagement's page and power the topic filter.
 - **Recordings and resources**: after an event, add approved links to a recording, slides, photos or an article. Each appears as its own button on the engagement's page (for example "Watch recording").
 - **Status**: *Your participation* (Invited, Confirmed, Declined) and *Event status* (Scheduled, Postponed, Cancelled) are labels. Changing them never publishes an engagement. The one exception keeps you safe: saving a published engagement as **Declined** takes it off the website (it becomes Hidden), and it stays off until you publish it again.
-- **Featured engagement**: shows this engagement in the homepage's "Next Speaking Engagement" band while it is upcoming, confirmed and scheduled. Without a featured one, the band shows the next confirmed engagement, and with none it doesn't appear.
+- **Featured engagement**: shows this engagement in the homepage's "Next Speaking Engagement" feature while it is upcoming, confirmed and scheduled: its title, dates, place, your role and session, its photo and a countdown, with buttons to its page and to the rest of your upcoming engagements. Without a featured one, the feature shows the next confirmed engagement, and with none it doesn't appear. Its heading and the second button's wording are in **Sections → Home → Next Speaking Engagement**.
 - **Private notes**: contacts, fees, logistics and reminders. They are never sent to the website.
 
 Click **Save as draft**. New engagements always start as drafts.

@@ -111,7 +111,7 @@ export const SECTION_REGISTRY = [
     fields: [
       { key: 'nextSpeakingLabel', label: 'Eyebrow', type: 'text', path: 'websitePages.home.nextSpeakingLabel' },
       { key: 'nextSpeakingTitle', label: 'Title', type: 'text', path: 'websitePages.home.nextSpeakingTitle' },
-      { key: 'nextSpeakingLinkLabel', label: 'Link to the Speaking page', type: 'text', path: 'websitePages.home.nextSpeakingLinkLabel' },
+      { key: 'nextSpeakingLinkLabel', label: 'Button to the Speaking page', type: 'text', path: 'websitePages.home.nextSpeakingLinkLabel', helpText: 'The second button, beside “View details”. It also shows how many more engagements are coming up.' },
     ],
     manageLink: { to: '/admin/speaking', label: 'Manage speaking engagements' },
   },

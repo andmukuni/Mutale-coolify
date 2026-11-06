@@ -75,7 +75,7 @@ export const defaultWebsitePages = {
     featuredEventsDescription: 'Handpicked events currently highlighted for the community.',
     nextSpeakingLabel: 'Speaking',
     nextSpeakingTitle: 'Next Speaking Engagement',
-    nextSpeakingLinkLabel: 'All speaking engagements',
+    nextSpeakingLinkLabel: 'View more upcoming engagements',
     featuredBlogLabel: 'Featured blog',
     featuredBlogTitle: 'Latest insights and articles',
     featuredBlogDescription: 'Handpicked Insights from Mubanga’s desk.',

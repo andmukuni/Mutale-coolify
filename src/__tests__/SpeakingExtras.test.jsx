@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { useState } from 'react';
 
@@ -9,7 +9,7 @@ vi.mock('../utils/speakingApi', () => ({ fetchPublicSpeakingEngagements: mocks.f
 vi.mock('../utils/cookieConsent', () => ({ hasConsent: (category) => category === 'analytics' && mocks.consent }));
 
 import NextSpeakingEngagement from '../components/speaking/NextSpeakingEngagement';
-import { pickNextEngagement } from '../components/speaking/nextEngagement';
+import { countdownLabel, pickNextEngagement } from '../components/speaking/nextEngagement';
 import { applyFilters, filterOptions } from '../components/speaking/engagementFilterRules';
 import { trackSpeaking } from '../utils/speakingMetrics';
 import Modal from '../components/ui/Modal';
@@ -51,21 +51,76 @@ describe('Next Speaking Engagement (homepage)', () => {
     expect(pickNextEngagement({})).toBeNull();
   });
 
-  it('shows the card with a link to the Speaking page, or nothing at all', async () => {
-    mocks.fetchEngagements.mockResolvedValue({ upcoming: [engagement({ event_title: 'Annual Summit' })] });
-    const { unmount } = render(
+  it('features the one next engagement, with its details and the ways on', async () => {
+    mocks.fetchEngagements.mockResolvedValue({
+      upcoming: [
+        engagement({ id: 'a', event_title: 'Lab Forum', start_date: '2099-01-05' }),
+        engagement({
+          id: 'b', event_title: 'Annual Summit', featured: true, event_type: 'summit', roles: ['keynote_speaker'],
+          start_date: '2099-02-10', end_date: '2099-02-11', city: 'Lusaka', country: 'Zambia', venue: 'Main Hall',
+          session_title: 'Leading quality', image_url: 'https://cdn.example.org/summit.jpg', image_alt: 'Mutale speaking',
+        }),
+        engagement({ id: 'c', event_title: 'Webinar', start_date: '2099-03-01' }),
+      ],
+      tba: [engagement({ id: 't', event_title: 'Undated', dates_tbc: true, start_date: null, section: 'tba' })],
+    });
+    render(
       <MemoryRouter>
-        <NextSpeakingEngagement eyebrow="Speaking" title="Next Speaking Engagement" linkLabel="All speaking engagements" />
+        <NextSpeakingEngagement eyebrow="Speaking" title="Next Speaking Engagement" linkLabel="View more upcoming engagements" />
       </MemoryRouter>,
     );
-    expect(await screen.findByRole('heading', { name: 'Annual Summit' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /All speaking engagements/ })).toHaveAttribute('href', '/speaking');
-    unmount();
+    const feature = within(await screen.findByRole('region', { name: 'Next Speaking Engagement' }));
+    // The section's name, then the engagement as the headline.
+    expect(feature.getByRole('heading', { level: 2, name: 'Next Speaking Engagement' })).toBeInTheDocument();
+    expect(feature.getByRole('heading', { level: 3, name: 'Annual Summit' })).toBeInTheDocument();
+    expect(feature.queryByText('Lab Forum')).not.toBeInTheDocument();
 
-    mocks.fetchEngagements.mockResolvedValue({ upcoming: [] });
+    expect(feature.getAllByRole('listitem').map((li) => li.textContent)).toEqual(['10–11 February 2099', 'Lusaka, Zambia', 'Keynote speaker']);
+    expect(feature.getByText('Leading quality')).toBeInTheDocument();
+    expect(feature.getByText('Summit')).toBeInTheDocument();
+    // "Confirmed" goes without saying here: only confirmed engagements are featured.
+    expect(feature.queryByText('Confirmed')).not.toBeInTheDocument();
+    expect(feature.getByRole('img', { name: 'Mutale speaking' })).toHaveAttribute('src', 'https://cdn.example.org/summit.jpg');
+
+    expect(feature.getByRole('link', { name: 'View details: Annual Summit' })).toHaveAttribute('href', '/speaking/b');
+    // Counts the others on the Speaking page (dated, upcoming), not the undated one.
+    const more = feature.getByRole('link', { name: 'View more upcoming engagements 2 more' });
+    expect(more).toHaveAttribute('href', '/speaking');
+  });
+
+  it('shows the event-type panel instead of a missing photo, and no count when nothing else is coming', async () => {
+    mocks.fetchEngagements.mockResolvedValue({ upcoming: [engagement({ event_title: 'Solo Talk', image_url: 'https://cdn.example.org/missing.jpg', image_alt: 'Mutale at the podium' })] });
+    const { container } = render(
+      <MemoryRouter><NextSpeakingEngagement title="Next Speaking Engagement" linkLabel="View more upcoming engagements" /></MemoryRouter>,
+    );
+    fireEvent.error(await screen.findByRole('img', { name: 'Mutale at the podium' }));
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    expect(container.querySelector('[class*="from-navy-950 via"] svg')).not.toBeNull();
+    expect(screen.getByRole('link', { name: 'View more upcoming engagements' })).toHaveAttribute('href', '/speaking');
+  });
+
+  it('shows nothing when no confirmed engagement is coming up', async () => {
+    mocks.fetchEngagements.mockResolvedValue({ upcoming: [engagement({ participation_status: 'invited' })] });
     const { container } = render(<MemoryRouter><NextSpeakingEngagement title="Next" /></MemoryRouter>);
     await Promise.resolve();
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('counts down in the event’s own time zone', () => {
+    // 6 November 2026, 23:30 in Lusaka (21:30 UTC).
+    const now = new Date('2026-11-06T21:30:00Z');
+    const on = (start_date, extra = {}) => countdownLabel(engagement({ start_date, timezone: 'Africa/Lusaka', ...extra }), now);
+    expect(on('2026-11-06')).toBe('Today');
+    expect(on('2026-11-07')).toBe('Tomorrow');
+    expect(on('2026-11-26')).toBe('In 20 days');
+    expect(on('2026-11-06', { in_progress: true })).toBe('Happening now');
+    // Too far off to be worth counting, undated, or already past.
+    expect(on('2027-06-01')).toBe('');
+    expect(on(null, { dates_tbc: true })).toBe('');
+    expect(on('2026-11-01')).toBe('');
+    // Already the 7th in Lusaka, though still the 6th in Honolulu.
+    expect(countdownLabel(engagement({ start_date: '2026-11-07', timezone: 'Pacific/Honolulu' }), new Date('2026-11-06T22:30:00Z'))).toBe('Tomorrow');
+    expect(countdownLabel(engagement({ start_date: '2026-11-07', timezone: 'Africa/Lusaka' }), new Date('2026-11-06T22:30:00Z'))).toBe('Today');
   });
 });
 
