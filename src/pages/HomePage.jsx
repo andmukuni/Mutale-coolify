@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  ArrowRight, Shield, Award, Globe, Briefcase,
+  ArrowRight, Shield, Globe, Briefcase,
   CheckCircle, Mail, MapPin, Quote, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import SectionHeader from '../components/SectionHeader';
@@ -13,11 +13,11 @@ import { selectHomeFeaturedEvents } from '../utils/eventServices';
 import heroPortrait from '../assets/mutale-navy-suit-and-tie.png';
 import { defaultWebsitePages, expertiseIconMap } from '../data/websitePages';
 import TrustedBySection from '../components/TrustedBySection';
+import HomeAboutPreview from '../components/HomeAboutPreview';
 import NextSpeakingEngagement from '../components/speaking/NextSpeakingEngagement';
 import { fetchPartnerLogos } from '../utils/partnerLogosApi';
 import { resolveMediaUrl } from '../utils/mediaUrl';
 
-const ABOUT_IMG_FALLBACK = 'https://images.unsplash.com/photo-1582719471384-894fbb16e074?auto=format&fit=crop&w=800&q=80';
 const CTA_BG_FALLBACK = 'https://images.unsplash.com/photo-1581093588401-fbb62a02f120?auto=format&fit=crop&w=1920&q=80';
 const HERO_PILL_ICONS = [MapPin, Briefcase, Globe];
 
@@ -27,7 +27,6 @@ export default function HomePage() {
   const visibility = profile.websitePages?.sectionVisibility || {};
   const isVisible = (id) => visibility[id] !== false;
   const heroPortraitSrc = heroPortrait;
-  const aboutImage = resolveMediaUrl(page.aboutImage) || ABOUT_IMG_FALLBACK;
   const ctaBackground = resolveMediaUrl(page.ctaBackgroundImage) || CTA_BG_FALLBACK;
   const heroPills = (Array.isArray(page.heroPills) && page.heroPills.length > 0)
     ? page.heroPills
@@ -200,79 +199,7 @@ export default function HomePage() {
       )}
 
       {/* ═══════════════════════ ABOUT PREVIEW ═══════════════════════ */}
-      {isVisible('home.about-preview') && (
-      <section className="py-20 sm:py-24 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid lg:grid-cols-2 gap-16 items-center">
-            {/* Image side */}
-            <div className="relative">
-              <div className="rounded-2xl overflow-hidden shadow-2xl shadow-navy-200/50">
-                <img
-                  src={aboutImage}
-                  alt="Laboratory quality assurance work"
-                  className="w-full h-80 sm:h-96 object-cover"
-                />
-              </div>
-              {/* Floating accent card */}
-              <div className="absolute -bottom-6 -right-4 sm:-right-6 bg-white rounded-xl shadow-xl border border-navy-100 p-4 max-w-[200px]">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-cyan-50 text-cyan-600">
-                    <Award size={20} />
-                  </div>
-                  <div>
-                    <div className="text-sm font-bold text-navy-900">{page.aboutFloatingTitle || defaultWebsitePages.home.aboutFloatingTitle}</div>
-                    <div className="text-xs text-navy-400">{page.aboutFloatingSubtitle || defaultWebsitePages.home.aboutFloatingSubtitle}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Text side */}
-            <div>
-              {(() => {
-                const trimmed = String(page.aboutTitle || '').trim();
-                const spaceIdx = trimmed.indexOf(' ');
-                const firstWord = spaceIdx === -1 ? trimmed : trimmed.slice(0, spaceIdx);
-                const restWords = spaceIdx === -1 ? '' : trimmed.slice(spaceIdx + 1);
-                return (
-                  <h2 className="text-3xl sm:text-4xl font-bold mb-3">
-                    <span className="text-navy-900">{firstWord}</span>
-                    {restWords && <span className="text-[#00A79D]"> {restWords}</span>}
-                  </h2>
-                );
-              })()}
-              <span className="block h-1 w-12 rounded-full bg-[#E76869] mb-6" />
-
-              <div className="space-y-4 mb-8">
-                {profile.summary.slice(0, 3).map((s, i) => (
-                  <p key={i} className="text-navy-600 leading-relaxed">{s}</p>
-                ))}
-              </div>
-
-              <div className="flex flex-wrap gap-3 mb-8">
-                {(Array.isArray(page.aboutTags) ? page.aboutTags : defaultWebsitePages.home.aboutTags).map((tag) => (
-                  <span
-                    key={tag}
-                    className="inline-flex items-center gap-1 text-xs font-medium bg-navy-50 text-navy-600 border border-navy-100 px-3 py-1.5 rounded-full"
-                  >
-                    <CheckCircle size={12} className="text-cyan-500" />
-                    {tag}
-                  </span>
-                ))}
-              </div>
-
-              <Link
-                to="/about"
-                className="inline-flex items-center gap-2 text-sm font-medium text-cyan-600 hover:text-cyan-700 transition-colors group"
-              >
-                Read Full Profile
-                <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
-      )}
+      {isVisible('home.about-preview') && <HomeAboutPreview page={page} summary={profile.summary} />}
 
       {/* ═══════════════════════ EXPERTISE ═══════════════════════ */}
       {isVisible('home.expertise') && (
