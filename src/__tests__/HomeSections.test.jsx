@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { Shield } from 'lucide-react';
+import ExpertiseCard from '../components/ExpertiseCard';
 import HomeAboutPreview from '../components/HomeAboutPreview';
 import TrustedBySection from '../components/TrustedBySection';
 import { defaultWebsitePages } from '../data/websitePages';
@@ -77,6 +79,20 @@ describe('TrustedBySection', () => {
     expect(screen.getByText('Unsafe').closest('a')).toBeNull();
   });
 
+  it('reacts to hover only where a partner links somewhere', () => {
+    render(
+      <TrustedBySection
+        label="Worked with"
+        partners={[
+          { id: 1, name: 'FIND', logo_url: '', website_url: 'https://www.finddx.org' },
+          { id: 2, name: 'No Site', logo_url: '' },
+        ]}
+      />,
+    );
+    expect(screen.getByRole('link', { name: /FIND/ })).toHaveClass('group');
+    expect(screen.getByText('No Site').closest('.group')).toBeNull();
+  });
+
   it('shows nothing when there are no partners', () => {
     const { container } = render(<TrustedBySection label="Worked with" />);
     expect(container).toBeEmptyDOMElement();
@@ -125,5 +141,16 @@ describe('HomeAboutPreview', () => {
   it('uses the image saved in Sections', () => {
     renderAbout({ ...defaultWebsitePages.home, aboutImage: 'https://cdn.example.org/mutale-lab.jpg' });
     expect(screen.getByRole('img', { name: 'Laboratory quality assurance work' })).toHaveAttribute('src', 'https://cdn.example.org/mutale-lab.jpg');
+  });
+});
+
+describe('ExpertiseCard', () => {
+  it('lights up on hover without lifting, as it is not a link', () => {
+    const { container } = render(<ExpertiseCard icon={Shield} title="Quality Assurance" description="Audits and systems." />);
+    const card = container.firstChild;
+    expect(card.className).not.toMatch(/translate|shadow-xl/);
+    expect(card).toHaveClass('group', 'hover:border-cyan-200');
+    expect(screen.getByRole('heading', { level: 3, name: 'Quality Assurance' })).toBeInTheDocument();
+    expect(container.querySelector('a, button')).toBeNull();
   });
 });

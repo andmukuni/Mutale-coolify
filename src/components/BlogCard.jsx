@@ -7,14 +7,14 @@ export default function BlogCard({ post }) {
     <Link
       to={`/blog/${post.slug}`}
       aria-label={`Read ${post.title}`}
-      className="app-card group flex h-full flex-col overflow-hidden rounded-2xl border border-navy-100 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-cyan-200 hover:shadow-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2"
+      className="app-card group flex h-full flex-col overflow-hidden rounded-2xl border border-navy-100 bg-white shadow-sm transition duration-300 ease-out hover:border-cyan-200 hover:shadow-xl hover:shadow-navy-900/10 motion-safe:hover:-translate-y-1 motion-safe:focus-visible:-translate-y-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-700 focus-visible:ring-offset-2"
     >
       {post.image ? (
         <div className="overflow-hidden">
           <img
             src={post.image}
             alt=""
-            className="h-48 w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
+            className="h-48 w-full object-cover motion-safe:transition-transform motion-safe:duration-500 motion-safe:group-hover:scale-[1.05]"
             loading="lazy"
           />
         </div>
@@ -53,8 +53,8 @@ export default function BlogCard({ post }) {
             <Clock size={12} />
             {post.readTime}
           </span>
-          <span className="inline-flex items-center gap-1 text-sm font-medium text-cyan-600 transition-all group-hover:gap-1.5 group-hover:text-cyan-700">
-            Read More <ArrowRight size={14} />
+          <span className="inline-flex items-center gap-1 text-sm font-medium text-cyan-700 transition-colors group-hover:text-cyan-800 dark:text-cyan-300">
+            Read More <ArrowRight size={14} aria-hidden="true" className="motion-safe:transition-transform motion-safe:group-hover:translate-x-0.5" />
           </span>
         </div>
       </div>

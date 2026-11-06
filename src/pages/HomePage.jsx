@@ -21,6 +21,16 @@ import { resolveMediaUrl } from '../utils/mediaUrl';
 const CTA_BG_FALLBACK = 'https://images.unsplash.com/photo-1581093588401-fbb62a02f120?auto=format&fit=crop&w=1920&q=80';
 const HERO_PILL_ICONS = [MapPin, Briefcase, Globe];
 
+// Shared hover and focus styles, so every control on the page responds the same way.
+// Movement only plays for visitors who haven't asked for reduced motion.
+const PRIMARY_BUTTON = 'group inline-flex items-center gap-2 rounded-xl bg-cyan-700 px-7 py-3.5 font-medium text-white shadow-lg shadow-cyan-900/20 transition duration-300 ease-out hover:bg-cyan-800 hover:shadow-xl hover:shadow-cyan-900/30 motion-safe:hover:-translate-y-0.5 motion-safe:active:translate-y-0 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-navy-900';
+const GHOST_BUTTON = 'inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-7 py-3.5 font-medium text-white backdrop-blur-sm transition duration-300 ease-out hover:border-white/40 hover:bg-white/20 motion-safe:hover:-translate-y-0.5 motion-safe:active:translate-y-0 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-navy-900';
+const ARROW_NUDGE = 'motion-safe:transition-transform motion-safe:duration-300 motion-safe:group-hover:translate-x-1';
+const CAROUSEL_ARROW = 'flex h-10 w-10 items-center justify-center rounded-full border border-navy-200 bg-white text-navy-700 shadow-sm transition duration-200 hover:border-cyan-700 hover:bg-cyan-700 hover:text-white hover:shadow-md motion-safe:active:scale-95 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-cyan-700 focus-visible:ring-offset-2';
+const carouselDot = (active) => `h-2.5 rounded-full transition-all duration-300 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-cyan-700 focus-visible:ring-offset-2 ${
+  active ? 'w-7 bg-cyan-700' : 'w-2.5 bg-navy-200 hover:bg-cyan-600/60'
+}`;
+
 export default function HomePage() {
   const { profile, events, blogPosts } = useData();
   const page = profile.websitePages?.home || defaultWebsitePages.home;
@@ -156,16 +166,10 @@ export default function HomePage() {
 
               {/* CTA buttons */}
               <div className="flex flex-wrap gap-3 mb-10">
-                <Link
-                  to="/contact"
-                  className="inline-flex items-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white px-7 py-3.5 rounded-xl font-medium transition-all duration-300 shadow-lg shadow-cyan-600/25 hover:shadow-cyan-500/40"
-                >
-                  Get in Touch <ArrowRight size={16} />
+                <Link to="/contact" className={PRIMARY_BUTTON}>
+                  Get in Touch <ArrowRight size={16} aria-hidden="true" className={ARROW_NUDGE} />
                 </Link>
-                <Link
-                  to="/about"
-                  className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white border border-white/20 px-7 py-3.5 rounded-xl font-medium transition-all duration-300"
-                >
+                <Link to="/about" className={GHOST_BUTTON}>
                   Read More
                 </Link>
               </div>
@@ -253,17 +257,17 @@ export default function HomePage() {
                     type="button"
                     onClick={() => setActiveFeaturedSlide((prev) => (prev - 1 + featuredSlides.length) % featuredSlides.length)}
                     aria-label="Previous featured events"
-                    className="absolute -left-3 sm:-left-4 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white border border-navy-200 text-navy-600 hover:text-cyan-600 transition-colors flex items-center justify-center shadow-sm"
+                    className={`absolute -left-3 sm:-left-5 top-1/2 z-10 -translate-y-1/2 ${CAROUSEL_ARROW}`}
                   >
-                    <ChevronLeft size={16} />
+                    <ChevronLeft size={18} aria-hidden="true" />
                   </button>
                   <button
                     type="button"
                     onClick={() => setActiveFeaturedSlide((prev) => (prev + 1) % featuredSlides.length)}
                     aria-label="Next featured events"
-                    className="absolute -right-3 sm:-right-4 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white border border-navy-200 text-navy-600 hover:text-cyan-600 transition-colors flex items-center justify-center shadow-sm"
+                    className={`absolute -right-3 sm:-right-5 top-1/2 z-10 -translate-y-1/2 ${CAROUSEL_ARROW}`}
                   >
-                    <ChevronRight size={16} />
+                    <ChevronRight size={18} aria-hidden="true" />
                   </button>
                 </>
               )}
@@ -277,9 +281,8 @@ export default function HomePage() {
                     type="button"
                     onClick={() => setActiveFeaturedSlide(index)}
                     aria-label={`Show featured slide ${index + 1}`}
-                    className={`h-2.5 rounded-full transition-all ${
-                      index === activeFeaturedSlide ? 'w-7 bg-cyan-600' : 'w-2.5 bg-navy-200 hover:bg-navy-300'
-                    }`}
+                    aria-current={index === activeFeaturedSlide ? 'true' : undefined}
+                    className={carouselDot(index === activeFeaturedSlide)}
                   />
                 ))}
               </div>
@@ -332,17 +335,17 @@ export default function HomePage() {
                     type="button"
                     onClick={() => setActiveFeaturedBlogSlide((prev) => (prev - 1 + featuredBlogSlides.length) % featuredBlogSlides.length)}
                     aria-label="Previous featured blog posts"
-                    className="absolute -left-3 sm:-left-4 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white border border-navy-200 text-navy-600 hover:text-cyan-600 transition-colors flex items-center justify-center shadow-sm"
+                    className={`absolute -left-3 sm:-left-5 top-1/2 z-10 -translate-y-1/2 ${CAROUSEL_ARROW}`}
                   >
-                    <ChevronLeft size={16} />
+                    <ChevronLeft size={18} aria-hidden="true" />
                   </button>
                   <button
                     type="button"
                     onClick={() => setActiveFeaturedBlogSlide((prev) => (prev + 1) % featuredBlogSlides.length)}
                     aria-label="Next featured blog posts"
-                    className="absolute -right-3 sm:-right-4 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white border border-navy-200 text-navy-600 hover:text-cyan-600 transition-colors flex items-center justify-center shadow-sm"
+                    className={`absolute -right-3 sm:-right-5 top-1/2 z-10 -translate-y-1/2 ${CAROUSEL_ARROW}`}
                   >
-                    <ChevronRight size={16} />
+                    <ChevronRight size={18} aria-hidden="true" />
                   </button>
                 </>
               )}
@@ -356,9 +359,8 @@ export default function HomePage() {
                     type="button"
                     onClick={() => setActiveFeaturedBlogSlide(index)}
                     aria-label={`Show featured blog slide ${index + 1}`}
-                    className={`h-2.5 rounded-full transition-all ${
-                      index === activeFeaturedBlogSlide ? 'w-7 bg-cyan-600' : 'w-2.5 bg-navy-200 hover:bg-navy-300'
-                    }`}
+                    aria-current={index === activeFeaturedBlogSlide ? 'true' : undefined}
+                    className={carouselDot(index === activeFeaturedBlogSlide)}
                   />
                 ))}
               </div>
@@ -367,10 +369,10 @@ export default function HomePage() {
             <div className="mt-8 text-center">
               <Link
                 to="/blog"
-                className="inline-flex items-center gap-2 text-sm font-medium text-cyan-600 hover:text-cyan-700 transition-colors group"
+                className="group inline-flex items-center gap-2 rounded-sm text-sm font-semibold text-cyan-800 transition-colors hover:text-cyan-900 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-cyan-700 focus-visible:ring-offset-2 dark:text-cyan-300 dark:hover:text-cyan-200"
               >
                 View all articles
-                <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+                <ArrowRight size={14} aria-hidden="true" className={ARROW_NUDGE} />
               </Link>
             </div>
           </div>
@@ -393,7 +395,8 @@ export default function HomePage() {
               style={{ transform: `translateX(-${activeTestimonial * 100}%)` }}
             >
               {testimonials.map((item) => (
-                <article key={item.id} className="min-w-full p-8 sm:p-10">
+                // Side padding keeps the quote clear of the arrows.
+                <article key={item.id} className="min-w-full px-14 py-8 sm:px-16 sm:py-10">
                   <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-cyan-50 text-cyan-600 mb-5">
                     <Quote size={18} />
                   </div>
@@ -417,17 +420,17 @@ export default function HomePage() {
               type="button"
               onClick={goToPrevTestimonial}
               aria-label="Previous testimonial"
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/90 border border-navy-200 text-navy-600 hover:text-cyan-600 transition-colors flex items-center justify-center"
+              className={`absolute left-3 top-1/2 -translate-y-1/2 ${CAROUSEL_ARROW}`}
             >
-              <ChevronLeft size={16} />
+              <ChevronLeft size={18} aria-hidden="true" />
             </button>
             <button
               type="button"
               onClick={goToNextTestimonial}
               aria-label="Next testimonial"
-              className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/90 border border-navy-200 text-navy-600 hover:text-cyan-600 transition-colors flex items-center justify-center"
+              className={`absolute right-3 top-1/2 -translate-y-1/2 ${CAROUSEL_ARROW}`}
             >
-              <ChevronRight size={16} />
+              <ChevronRight size={18} aria-hidden="true" />
             </button>
           </div>
 
@@ -438,9 +441,8 @@ export default function HomePage() {
                 type="button"
                 onClick={() => setActiveTestimonial(index)}
                 aria-label={`Show testimonial ${index + 1}`}
-                className={`h-2.5 rounded-full transition-all ${
-                  index === activeTestimonial ? 'w-7 bg-cyan-600' : 'w-2.5 bg-navy-200 hover:bg-navy-300'
-                }`}
+                aria-current={index === activeTestimonial ? 'true' : undefined}
+                className={carouselDot(index === activeTestimonial)}
               />
             ))}
           </div>
@@ -472,11 +474,8 @@ export default function HomePage() {
             {profile.availableFor}
           </p>
           <div className="flex flex-wrap justify-center gap-4">
-            <Link
-              to="/contact"
-              className="inline-flex items-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white px-8 py-3.5 rounded-xl font-medium transition-all duration-300 shadow-lg shadow-cyan-600/25 hover:shadow-cyan-500/40"
-            >
-              Get in Touch <ArrowRight size={16} />
+            <Link to="/contact" className={PRIMARY_BUTTON}>
+              Get in Touch <ArrowRight size={16} aria-hidden="true" className={ARROW_NUDGE} />
             </Link>
           </div>
         </div>

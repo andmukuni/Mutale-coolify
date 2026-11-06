@@ -97,7 +97,7 @@ function PartnerCell({ partner }) {
       <span className="mt-2 flex flex-1 items-center xl:mt-0 xl:justify-center">
         {showLogo ? (
           // A white plate in both themes: uploaded logos are often drawn for a white page.
-          <span className="inline-flex h-12 max-w-full items-center justify-center rounded-lg bg-[#ffffff] px-2.5 py-1.5 ring-1 ring-navy-100 xl:h-14 xl:w-full xl:px-2">
+          <span className="inline-flex h-12 max-w-full items-center justify-center rounded-lg bg-[#ffffff] px-2.5 py-1.5 ring-1 ring-navy-100 transition duration-300 group-hover:shadow-md group-hover:ring-cyan-300 xl:h-14 xl:w-full xl:px-2">
             <img
               src={logoSrc}
               alt=""
@@ -107,13 +107,13 @@ function PartnerCell({ partner }) {
             />
           </span>
         ) : (
-          <span className="text-base sm:text-lg font-bold leading-snug tracking-tight text-navy-900 xl:text-center xl:text-base">{partner.name}</span>
+          <span className="text-base sm:text-lg font-bold leading-snug tracking-tight text-navy-900 transition-colors group-hover:text-cyan-800 dark:group-hover:text-cyan-300 xl:text-center xl:text-base">{partner.name}</span>
         )}
       </span>
 
       {showLogo && (
         <span className="mt-2 flex items-start justify-between gap-1.5">
-          <span className="line-clamp-2 min-w-0 text-xs leading-snug text-navy-500">{partner.name}</span>
+          <span className="line-clamp-2 min-w-0 text-xs leading-snug text-navy-500 transition-colors group-hover:text-cyan-800 dark:group-hover:text-cyan-300">{partner.name}</span>
           <span className={`hidden h-5 w-5 xl:flex ${iconClass}`}>
             <Icon size={12} aria-hidden="true" />
           </span>
@@ -122,7 +122,7 @@ function PartnerCell({ partner }) {
     </>
   );
 
-  const cellClass = 'group flex w-full min-w-0 min-h-[7rem] flex-col p-4 xl:p-3.5 break-words';
+  const cellClass = 'flex w-full min-w-0 min-h-[7rem] flex-col p-4 xl:p-3.5 break-words';
 
   if (website) {
     return (
@@ -133,7 +133,7 @@ function PartnerCell({ partner }) {
         // The name is what the cell is about; the label and logo only support it.
         aria-label={`${partner.name} (opens in a new tab)`}
         title={partner.name}
-        className={`${cellClass} transition-colors hover:bg-[#00A79D]/[0.04] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyan-700`}
+        className={`group ${cellClass} transition-colors duration-300 hover:bg-[#00A79D]/[0.07] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyan-700`}
       >
         {body}
       </a>

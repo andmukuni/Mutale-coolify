@@ -30,10 +30,10 @@ export default function NextSpeakingEngagement({ eyebrow, title, linkLabel }) {
           </div>
           <Link
             to="/speaking"
-            className="inline-flex items-center gap-1.5 rounded-lg text-sm font-semibold text-cyan-800 hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-cyan-700 focus-visible:ring-offset-2 dark:text-cyan-300"
+            className="group inline-flex items-center gap-1.5 rounded-lg text-sm font-semibold text-cyan-800 hover:text-cyan-900 hover:underline underline-offset-4 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-cyan-700 focus-visible:ring-offset-2 dark:text-cyan-300"
           >
             {linkLabel}
-            <ArrowRight size={16} aria-hidden="true" />
+            <ArrowRight size={16} aria-hidden="true" className="motion-safe:transition-transform motion-safe:group-hover:translate-x-0.5" />
           </Link>
         </div>
         <SpeakingEngagementCard engagement={engagement} headingLevel="h3" />

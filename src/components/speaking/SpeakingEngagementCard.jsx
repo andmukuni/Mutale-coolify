@@ -73,7 +73,7 @@ export default function SpeakingEngagementCard({ engagement, headingLevel = 'h3'
   // Forced-colours mode drops rings, so the link also keeps a transparent
   // outline (outline-hidden) that the system then draws in its focus colour.
   const linkedClasses = to
-    ? 'group hover:border-cyan-300 hover:shadow-md has-[a.card-link:focus-visible]:ring-2 has-[a.card-link:focus-visible]:ring-cyan-700 has-[a.card-link:focus-visible]:ring-offset-2'
+    ? 'group hover:border-cyan-200 hover:shadow-lg hover:shadow-navy-900/10 motion-safe:hover:-translate-y-0.5 has-[a.card-link:focus-visible]:ring-2 has-[a.card-link:focus-visible]:ring-cyan-700 has-[a.card-link:focus-visible]:ring-offset-2'
     : '';
 
   return (
@@ -133,7 +133,7 @@ export default function SpeakingEngagementCard({ engagement, headingLevel = 'h3'
               aria-hidden="true"
             >
               View details
-              <ArrowRight size={15} className="transition-transform group-hover:translate-x-0.5" />
+              <ArrowRight size={15} className="motion-safe:transition-transform motion-safe:group-hover:translate-x-0.5" />
             </span>
           )}
         </div>

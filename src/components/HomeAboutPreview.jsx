@@ -101,7 +101,7 @@ export default function HomeAboutPreview({ page, summary = [] }) {
           <div className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-4">
             <Link
               to="/about"
-              className="group inline-flex items-center gap-2 rounded-xl bg-navy-900 px-6 py-3 text-sm font-semibold text-white shadow-md transition-colors hover:bg-cyan-800 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-cyan-700 focus-visible:ring-offset-2 dark:bg-cyan-700 dark:hover:bg-cyan-600"
+              className="group inline-flex items-center gap-2 rounded-xl bg-navy-900 px-6 py-3 text-sm font-semibold text-white shadow-md transition duration-300 ease-out hover:bg-cyan-800 hover:shadow-lg motion-safe:hover:-translate-y-0.5 motion-safe:active:translate-y-0 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-cyan-700 focus-visible:ring-offset-2 dark:bg-cyan-700 dark:hover:bg-cyan-600"
             >
               Read Full Profile
               <ArrowRight size={16} aria-hidden="true" className="motion-safe:transition-transform motion-safe:group-hover:translate-x-0.5" />
