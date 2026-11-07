@@ -14,83 +14,31 @@ const SUMMARY = [
   'A fourth line kept for the About page.',
 ];
 
+// The partner strip as it was before the November redesigns (restored on 7 November).
 describe('TrustedBySection', () => {
-  const cells = (list) => within(list).getAllByRole('listitem');
-
-  it('heads one panel of partners with the saved label, a cell each', () => {
-    render(<TrustedBySection label="Mutale has worked with" legacyNames={['Africa CDC', 'WHO', 'HPCZ']} />);
-    const section = screen.getByRole('region', { name: 'Mutale has worked with' });
-    expect(within(section).getByRole('heading', { level: 2, name: 'Mutale has worked with' })).toBeInTheDocument();
-    const list = within(section).getByRole('list');
-    // Two a row on phones, four from tablets, and one strip across the page from 1280 px.
-    expect(list).toHaveClass('grid', 'grid-cols-2', 'md:grid-cols-4', 'xl:flex');
-    // Without logos or websites, the name is the cell's large text.
-    expect(cells(list).map((li) => li.textContent)).toEqual(['Africa CDC', 'WHO', 'HPCZ']);
+  it('shows the saved label and a card for each partner, four a row on wider screens', () => {
+    const { container } = render(<TrustedBySection label="Mutale has worked with" legacyNames={['Africa CDC', 'WHO', 'HPCZ']} />);
+    expect(screen.getByText('Mutale', { exact: false }).closest('p')).toHaveTextContent('Mutale has worked with');
+    const grid = container.querySelector('.grid');
+    expect(grid).toHaveClass('grid-cols-2', 'md:grid-cols-4');
+    expect([...grid.children].map((card) => card.textContent)).toEqual(['Africa CDC', 'WHO', 'HPCZ']);
   });
 
-  it('wraps more than eight partners in fours instead of one strip', () => {
-    render(<TrustedBySection label="Worked with" legacyNames={Array.from({ length: 10 }, (_, i) => `Partner ${i + 1}`)} />);
-    expect(screen.getByRole('list')).not.toHaveClass('xl:flex');
-  });
-
-  it.each([
-    [8, []],
-    [7, ['block md:block']],
-    [5, ['block md:block', 'hidden md:block', 'hidden md:block']],
-    [6, ['hidden md:block', 'hidden md:block']],
-  ])('completes the last row of %i partners with blank cells', (count, fillers) => {
-    const { container } = render(<TrustedBySection label="Worked with" legacyNames={Array.from({ length: count }, (_, i) => `Partner ${i + 1}`)} />);
-    const blanks = [...container.querySelectorAll('li[aria-hidden="true"]')];
-    expect(blanks.map((li) => li.className.match(/(block|hidden) md:(block|hidden)/)[0])).toEqual(fillers);
-    expect(blanks.every((li) => li.textContent === '')).toBe(true);
-    // The single strip needs none.
-    expect(blanks.every((li) => li.classList.contains('xl:hidden'))).toBe(true);
-  });
-
-  it('shows an uploaded logo on a plate with the name beneath, and the name alone if the logo fails', () => {
-    const { container } = render(<TrustedBySection label="Worked with" partners={[{ id: 1, name: 'WHO', logo_url: 'https://cdn.example.org/who.png' }]} legacyNames={['Ignored']} />);
-    const logo = container.querySelector('img');
-    expect(logo).toHaveAttribute('src', 'https://cdn.example.org/who.png');
-    // Decorative: the name is given as text.
-    expect(logo).toHaveAttribute('alt', '');
-    expect(screen.getByText('WHO')).toHaveClass('text-xs');
+  it('prefers uploaded logos, and shows the name if a logo fails to load', () => {
+    render(<TrustedBySection label="Worked with" partners={[{ id: 1, name: 'WHO', logo_url: 'https://cdn.example.org/who.png' }]} legacyNames={['Ignored']} />);
+    const logo = screen.getByRole('img', { name: 'WHO' });
     expect(screen.queryByText('Ignored')).not.toBeInTheDocument();
     fireEvent.error(logo);
-    expect(container.querySelector('img')).toBeNull();
-    expect(screen.getByText('WHO')).toHaveClass('font-bold');
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    expect(screen.getByText('WHO')).toBeInTheDocument();
   });
 
-  it('links a partner to its website in a new tab, labelled with its domain, but only for web addresses', () => {
-    render(
-      <TrustedBySection
-        label="Worked with"
-        partners={[
-          { id: 1, name: 'FIND', logo_url: '', website_url: 'https://www.finddx.org' },
-          { id: 2, name: 'Unsafe', logo_url: '', website_url: 'javascript:alert(1)' },
-        ]}
-      />,
-    );
-    const link = screen.getByRole('link', { name: 'FIND (opens in a new tab)' });
-    expect(link).toHaveAttribute('href', 'https://www.finddx.org/');
+  it('links a partner to its website in a new tab', () => {
+    render(<TrustedBySection label="Worked with" partners={[{ id: 1, name: 'FIND', logo_url: '', website_url: 'https://www.finddx.org' }]} />);
+    const link = screen.getByRole('link', { name: 'FIND' });
+    expect(link).toHaveAttribute('href', 'https://www.finddx.org');
     expect(link).toHaveAttribute('target', '_blank');
     expect(link.getAttribute('rel')).toContain('noopener');
-    expect(within(link).getByText('finddx.org')).toBeInTheDocument();
-    expect(screen.getAllByRole('link')).toHaveLength(1);
-    expect(screen.getByText('Unsafe').closest('a')).toBeNull();
-  });
-
-  it('reacts to hover only where a partner links somewhere', () => {
-    render(
-      <TrustedBySection
-        label="Worked with"
-        partners={[
-          { id: 1, name: 'FIND', logo_url: '', website_url: 'https://www.finddx.org' },
-          { id: 2, name: 'No Site', logo_url: '' },
-        ]}
-      />,
-    );
-    expect(screen.getByRole('link', { name: /FIND/ })).toHaveClass('group');
-    expect(screen.getByText('No Site').closest('.group')).toBeNull();
   });
 
   it('shows nothing when there are no partners', () => {
